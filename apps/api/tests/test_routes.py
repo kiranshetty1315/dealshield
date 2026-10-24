@@ -35,6 +35,25 @@ def test_chat_upload_and_persistence():
     assert get_data["messages"][0]["content"] == "Hi Priya, let's discuss the project"
 
 
+def test_chat_upload_12_hour_with_seconds():
+    # Matches user format: Line 1 encryption header, Line 2 12-hour timestamp with seconds
+    sample_chat = (
+        "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.\n"
+        "7/27/26, 12:17:00 PM - Raj Mehta: Hi Priya, regarding the website project\n"
+        "7/27/26, 12:18:00 PM - Priya Sharma: Yes, let's finalize the terms\n"
+    )
+    response = client.post(
+        "/api/v1/chats/upload",
+        content=sample_chat,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["message_count"] == 2
+    assert "Raj Mehta" in data["party_names"]
+    assert "Priya Sharma" in data["party_names"]
+
+
 def test_chat_upload_file_size_limit():
     # 10 MB limit check: header indicating oversized payload
     oversized_headers = {

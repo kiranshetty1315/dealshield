@@ -18,12 +18,14 @@ from typing import List, Tuple, Dict, Any, Optional
 from app.schemas.chat import Message
 
 
-# Regex pattern supporting common WhatsApp export formats:
+# Regex pattern supporting common WhatsApp export formats across Android, iOS, and Web:
 # Format A: "12/03/24, 10:15 - Raj Mehta: Message text"
 # Format B: "12/03/2024, 10:15:20 - Raj Mehta: Message text"
 # Format C: "[12/03/24, 10:15:20] Raj Mehta: Message text"
+# Format D: "7/27/26, 12:17:00 PM - Raj Mehta: Message text" (12-hour with seconds)
+# Format E: "[7/27/26, 12:17:00 PM] Raj Mehta: Message text" (iOS 12-hour with seconds)
 WHATSAPP_LINE_REGEX = re.compile(
-    r"^\[?(\d{1,2}/\d{1,2}/\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AaPp][Mm])?)\]?\s*[-–]?\s*([^:]+):\s*(.*)$"
+    r"^\[?(\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:[\s\u202f\xa0]*(?:[AaPp]\.?[Mm]\.?|[AaPp][Mm]))?)\]?\s*[-–—]?\s*([^:]+):\s*(.*)$"
 )
 
 
@@ -36,13 +38,17 @@ def _detect_chat_date_convention(raw_lines: List[str]) -> Tuple[bool, bool, str]
     found_day_first = False
     found_month_first = False
 
-    for line in raw_lines:
+    for raw_line in raw_lines:
+        line = raw_line.lstrip("\u200e\u200f\ufeff\u202a\u202b\u202c\u202d\u202e")
         match = WHATSAPP_LINE_REGEX.match(line)
         if match:
             date_str = match.group(1).strip()
             parts = re.split(r"[/.-]", date_str)
             if len(parts) >= 2:
                 try:
+                    # Skip ISO format YYYY-MM-DD
+                    if len(parts[0]) == 4:
+                        continue
                     p1, p2 = int(parts[0]), int(parts[1])
                     if p1 > 12 >= p2:
                         found_day_first = True
@@ -62,41 +68,39 @@ def _detect_chat_date_convention(raw_lines: List[str]) -> Tuple[bool, bool, str]
 
 def _parse_timestamp(date_str: str, time_str: str, day_first: bool = True) -> datetime:
     """Parse timestamp rigorously. Fails loudly on malformed dates."""
+    # Normalize whitespace and unicode non-breaking / narrow spaces (iOS exports use \u202f)
+    time_clean = re.sub(r"[\u202f\xa0\s]+", " ", time_str.strip())
+    # Normalize a.m. / p.m. with or without periods to AM / PM
+    time_clean = re.sub(r"(?i)\b([ap])\.m\.?", r"\1m", time_clean)
+    # Ensure standard space before AM/PM if compact (e.g. 12:17:00PM -> 12:17:00 PM)
+    time_clean = re.sub(r"(?i)(\d+)\s*(am|pm)\b", r"\1 \2", time_clean).upper()
+
     date_clean = date_str.strip()
-    time_clean = time_str.strip()
+    # Normalize date separators (. or - to /) unless ISO YYYY-MM-DD
+    if not re.match(r"^\d{4}", date_clean):
+        date_clean = re.sub(r"[.-]", "/", date_clean)
+
     full_str = f"{date_clean} {time_clean}"
 
-    if day_first:
-        formats = [
-            "%d/%m/%y %H:%M",
-            "%d/%m/%Y %H:%M",
-            "%d/%m/%y %H:%M:%S",
-            "%d/%m/%Y %H:%M:%S",
-            "%d/%m/%y %I:%M %p",
-            "%d/%m/%Y %I:%M %p",
-            "%d/%m/%y %I:%M%p",
-            "%d/%m/%Y %I:%M%p",
-            "%m/%d/%y %H:%M",
-            "%m/%d/%Y %H:%M",
-        ]
-    else:
-        formats = [
-            "%m/%d/%y %H:%M",
-            "%m/%d/%Y %H:%M",
-            "%m/%d/%y %H:%M:%S",
-            "%m/%d/%Y %H:%M:%S",
-            "%m/%d/%y %I:%M %p",
-            "%m/%d/%Y %I:%M %p",
-            "%d/%m/%y %H:%M",
-            "%d/%m/%Y %H:%M",
-        ]
+    date_fmts = (
+        ["%d/%m/%y", "%d/%m/%Y", "%m/%d/%y", "%m/%d/%Y", "%Y-%m-%d", "%Y/%m/%d"]
+        if day_first
+        else ["%m/%d/%y", "%m/%d/%Y", "%d/%m/%y", "%d/%m/%Y", "%Y-%m-%d", "%Y/%m/%d"]
+    )
+    time_fmts = [
+        "%I:%M:%S %p",
+        "%I:%M %p",
+        "%H:%M:%S",
+        "%H:%M",
+    ]
 
-    for fmt in formats:
-        try:
-            parsed = datetime.strptime(full_str, fmt)
-            return parsed.replace(tzinfo=timezone.utc)
-        except ValueError:
-            continue
+    for d in date_fmts:
+        for t in time_fmts:
+            try:
+                parsed = datetime.strptime(full_str, f"{d} {t}")
+                return parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                continue
 
     # FAIL LOUDLY: For evidentiary records, timestamps must not be fabricated
     raise ValueError(
@@ -159,7 +163,8 @@ def parse_whatsapp_chat(
             )
             sequence += 1
 
-    for line_idx, line in enumerate(lines, start=1):
+    for line_idx, raw_line in enumerate(lines, start=1):
+        line = raw_line.lstrip("\u200e\u200f\ufeff\u202a\u202b\u202c\u202d\u202e")
         match = WHATSAPP_LINE_REGEX.match(line)
         if match:
             commit_current()
@@ -168,7 +173,13 @@ def parse_whatsapp_chat(
             sender_clean = sender_part.strip()
 
             # Ignore system notifications
-            if "end-to-end encrypted" in line.lower() or "created group" in line.lower():
+            line_lower = line.lower()
+            if (
+                "end-to-end encrypted" in line_lower
+                or "created group" in line_lower
+                or "security code changed" in line_lower
+                or "messages to this chat and calls are now secured" in line_lower
+            ):
                 current_sender = ""
                 current_timestamp = None
                 current_content_lines = []

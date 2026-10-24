@@ -74,3 +74,41 @@ def test_unparseable_timestamp_fails_loudly():
     )
     with pytest.raises(ValueError, match="Evidentiary Integrity Error"):
         parse_whatsapp_chat(raw_malformed)
+
+
+def test_parse_12_hour_with_seconds_and_unicode_spaces():
+    # Real-world iOS WhatsApp export format containing 12-hour timestamps with seconds and narrow spaces
+    raw_chat = (
+        "Messages and calls are end-to-end encrypted. No one outside of this chat, not even WhatsApp, can read or listen to them.\n"
+        "7/27/26, 12:17:00 PM - Raj Mehta: Hi Priya, regarding the project scope\n"
+        "[7/27/26, 12:18:05\u202fPM] Priya Sharma: I reviewed the deliverable specification\n"
+        "7/27/26, 12:20:10 p.m. - Raj Mehta: Sounds good, let's proceed\n"
+    )
+    messages, parties, metadata = parse_whatsapp_chat(raw_chat)
+    assert len(messages) == 3
+    assert len(parties) == 2
+    assert "Raj Mehta" in parties
+    assert "Priya Sharma" in parties
+    assert messages[0].timestamp.hour == 12
+    assert messages[0].timestamp.minute == 17
+    assert messages[0].timestamp.second == 0
+    assert messages[0].timestamp.year == 2026
+    assert messages[0].timestamp.month == 7
+    assert messages[0].timestamp.day == 27
+
+    assert messages[1].timestamp.second == 5
+    assert messages[2].timestamp.second == 10
+
+
+def test_parse_european_dot_date_format():
+    raw_chat = (
+        "27.07.2026, 14:15:30 - Amit Patel: Project milestone achieved\n"
+        "27.07.2026, 14:20:00 - Neha Gupta: Confirmed receipt\n"
+    )
+    messages, parties, metadata = parse_whatsapp_chat(raw_chat)
+    assert len(messages) == 2
+    assert messages[0].timestamp.year == 2026
+    assert messages[0].timestamp.month == 7
+    assert messages[0].timestamp.day == 27
+    assert messages[0].timestamp.hour == 14
+
