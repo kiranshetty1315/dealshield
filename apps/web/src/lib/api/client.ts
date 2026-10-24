@@ -8,6 +8,9 @@ import {
   DocumentHashVerification,
   AuditEvent,
   TokenConfirmationResponse,
+  SessionResponse,
+  TokenInspectResponse,
+  TokenGenerateResponse,
   User,
   AuthResponse,
   DashboardStats,
@@ -342,10 +345,18 @@ export class ApiClient {
 
   // --- Team D: Confirmations & Single-Use Tokens ---
 
-  async recordConfirmation(agreementId: string, partyName: string, confirmed: boolean, notes?: string): Promise<ConfirmationStatus> {
+  async recordConfirmation(
+    agreementId: string,
+    partyName: string,
+    confirmed: boolean,
+    notes?: string
+  ): Promise<ConfirmationStatus> {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
       body: JSON.stringify({
         agreement_id: agreementId,
         party_name: partyName,
@@ -385,11 +396,24 @@ export class ApiClient {
     return res.json();
   }
 
-  async generatePartyToken(agreementId: string, partyName: string): Promise<{ token: string; raw_token: string; confirmation_url: string }> {
+  async generatePartyToken(
+    agreementId: string,
+    partyName: string,
+    partyEmail: string,
+    hoursValid: number = 72
+  ): Promise<TokenGenerateResponse> {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agreement_id: agreementId, party_name: partyName }),
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        agreement_id: agreementId,
+        party_name: partyName,
+        party_email: partyEmail,
+        hours_valid: hoursValid,
+      }),
     });
 
     if (!res.ok) {
@@ -399,21 +423,14 @@ export class ApiClient {
     return res.json();
   }
 
-  async inspectToken(token: string): Promise<{
-    token: string;
-    agreement_id: string;
-    party_name: string;
-    confirmed: boolean;
-    confirmed_at?: string;
-    declined: boolean;
-    declined_at?: string;
-    decline_reason?: string;
-    expires_at?: string;
-    agreement?: Agreement | null;
-  }> {
+  async inspectToken(token: string, sessionToken?: string): Promise<TokenInspectResponse> {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (sessionToken) {
+      headers["X-Review-Session"] = sessionToken;
+    }
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers,
       cache: "no-store",
     });
 
@@ -424,19 +441,73 @@ export class ApiClient {
     return res.json();
   }
 
+  async emailCheck(token: string, email: string): Promise<{ status: string; message: string }> {
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}/email-check`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "We couldn't verify this email address." }));
+      throw new Error(err.detail || "Email verification failed");
+    }
+    return res.json();
+  }
+
+  async sendOtp(token: string): Promise<{ status: string; masked_email: string; message: string }> {
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}/otp/send`,
+      {
+        method: "POST",
+        headers: { Accept: "application/json" },
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to send verification code" }));
+      throw new Error(err.detail || "Failed to send code");
+    }
+    return res.json();
+  }
+
+  async verifyOtp(token: string, otp: string): Promise<SessionResponse> {
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}/otp/verify`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ otp }),
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Invalid verification code" }));
+      throw new Error(err.detail || "Verification failed");
+    }
+    return res.json();
+  }
+
   async confirmByToken(
     token: string,
     notes?: string,
     action: "agree" | "decline" = "agree",
-    declineReason?: string
+    declineReason?: string,
+    sessionToken?: string
   ): Promise<TokenConfirmationResponse> {
-    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens/confirm`, {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (sessionToken) {
+      headers["X-Review-Session"] = sessionToken;
+    }
+    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
-        token,
-        notes,
         action,
+        notes,
         decline_reason: declineReason,
       }),
     });
@@ -446,6 +517,35 @@ export class ApiClient {
       throw new Error(err.detail || `Token execution failed (${res.status})`);
     }
     return res.json();
+  }
+
+  async downloadAgreementByToken(token: string, sessionToken?: string, filename?: string): Promise<void> {
+    const headers: Record<string, string> = {};
+    if (sessionToken) {
+      headers["X-Review-Session"] = sessionToken;
+    }
+    const res = await fetch(
+      `${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}/download`,
+      {
+        method: "GET",
+        headers,
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Download failed" }));
+      throw new Error(err.detail || "Failed to download agreement PDF");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || `DealShield_Agreement_${token.slice(0, 8)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   }
 
   // --- Team D: Evidence Vault ---

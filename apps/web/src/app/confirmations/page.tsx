@@ -14,10 +14,8 @@ import {
   Clock,
   Users,
   ArrowRight,
-  KeyRound,
   ShieldAlert,
   ShieldCheck,
-  Send,
   Loader2,
   Database,
   Sparkles,
@@ -29,11 +27,12 @@ import {
   ChevronDown,
   Upload,
   GitCompare,
-  Info,
   RefreshCw,
   Award,
   Download,
   Eye,
+  Mail,
+  MessageSquare,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import {
@@ -73,7 +72,6 @@ function ConfirmationsContent() {
   const searchParams = useSearchParams();
   const agreementIdParam = searchParams.get("agreement_id");
   const chatIdParam = searchParams.get("chat_id");
-  const tokenParam = searchParams.get("token");
 
   // Negotiations / Conversations list
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
@@ -87,13 +85,11 @@ function ConfirmationsContent() {
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Token testing state
-  const [tokenInput, setTokenInput] = useState(tokenParam || "");
-  const [tokenNotes, setTokenNotes] = useState("");
-  const [tokenResult, setTokenResult] = useState<string | null>(null);
-  const [tokenError, setTokenError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Counterparty Email Input state per party
+  const [counterpartyEmails, setCounterpartyEmails] = useState<Record<string, string>>({});
 
   // Shareable link state
   const [shareableLink, setShareableLink] = useState<{ partyName: string; url: string } | null>(null);
@@ -104,7 +100,7 @@ function ConfirmationsContent() {
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [resolutionBanner, setResolutionBanner] = useState<ResolutionDiffSummary | null>(null);
 
-  // Indian Non-Judicial Stamp Paper Modal
+  // Commercial Agreement Record Modal
   const [isStampModalOpen, setIsStampModalOpen] = useState(false);
 
   // 1. Load all conversations on mount
@@ -194,12 +190,6 @@ function ConfirmationsContent() {
       setIsLoadingStatus(false);
     }
   }, [selectedChatId, agreementIdParam, loadDataForSelection, isLoadingConversations, conversations.length]);
-
-  useEffect(() => {
-    if (tokenParam) {
-      setTokenInput(tokenParam);
-    }
-  }, [tokenParam]);
 
   // Live Auto-Polling: periodically re-checks Supabase so external counterparty assent reflects in real-time
   useEffect(() => {
@@ -311,17 +301,22 @@ function ConfirmationsContent() {
   // Generate single-use signed link for external counterparty
   const handleGenerateShareableToken = async (partyName: string) => {
     if (!agreement) return;
+    const email = counterpartyEmails[partyName]?.trim();
+    if (!email) {
+      setErrorMessage(`Please enter a valid counterparty email for ${partyName} before generating a review link.`);
+      return;
+    }
+
     setIsGeneratingToken(partyName);
     setCopied(false);
     setErrorMessage(null);
     try {
-      const res = await api.generatePartyToken(agreement.id, partyName);
+      const res = await api.generatePartyToken(agreement.id, partyName, email);
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const fullUrl = `${origin}/review?token=${res.token}&agreement_id=${encodeURIComponent(agreement.id)}`;
+      const fullUrl = `${origin}/review?token=${res.token}`;
       setShareableLink({ partyName, url: fullUrl });
-      setTokenInput(res.token);
     } catch (err: any) {
-      setErrorMessage(`Failed to generate token: ${err.message || err}`);
+      setErrorMessage(`Failed to generate review link: ${err.message || err}`);
     } finally {
       setIsGeneratingToken(null);
     }
@@ -332,28 +327,6 @@ function ConfirmationsContent() {
       navigator.clipboard.writeText(shareableLink.url);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
-    }
-  };
-
-  // Execute token confirmation directly
-  const handleExecuteToken = async () => {
-    if (!tokenInput.trim()) return;
-
-    setActionLoading("token");
-    setTokenResult(null);
-    setTokenError(null);
-    try {
-      const res = await api.confirmByToken(tokenInput.trim(), tokenNotes || undefined);
-      setTokenResult(`Success: Agreement confirmed by ${res.party_name}!`);
-      if (res.agreement_id) {
-        await refreshStatus(res.agreement_id);
-      } else if (agreement) {
-        await refreshStatus(agreement.id);
-      }
-    } catch (err: any) {
-      setTokenError(err.message || "Failed to confirm via token");
-    } finally {
-      setActionLoading(null);
     }
   };
 
@@ -539,10 +512,10 @@ function ConfirmationsContent() {
                 size="sm"
                 onClick={() => setIsStampModalOpen(true)}
                 className="gap-1.5 text-xs border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"
-                title="Preview authentic Indian Non-Judicial Stamp Paper contract"
+                title="Preview Commercial Agreement Record"
               >
                 <Award className="h-3.5 w-3.5 text-amber-600" />
-                <span>e-Stamp Contract</span>
+                <span>Agreement Record</span>
               </Button>
             )}
 
@@ -602,61 +575,6 @@ function ConfirmationsContent() {
         </div>
       )}
 
-      {/* External Counterparty Review Banner if arriving via token */}
-      {tokenParam && (
-        <Card className="border-blue-300 bg-blue-50/80 shadow-md animate-in fade-in duration-200">
-          <CardContent className="p-5 space-y-3">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-blue-600 text-white">
-                  <KeyRound className="h-4 w-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-blue-950">
-                    External Counterparty Review Mode
-                  </h3>
-                  <p className="text-xs text-blue-800">
-                    You are reviewing this agreement via a secure, single-use signed link. No account creation is required.
-                  </p>
-                </div>
-              </div>
-              <Badge variant="outline" className="border-blue-400 bg-white text-blue-900 text-[11px] font-semibold">
-                Single-Use Token Active
-              </Badge>
-            </div>
-
-            <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-              <span className="text-xs text-blue-900 font-medium">
-                Clicking confirm records your assent with a tamper-evident audit timestamp.
-              </span>
-              <Button
-                size="sm"
-                onClick={handleExecuteToken}
-                disabled={actionLoading === "token" || isAllConfirmed}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 shadow-sm"
-              >
-                {actionLoading === "token" ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Recording Assent...
-                  </>
-                ) : isAllConfirmed ? (
-                  <>
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Agreement Already Confirmed
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    I Agree & Confirm Agreement
-                  </>
-                )}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Legal Status Card */}
       <Card className="border-slate-200 shadow-sm">
         <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
@@ -712,6 +630,7 @@ function ConfirmationsContent() {
               {partiesList.map((party, idx) => {
                 const isDeclined = Boolean(party.declined);
                 const isConfirmed = Boolean(party.confirmed);
+                const isInitiator = agreement?.parties?.[0] === party.party_name;
 
                 return (
                   <div
@@ -804,89 +723,169 @@ function ConfirmationsContent() {
                     {/* Actions when party has NOT confirmed */}
                     {!party.confirmed ? (
                       <div className="space-y-2 pt-1">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleConfirmAsParty(party.party_name)}
-                            disabled={actionLoading !== null}
-                            className="w-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                          >
-                            {actionLoading === party.party_name ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Recording...
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                Direct Confirm
-                              </>
-                            )}
-                          </Button>
-
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleGenerateShareableToken(party.party_name)}
-                            disabled={isGeneratingToken !== null}
-                            className="w-full text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 gap-1.5"
-                          >
-                            {isGeneratingToken === party.party_name ? (
-                              <>
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                Generating...
-                              </>
-                            ) : (
-                              <>
-                                <Share2 className="h-3.5 w-3.5" />
-                                Share Token Link
-                              </>
-                            )}
-                          </Button>
-                        </div>
-
-                        {/* Expandable Shareable Token Box */}
-                        {shareableLink?.partyName === party.party_name && (
-                          <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2 animate-in fade-in duration-150 text-xs">
-                            <div className="flex items-center justify-between">
-                              <span className="font-bold text-[11px] text-blue-950 flex items-center gap-1">
-                                <Link2 className="h-3.5 w-3.5 text-blue-700" />
-                                Shareable Counterparty Link
-                              </span>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={handleCopyLink}
-                                className="h-6 text-[10px] px-2.5 bg-white gap-1 border-blue-300 text-blue-800 hover:bg-blue-100"
-                              >
-                                {copied ? (
-                                  <>
-                                    <Check className="h-3 w-3 text-emerald-600" />
-                                    Copied!
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy className="h-3 w-3" />
-                                    Copy Link
-                                  </>
-                                )}
-                              </Button>
-                            </div>
-                            <Input
-                              readOnly
-                              value={shareableLink.url}
-                              className="text-[10px] font-mono h-7 bg-white text-slate-800"
-                            />
-                            <p className="text-[10px] text-blue-800 leading-normal">
-                              Share this link with {party.party_name} via WhatsApp or email. They can review and click &ldquo;Agree&rdquo; in 1 click without creating an account.
+                        {isInitiator ? (
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-slate-500">
+                              As the contract initiator ({party.party_name}), you can record your assent directly from your authenticated dashboard.
                             </p>
+                            <Button
+                              size="sm"
+                              onClick={() => handleConfirmAsParty(party.party_name)}
+                              disabled={actionLoading !== null}
+                              className="w-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                            >
+                              {actionLoading === party.party_name ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  Recording...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  Direct Confirm (Initiator)
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="space-y-1">
+                              <label
+                                htmlFor={`email-${party.party_name}`}
+                                className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
+                              >
+                                <Mail className="h-3 w-3 text-slate-500" />
+                                Counterparty Email ({party.party_name}):
+                              </label>
+                              <div className="flex gap-2">
+                                <Input
+                                  id={`email-${party.party_name}`}
+                                  type="email"
+                                  placeholder="counterparty@example.com"
+                                  value={counterpartyEmails[party.party_name] || ""}
+                                  onChange={(e) =>
+                                    setCounterpartyEmails((prev) => ({
+                                      ...prev,
+                                      [party.party_name]: e.target.value,
+                                    }))
+                                  }
+                                  className="text-xs h-8 bg-white"
+                                  disabled={isGeneratingToken !== null}
+                                />
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleGenerateShareableToken(party.party_name)}
+                                  disabled={
+                                    isGeneratingToken !== null ||
+                                    !counterpartyEmails[party.party_name]?.trim()
+                                  }
+                                  className="text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 gap-1.5 shrink-0 h-8"
+                                >
+                                  {isGeneratingToken === party.party_name ? (
+                                    <>
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      Generating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Share2 className="h-3.5 w-3.5" />
+                                      Create Review Link
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+                              <p className="text-[10px] text-slate-500">
+                                Link requires OTP sent to this email before {party.party_name} can review or confirm.
+                              </p>
+                            </div>
+
+                            {/* Expandable Shareable Token Box */}
+                            {shareableLink?.partyName === party.party_name && (
+                              <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2 animate-in fade-in duration-150 text-xs">
+                                <div className="flex items-center justify-between">
+                                  <span className="font-bold text-[11px] text-blue-950 flex items-center gap-1">
+                                    <Link2 className="h-3.5 w-3.5 text-blue-700" />
+                                    Shareable Counterparty Link
+                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={handleCopyLink}
+                                      className="h-6 text-[10px] px-2 bg-white gap-1 border-blue-300 text-blue-800 hover:bg-blue-100"
+                                    >
+                                      {copied ? (
+                                        <>
+                                          <Check className="h-3 w-3 text-emerald-600" />
+                                          Copied!
+                                        </>
+                                      ) : (
+                                        <>
+                                          <Copy className="h-3 w-3" />
+                                          Copy Link
+                                        </>
+                                      )}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      asChild
+                                      className="h-6 text-[10px] px-2 bg-emerald-50 gap-1 border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                                    >
+                                      <a
+                                        href={`https://wa.me/?text=${encodeURIComponent(
+                                          `Hi ${party.party_name}, please review and assent to our commercial agreement draft: ${shareableLink.url}`
+                                        )}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                      >
+                                        <MessageSquare className="h-3 w-3 text-emerald-600" />
+                                        WhatsApp
+                                      </a>
+                                    </Button>
+                                  </div>
+                                </div>
+                                <Input
+                                  readOnly
+                                  value={shareableLink.url}
+                                  className="text-[10px] font-mono h-7 bg-white text-slate-800"
+                                />
+                                <p className="text-[10px] text-blue-800 leading-normal">
+                                  Send this link to {party.party_name}. They will enter their email ({counterpartyEmails[party.party_name]}) and verify with a one-time passcode to review and sign.
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
                     ) : (
-                      <div className="text-[10px] font-mono text-emerald-700 flex items-center gap-1 pt-1">
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                        Assent Cryptographically Logged in Audit Trail
+                      <div className="space-y-1.5 pt-1">
+                        <div className="text-[11px] font-mono text-emerald-700 flex items-center gap-1">
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                          Assent Cryptographically Logged in Audit Trail
+                        </div>
+                        {party.masked_email && (
+                          <div className="text-[10px] text-slate-600 flex items-center gap-1">
+                            <Mail className="h-3 w-3 text-slate-400" />
+                            <span>
+                              Verified Email:{" "}
+                              <span className="font-mono font-semibold text-slate-800">
+                                {party.masked_email}
+                              </span>
+                            </span>
+                          </div>
+                        )}
+                        {party.verification_method && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300"
+                          >
+                            {party.verification_method === "email_otp"
+                              ? "Assent Verified via Email OTP"
+                              : "Direct Dashboard Assent"}
+                          </Badge>
+                        )}
                       </div>
                     )}
                   </div>
@@ -910,7 +909,7 @@ function ConfirmationsContent() {
                     <Link href={`/evidence?entity_id=${encodeURIComponent(agreement.id)}`}>
                       <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5">
                         <ShieldCheck className="h-3.5 w-3.5" />
-                        Inspect Section 65B Evidence Vault
+                        Inspect Cryptographic Evidence Vault
                         <ArrowRight className="h-3.5 w-3.5" />
                       </Button>
                     </Link>
@@ -921,21 +920,21 @@ function ConfirmationsContent() {
                 </p>
               </div>
 
-              {/* Official Non-Judicial e-Stamp Download & Client Sharing Banner */}
+              {/* Commercial Agreement Record Download & Client Sharing Banner */}
               {agreement && (
                 <div className="border border-amber-300 bg-amber-50/90 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs shadow-xs">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Award className="h-4 w-4 text-amber-700 shrink-0" />
                       <span className="font-bold text-amber-950 text-sm">
-                        Official Non-Judicial e-Stamp Contract (PDF)
+                        Commercial Agreement Record (PDF)
                       </span>
                       <Badge className="bg-amber-200 text-amber-900 border-amber-400 text-[10px] font-semibold">
-                        ₹ 100 Non-Judicial e-Stamp
+                        Verified Assent Record
                       </Badge>
                     </div>
                     <p className="text-amber-900 text-[11px] leading-relaxed">
-                      The commercial contract is finalized with two-party mutual assent under Section 10A IT Act, 2000. Download the official Indian Stamp Paper PDF format to share directly with your client or counterparty.
+                      The commercial contract is finalized with two-party mutual assent under Section 10A IT Act, 2000. Download the commercial agreement PDF with Certificate of Assent to share directly with your client or counterparty.
                     </p>
                   </div>
 
@@ -947,7 +946,7 @@ function ConfirmationsContent() {
                       className="text-xs gap-1.5 border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
                     >
                       <Eye className="h-3.5 w-3.5 text-amber-700" />
-                      <span>Preview Stamp Deed</span>
+                      <span>Preview Agreement</span>
                     </Button>
 
                     <Button
@@ -957,7 +956,7 @@ function ConfirmationsContent() {
                     >
                       <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
                         <Download className="h-3.5 w-3.5" />
-                        <span>Download Stamp PDF</span>
+                        <span>Download Agreement PDF</span>
                       </a>
                     </Button>
                   </div>
@@ -992,99 +991,6 @@ function ConfirmationsContent() {
           <div className="border-t pt-4 text-xs text-slate-500">
             <strong>Rule:</strong> The agreement becomes effective only once both parties record mutual, unqualified assent without pending objections.
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Testable Single-Use Token Confirmation Box */}
-      <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div>
-              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-800">
-                <KeyRound className="h-4 w-4 text-blue-600" />
-                Test Counterparty Single-Use Signed Token Link
-              </CardTitle>
-              <CardDescription className="text-xs">
-                External counterparties receive a unique token link to confirm without creating an account. Test token execution live below.
-              </CardDescription>
-            </div>
-
-            {unconfirmedParty && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => handleGenerateShareableToken(unconfirmedParty.party_name)}
-                className="text-xs gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
-              >
-                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                Generate Token for {unconfirmedParty.party_name}
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-5 space-y-3.5">
-          {/* Architectural Explanation Notice */}
-          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600 space-y-1">
-            <div className="font-bold flex items-center gap-1.5 text-slate-800">
-              <Info className="h-3.5 w-3.5 text-blue-600" />
-              How Counterparty Confirmation Works
-            </div>
-            <p className="text-[11px] leading-relaxed">
-              1. <strong>Share Link:</strong> The contract drafter generates a single-use signed token link and shares it with the external party via WhatsApp/email.
-              <br />
-              2. <strong>No Account Needed:</strong> The counterparty opens the link, reviews the synthesized clauses, and clicks &ldquo;I Agree & Confirm&rdquo;.
-              <br />
-              3. <strong>Immediate Finalization:</strong> The single-use token executes, stamps the counterparty&apos;s assent into the audit trail, and marks the agreement as <code>fully_confirmed</code> under Section 7 of the Indian Contract Act.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Input
-              placeholder="Paste raw confirmation token..."
-              value={tokenInput}
-              onChange={(e) => setTokenInput(e.target.value)}
-              className="text-xs font-mono"
-            />
-            <Input
-              placeholder="Optional confirmation remarks / notes..."
-              value={tokenNotes}
-              onChange={(e) => setTokenNotes(e.target.value)}
-              className="text-xs"
-            />
-          </div>
-
-          <Button
-            size="sm"
-            onClick={handleExecuteToken}
-            disabled={actionLoading === "token" || !tokenInput.trim()}
-            className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-          >
-            {actionLoading === "token" ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Executing Token...
-              </>
-            ) : (
-              <>
-                <Send className="h-3.5 w-3.5" />
-                Execute Token Confirmation via API
-              </>
-            )}
-          </Button>
-
-          {tokenResult && (
-            <Alert className="bg-emerald-50 border-emerald-200 text-emerald-800 text-xs">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <AlertDescription>{tokenResult}</AlertDescription>
-            </Alert>
-          )}
-
-          {tokenError && (
-            <Alert variant="destructive" className="text-xs">
-              <ShieldAlert className="h-4 w-4" />
-              <AlertDescription>{tokenError}</AlertDescription>
-            </Alert>
-          )}
         </CardContent>
       </Card>
 

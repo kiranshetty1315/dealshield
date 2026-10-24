@@ -220,7 +220,7 @@ export function ChatMessageViewer({
       <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center justify-between">
         <span className="flex items-center gap-1">
           <Shield className="h-3 w-3 text-blue-600" />
-          Section 65B Citation Ready
+          Cryptographic Citation Ready
         </span>
         <span>
           Click any message to filter or inspect its terms.

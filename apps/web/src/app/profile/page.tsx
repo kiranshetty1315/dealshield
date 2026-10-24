@@ -506,9 +506,9 @@ export default function ProfilePage() {
                 <FileCheck2 className="h-4 w-4" />
               </div>
               <div className="space-y-0.5">
-                <span className="font-bold text-slate-900 block">Section 65B Admissibility</span>
+                <span className="font-bold text-slate-900 block">Cryptographic Evidence Vault</span>
                 <p className="text-[11px] text-slate-500">
-                  Every finalized agreement generates a cryptographically hashed certificate for judicial submission under Indian Evidence Act.
+                  Every finalized agreement generates a cryptographically hashed certificate recording mutual assent with tamper-evident audit trail.
                 </p>
               </div>
             </div>
@@ -553,7 +553,7 @@ export default function ProfilePage() {
                 <span className="text-2xl font-extrabold text-purple-700 font-mono">
                   {isLoadingStats ? "..." : dashboardStats?.total_hashes ?? 0}
                 </span>
-                <span className="text-[11px] text-slate-500 block font-medium">Section 65B Hashes</span>
+                <span className="text-[11px] text-slate-500 block font-medium">SHA-256 Hashes</span>
               </div>
             </div>
 

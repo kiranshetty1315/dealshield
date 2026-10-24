@@ -652,7 +652,7 @@ function AnalysisContent() {
                 <p className="leading-relaxed text-[11px] text-blue-800">
                   Every extracted term and conflict is tied to an immutable citation ID (e.g.,{" "}
                   <code className="font-mono bg-blue-100 text-blue-900 px-1 py-0.5 rounded">msg_...</code>).
-                  Section 65B Indian Evidence Act compliant hashing ensures the original chat export is cryptographically matched with each generated agreement clause.
+                  Tamper-evident SHA-256 cryptographic hashing ensures the original chat export is matched with each generated agreement clause.
                 </p>
               </div>
             </div>

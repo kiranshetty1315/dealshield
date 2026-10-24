@@ -137,6 +137,12 @@ export interface Agreement {
 
 export interface PartyConfirmationRecord {
   party_name: string;
+  party_email?: string;
+  masked_email?: string;
+  verification_method?: string;
+  email_verified_at?: string;
+  agreed_version_number?: number;
+  agreed_content_hash?: string;
   confirmed: boolean;
   confirmed_at?: string;
   declined?: boolean;
@@ -205,6 +211,36 @@ export interface TokenConfirmationResponse {
   declined_at?: string;
   decline_reason?: string;
   action?: "agree" | "decline";
+}
+
+export interface SessionResponse {
+  session_token: string;
+  expires_at: string;
+}
+
+export interface TokenInspectResponse {
+  token: string;
+  party_name: string;
+  masked_email?: string;
+  confirmed: boolean;
+  confirmed_at?: string;
+  declined: boolean;
+  declined_at?: string;
+  decline_reason?: string;
+  expires_at?: string;
+  requires_email_verification: boolean;
+  agreement?: Agreement | null;
+}
+
+export interface TokenGenerateResponse {
+  status: string;
+  agreement_id: string;
+  party_name: string;
+  raw_token: string;
+  token: string;
+  token_hash: string;
+  expires_at: string;
+  confirmation_url: string;
 }
 
 

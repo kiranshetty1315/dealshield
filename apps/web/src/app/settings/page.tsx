@@ -498,7 +498,7 @@ export default function SettingsPage() {
                 <div className="text-[11px] text-amber-800 font-medium pt-0.5">
                   • Deletion permanently removes all encrypted message records from the database.
                   <br />
-                  • Section 65B tamper-evident hash certificates remain intact in the evidence repository.
+                  • Tamper-evident hash certificates remain intact in the evidence repository.
                 </div>
               </div>
 
@@ -755,7 +755,7 @@ export default function SettingsPage() {
                   </div>
                   <div className="flex items-start gap-1.5">
                     <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    <span><strong>Section 65B Certificate:</strong> Evidence packages generate immutable SHA-256 hash receipts.</span>
+                    <span><strong>Audit Certificate:</strong> Evidence packages generate immutable SHA-256 hash receipts.</span>
                   </div>
                 </div>
               </div>

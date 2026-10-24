@@ -2,16 +2,15 @@
 
 import React from "react";
 import {
-  FileCheck2,
+  FileText,
   Download,
   Printer,
   X,
   ShieldCheck,
   CheckCircle2,
   Clock,
-  ExternalLink,
-  Award,
-  Hash,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -37,15 +36,7 @@ export function StampPaperModal({
   const clauses = currentVersion?.clauses || [];
 
   const firstParty = agreement.parties?.[0] || "Client / First Party";
-  const secondParty = agreement.parties?.[1] || (
-    agreement.parties?.[0] || "Service Provider / Counterparty"
-  );
-
-  const certNumber = `IN-DL${Math.abs(
-    agreement.id.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) * 12345
-  )
-    .toString()
-    .slice(0, 9)}Z`;
+  const secondParty = agreement.parties?.[1] || "Service Provider / Counterparty";
 
   const createdDate = agreement.created_at
     ? new Date(agreement.created_at).toLocaleDateString("en-IN", {
@@ -74,18 +65,18 @@ export function StampPaperModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 print:max-h-none print:shadow-none print:border-none print:rounded-none">
-        {/* Modal Top Control Bar (Hidden on print) */}
+        {/* Modal Top Control Bar */}
         <div className="p-4 bg-slate-900 text-white flex items-center justify-between gap-4 shrink-0 print:hidden">
           <div className="flex items-center gap-2.5">
-            <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              <Award className="h-5 w-5" />
+            <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-500/30">
+              <FileText className="h-5 w-5" />
             </div>
             <div>
               <h3 className="font-bold text-sm sm:text-base text-white flex items-center gap-2">
-                Indian Non-Judicial e-Stamp Paper Agreement
+                DealShield AI — Commercial Agreement Record
               </h3>
               <p className="text-xs text-slate-400">
-                Statutory enforceable digital contract under Section 10A IT Act, 2000 &amp; Section 7 ICA, 1872
+                Private commercial record generated from verified negotiations with Certificate of Assent
               </p>
             </div>
           </div>
@@ -98,17 +89,17 @@ export function StampPaperModal({
               className="text-xs gap-1.5 bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700 hover:text-white"
             >
               <Printer className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Print Document</span>
+              <span className="hidden sm:inline">Print</span>
             </Button>
 
             <Button
               size="sm"
               asChild
-              className="text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-sm"
+              className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
             >
               <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
                 <Download className="h-3.5 w-3.5" />
-                <span>Download PDF</span>
+                <span>Download Agreement PDF</span>
               </a>
             </Button>
 
@@ -122,72 +113,75 @@ export function StampPaperModal({
           </div>
         </div>
 
-        {/* Scrollable Document Container (Printable Paper Sheet) */}
+        {/* Scrollable Document Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 bg-slate-100/60 print:p-0 print:bg-white">
           <div className="bg-white mx-auto max-w-[760px] p-6 sm:p-10 shadow-sm border border-slate-300 rounded-lg space-y-6 text-slate-900 font-sans print:shadow-none print:border-none print:p-0">
-            {/* 1. ORNAMENTAL E-STAMP BANNER */}
-            <div className="border-2 border-amber-600 rounded-lg overflow-hidden shadow-xs">
-              <div className="bg-amber-100/90 border-b border-amber-600 p-3 sm:p-4 text-center space-y-0.5">
-                <p className="text-[11px] font-bold tracking-widest text-amber-900 uppercase">
-                  INDIA NON JUDICIAL
+            {/* 1. DOCUMENT HEADER */}
+            <div className="border border-slate-300 rounded-lg overflow-hidden shadow-xs">
+              <div className="bg-slate-50 border-b border-slate-300 p-4 text-center space-y-1">
+                <p className="text-xs font-bold tracking-widest text-slate-600 uppercase">
+                  DealShield AI
                 </p>
-                <h2 className="text-base sm:text-lg font-extrabold text-amber-950 tracking-wide uppercase">
-                  Government of National Capital Territory of Delhi
+                <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-wide uppercase">
+                  Plain-Language Commercial Agreement (Record)
                 </h2>
-                <p className="text-xs font-bold text-blue-900">
-                  e-Stamp Certificate of Commercial Service Agreement
+                <p className="text-xs text-slate-500">
+                  Private Record of Agreed Commercial Terms
                 </p>
               </div>
 
-              {/* e-Stamp Metadata Grid */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 text-[11px] bg-amber-50/50 divide-x divide-y divide-amber-300/60 border-b border-amber-600">
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Certificate No.</span>
-                  <span className="font-mono font-bold text-slate-900">{certNumber}</span>
-                </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Certificate Issued Date</span>
-                  <span className="font-semibold text-slate-800">{createdDate}</span>
-                </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Account Reference</span>
-                  <span className="font-semibold text-slate-800">SELFPRINT / DEALSHIELD</span>
-                </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Unique Doc. Reference</span>
-                  <span className="font-mono font-bold text-slate-800 truncate block" title={agreement.id}>
-                    SUBIN-IN{agreement.id.slice(0, 8).toUpperCase()}01M
+              {/* Document Metadata Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 text-[11px] bg-slate-50/50 divide-x divide-y divide-slate-200 border-b border-slate-300">
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Agreement Ref</span>
+                  <span className="font-mono font-bold text-slate-900 truncate block" title={agreement.id}>
+                    {agreement.id.slice(0, 16)}...
                   </span>
                 </div>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Date Generated</span>
+                  <span className="font-semibold text-slate-800">{createdDate}</span>
+                </div>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Version</span>
+                  <span className="font-semibold text-slate-800">v{currentVersion?.version_number || agreement.current_version}.0</span>
+                </div>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Status</span>
+                  <span className="font-bold text-emerald-800 uppercase">{agreement.status.replace("_", " ")}</span>
+                </div>
 
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Purchased by</span>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">First Party (Initiator)</span>
                   <span className="font-bold text-slate-900">{firstParty}</span>
                 </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Description of Doc</span>
-                  <span className="font-semibold text-slate-800">Article 5(c) Commercial Agreement</span>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Second Party (Counterparty)</span>
+                  <span className="font-bold text-slate-900">{secondParty}</span>
                 </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Stamp Duty Paid By</span>
-                  <span className="font-semibold text-slate-800">{firstParty}</span>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Integrity Digest</span>
+                  <span className="font-mono text-slate-700 truncate block">SHA-256 Fingerprint</span>
                 </div>
-                <div className="p-2 space-y-0.5">
-                  <span className="font-semibold text-slate-500 block text-[10px]">Stamp Duty Amount</span>
-                  <span className="font-bold text-amber-900">₹ 100/- (Rupees One Hundred)</span>
+                <div className="p-2.5 space-y-0.5">
+                  <span className="font-semibold text-slate-500 block text-[10px]">Assent Method</span>
+                  <span className="font-semibold text-slate-800">Email OTP / Direct</span>
                 </div>
               </div>
 
-              {/* Statutory Notice Band */}
-              <div className="bg-amber-100/70 p-2 text-[10px] text-amber-950 leading-relaxed text-center">
-                <strong>STATUTORY LEGAL EFFECT:</strong> Executed pursuant to <strong>Section 10A Information Technology Act, 2000</strong> (electronic contracts), <strong>Section 65B Indian Evidence Act, 1872</strong> (electronic record admissibility), and <strong>Section 7 Indian Contract Act, 1872</strong> (absolute &amp; unqualified acceptance).
+              {/* Warning Notice Callout */}
+              <div className="bg-amber-50 p-3 text-[10px] text-amber-950 leading-relaxed border-t border-amber-200 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong>NOTICE:</strong> This document is a private record of commercial terms agreed between the parties. It is <strong>NOT</strong> a government-issued stamp paper, e-Stamp certificate, or statutory non-judicial stamp paper. No stamp duty has been paid through this service. For legal proceedings requiring stamp duty under the Indian Stamp Act, 1899 or applicable State Stamp Acts, parties must independently pay stamp duty through authorised channels. Electronic assents recorded herein are based on single-use token and email-OTP verification and do not constitute an Aadhaar eSign or IT Act Section 3/3A digital signature.
+                </div>
               </div>
             </div>
 
             {/* 2. AGREEMENT TITLE & PREAMBLE */}
             <div className="text-center space-y-1 pt-2 border-b border-slate-200 pb-4">
               <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight uppercase">
-                Commercial Service Agreement
+                Commercial Service Agreement Terms
               </h1>
               <p className="text-xs text-slate-500">
                 Agreement Identifier: <code className="font-mono">{agreement.id}</code> &bull; Version v{currentVersion?.version_number || agreement.current_version}.0
@@ -196,152 +190,106 @@ export function StampPaperModal({
 
             <div className="text-xs text-slate-700 leading-relaxed space-y-2">
               <p>
-                This <strong>Commercial Service Agreement</strong> (&ldquo;Agreement&rdquo;) is entered into and deemed effective as of <strong>{createdDate}</strong>, by and between:
+                This <strong>Commercial Service Agreement</strong> (&ldquo;Agreement&rdquo;) records the commercial terms agreed upon between the following parties:
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">First Party (Initiator)</span>
-                  <p className="font-bold text-slate-900">{firstParty}</p>
-                  <p className="text-[11px] text-slate-500">Requesting / Authorizing Entity</p>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Second Party (Counterparty)</span>
-                  <p className="font-bold text-slate-900">{secondParty}</p>
-                  <p className="text-[11px] text-slate-500">Executing Contractor / Service Provider</p>
-                </div>
-              </div>
-              <p className="text-[11px] italic text-slate-600">
-                WHEREAS, the Parties engaged in mutual commercial communications and formally accepted the covenants, milestones, and consideration set forth below.
-              </p>
+              <ol className="list-decimal list-inside space-y-1 pl-2 text-slate-800 font-medium">
+                <li><strong>{firstParty}</strong>, hereinafter referred to as the <strong>&ldquo;First Party / Initiator&rdquo;</strong></li>
+                <li><strong>{secondParty}</strong>, hereinafter referred to as the <strong>&ldquo;Second Party / Counterparty&rdquo;</strong></li>
+              </ol>
             </div>
 
             {/* 3. SYNTHESIZED CLAUSES */}
             <div className="space-y-4 pt-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 pb-1 flex items-center gap-1.5">
-                <FileCheck2 className="h-3.5 w-3.5 text-blue-600" />
-                Contractual Clauses &amp; Agreed Obligations
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1">
+                Agreed Contract Clauses
               </h3>
 
-              <div className="space-y-4">
-                {clauses.map((clause, idx) => (
-                  <div key={clause.clause_id || idx} className="space-y-1 pl-2 border-l-2 border-blue-600/40">
-                    <div className="flex items-center justify-between gap-2">
-                      <h4 className="font-bold text-xs text-slate-900">{clause.title}</h4>
-                      <span className="text-[10px] font-mono text-slate-400">Clause {idx + 1}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-700 leading-relaxed whitespace-pre-line">
-                      {clause.body}
+              {clauses.map((clause, idx) => (
+                <div key={clause.clause_id || idx} className="space-y-1.5 p-3 rounded-lg bg-slate-50/70 border border-slate-200">
+                  <h4 className="font-bold text-xs text-slate-900">{clause.title}</h4>
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{clause.body}</p>
+                  {clause.statutory_reference && (
+                    <p className="text-[10px] text-slate-500 italic">
+                      <strong>Reference Standard:</strong> {clause.statutory_reference}
                     </p>
-                    {clause.statutory_reference && (
-                      <p className="text-[10px] text-slate-500 italic">
-                        Legal Framework: {clause.statutory_reference}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  )}
+                </div>
+              ))}
             </div>
 
-            {/* 4. TWO-PARTY MUTUAL ASSENT & EXECUTION BLOCK */}
+            {/* 4. CERTIFICATE OF ASSENT */}
             <div className="pt-4 border-t border-slate-200 space-y-3">
-              <p className="text-xs font-bold text-slate-900">
-                IN WITNESS WHEREOF, the Parties have executed and digitally affirmed this Agreement:
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                Certificate of Assent &amp; Execution Audit Trail
+              </h3>
+              <p className="text-[11px] text-slate-600">
+                Electronic assents verified via single-use security tokens and Email OTP to declared counterparty email addresses:
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {/* Party A Box */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-1.5 text-xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">First Party</span>
-                  <p className="font-bold text-slate-900 text-sm">{firstParty}</p>
-                  <div className="flex items-center gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {/* Party 1 Box */}
+                <div className={`p-3.5 rounded-lg border space-y-1.5 ${p1Record?.confirmed ? "bg-emerald-50/60 border-emerald-300" : "bg-slate-50 border-slate-200"}`}>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block">First Party (Initiator)</span>
+                  <p className="font-bold text-sm text-slate-900">{firstParty}</p>
+                  <Badge className={`text-[10px] ${p1Record?.confirmed ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
                     {p1Record?.confirmed ? (
-                      <Badge className="bg-emerald-600 text-white text-[10px] gap-1 px-2 py-0.5">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Formally Confirmed
-                      </Badge>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Assent Recorded</span>
                     ) : (
-                      <Badge variant="outline" className="border-amber-400 text-amber-800 text-[10px] gap-1">
-                        <Clock className="h-3 w-3" />
-                        Pending Record
-                      </Badge>
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Pending</span>
                     )}
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Timestamp: {p1Record?.confirmed_at ? new Date(p1Record.confirmed_at).toUTCString() : createdDate}
+                  </Badge>
+                  <p className="text-[10px] text-slate-600">
+                    <strong>Timestamp:</strong> {p1Record?.confirmed_at ? new Date(p1Record.confirmed_at).toUTCString() : "Pending"}
                   </p>
-                  <p className="text-[10px] font-mono text-slate-400 truncate">
-                    Sign Ref: {p1Record?.ip_hash || "HMAC-SHA256 Registered"}
+                  <p className="text-[10px] text-slate-500">
+                    <strong>Method:</strong> Direct Platform Confirmation (Initiator)
                   </p>
                 </div>
 
-                {/* Party B Box */}
-                <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 space-y-1.5 text-xs">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Second Party</span>
-                  <p className="font-bold text-slate-900 text-sm">{secondParty}</p>
-                  <div className="flex items-center gap-1.5">
+                {/* Party 2 Box */}
+                <div className={`p-3.5 rounded-lg border space-y-1.5 ${p2Record?.confirmed ? "bg-emerald-50/60 border-emerald-300" : p2Record?.declined ? "bg-rose-50 border-rose-300" : "bg-slate-50 border-slate-200"}`}>
+                  <span className="text-[10px] uppercase font-bold text-slate-500 block">Second Party (Counterparty)</span>
+                  <p className="font-bold text-sm text-slate-900">{secondParty}</p>
+                  <Badge className={`text-[10px] ${p2Record?.confirmed ? "bg-emerald-100 text-emerald-800 border-emerald-300" : p2Record?.declined ? "bg-rose-100 text-rose-800 border-rose-300" : "bg-amber-100 text-amber-800 border-amber-300"}`}>
                     {p2Record?.confirmed ? (
-                      <Badge className="bg-emerald-600 text-white text-[10px] gap-1 px-2 py-0.5">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Formally Confirmed
-                      </Badge>
+                      <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Assent Recorded</span>
+                    ) : p2Record?.declined ? (
+                      <span className="flex items-center gap-1"><XCircle className="h-3 w-3" /> Terms Declined</span>
                     ) : (
-                      <Badge variant="outline" className="border-amber-400 text-amber-800 text-[10px] gap-1">
-                        <Clock className="h-3 w-3" />
-                        Pending Record
-                      </Badge>
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> Awaiting Confirmation</span>
                     )}
-                  </div>
+                  </Badge>
+                  <p className="text-[10px] text-slate-600">
+                    <strong>Masked Email:</strong> {p2Record?.masked_email || "Declared address"}
+                  </p>
+                  <p className="text-[10px] text-slate-600">
+                    <strong>Timestamp:</strong> {p2Record?.confirmed_at ? new Date(p2Record.confirmed_at).toUTCString() : (p2Record?.declined_at ? new Date(p2Record.declined_at).toUTCString() : "Pending")}
+                  </p>
                   <p className="text-[10px] text-slate-500">
-                    Timestamp: {p2Record?.confirmed_at ? new Date(p2Record.confirmed_at).toUTCString() : "Awaiting Counterparty"}
+                    <strong>Method:</strong> Email OTP to declared counterparty address. Not an Aadhaar eSign.
                   </p>
-                  <p className="text-[10px] font-mono text-slate-400 truncate">
-                    Sign Ref: {p2Record?.ip_hash || "Secured Token Verification"}
-                  </p>
+                  {p2Record?.declined && p2Record.decline_reason && (
+                    <p className="text-[10px] text-rose-700 italic">
+                      <strong>Decline Reason:</strong> &ldquo;{p2Record.decline_reason}&rdquo;
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* 5. CRYPTOGRAPHIC TAMPER-EVIDENT EVIDENCE VAULT SEAL */}
-            <div className="rounded-lg border border-emerald-300 bg-emerald-50/70 p-3.5 flex items-start gap-3 text-xs text-emerald-950">
-              <div className="p-1.5 rounded-md bg-emerald-600 text-white shrink-0 mt-0.5">
-                <ShieldCheck className="h-4 w-4" />
-              </div>
-              <div className="space-y-0.5 flex-1 min-w-0">
-                <p className="font-bold text-xs text-emerald-900">
-                  DealShield AI Cryptographic Evidence Vault Seal
-                </p>
-                <p className="text-[10px] text-emerald-800">
-                  SHA-256 Digest: <span className="font-mono font-bold">{currentVersion?.content_hash || agreement.id}</span>
-                </p>
-                <p className="text-[10px] text-emerald-700">
-                  Tamper-evident non-repudiation ledger sealed under Section 65B of the Indian Evidence Act, 1872.
-                </p>
-              </div>
+            {/* 5. CRYPTOGRAPHIC SEAL */}
+            <div className="bg-slate-50 border border-slate-200 p-3 rounded-lg text-[10px] text-slate-600 space-y-1">
+              <p className="font-bold text-slate-800 flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                DealShield AI Cryptographic Record &amp; Integrity Seal
+              </p>
+              <p className="font-mono truncate">
+                SHA-256 Digest: {currentVersion?.content_hash || "Standard Agreement Fingerprint"}
+              </p>
+              <p className="text-slate-500">
+                Private Commercial Record &bull; Notary/Statutory Stamp Duty Not Included &bull; Tamper-Evident SHA-256 Ledger
+              </p>
             </div>
-          </div>
-        </div>
-
-        {/* Modal Bottom Footer Action Bar (Hidden on print) */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0 print:hidden">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-            <span>Ready for client delivery, email dispatch, or archival.</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={onClose} className="text-xs">
-              Close Preview
-            </Button>
-            <Button
-              size="sm"
-              asChild
-              className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
-            >
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
-                <Download className="h-3.5 w-3.5" />
-                <span>Download Official Stamp Paper (PDF)</span>
-              </a>
-            </Button>
           </div>
         </div>
       </div>

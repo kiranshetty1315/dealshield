@@ -431,12 +431,12 @@ function AgreementsContent() {
                 onClick={() => setIsStampModalOpen(true)}
                 className="gap-2 text-xs h-9 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
               >
-                <Award className="h-4 w-4 text-amber-600" /> Preview e-Stamp
+                <Award className="h-4 w-4 text-amber-600" /> Preview Agreement
               </Button>
 
               <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
                 <Button size="sm" className="gap-2 text-xs h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs">
-                  <Download className="h-4 w-4" /> Download e-Stamp PDF
+                  <Download className="h-4 w-4" /> Download Agreement PDF
                 </Button>
               </a>
 
@@ -497,7 +497,7 @@ function AgreementsContent() {
                     </div>
                   </div>
                   <p className="text-[10px] text-slate-500">
-                    Guaranteed append-only audit trail enforcing DPDP Act 2023 compliance and Section 65B Indian Evidence Act admissibility.
+                    Guaranteed append-only audit trail enforcing DPDP Act 2023 compliance and cryptographic tamper-evident integrity.
                   </p>
                 </CardContent>
               </Card>
@@ -518,7 +518,7 @@ function AgreementsContent() {
                   Two-Party Confirmation Status
                 </span>
                 <p className="text-[11px] text-slate-600 leading-relaxed">
-                  When both counterparties confirm this draft via token-authenticated review links, an immutable Section 65B digital evidence certificate will be generated and signed.
+                  When both counterparties confirm this draft via email-OTP authenticated review links, an immutable cryptographic Certificate of Assent will be recorded.
                 </p>
                 <div className="pt-1">
                   <Button variant="outline" size="sm" asChild className="w-full text-xs h-8 text-blue-700 border-blue-200 bg-blue-50/50 hover:bg-blue-100">

@@ -83,7 +83,7 @@ function EvidenceContent() {
         <div className="flex items-center gap-2 flex-wrap">
           <h1 className="text-3xl font-extrabold text-slate-900">Evidence Vault & Integrity Verifier</h1>
           <Badge variant="outline" className="border-emerald-300 text-emerald-700 bg-emerald-50">
-            Section 65B Admissible
+            Tamper-Evident Ledger
           </Badge>
           <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50">
             SHA-256 Protected
