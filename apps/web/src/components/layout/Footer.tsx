@@ -10,8 +10,13 @@ export function Footer() {
           <span className="font-semibold text-slate-800">DealShield AI</span>
           <span>— Hackathon Problem Statement LS-06: From Handshake to Contract</span>
         </div>
-        <div className="text-xs text-slate-500 text-center md:text-right max-w-md">
-          Integrity hashes verify document consistency against audit logs. Does not replace statutory eSign certificates under the Indian IT Act.
+        <div className="text-xs text-slate-500 text-center md:text-right max-w-lg space-y-1">
+          <div>
+            DPDP Act 2023 Compliant: Salted IP hashing & data minimization applied.
+          </div>
+          <div>
+            Plain-language summary only. Not an executed or stamp-duty-paid legal deed under the Indian Stamp Act, 1899.
+          </div>
         </div>
       </div>
     </footer>

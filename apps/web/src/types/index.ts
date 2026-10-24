@@ -66,6 +66,7 @@ export interface ConflictItem {
   source_message_ids: string[];
   severity: ConflictSeverity;
   resolution_suggestion?: string;
+  statutory_context?: string;
 }
 
 export interface MissingTerm {

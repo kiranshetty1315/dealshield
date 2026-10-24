@@ -1,112 +1,101 @@
 {
-  "analysis_id": "analysis-001",
-  "chat_id": "chat-001",
+  "analysis_id": "analysis_7f1c9a3d4e8b",
+  "chat_id": "chat_sample_01",
   "parties": [
     {
+      "party_id": "party_raj_01",
       "name": "Raj Mehta",
-      "role": "client",
-      "identified_from": ["msg-001", "msg-003"]
+      "detected_role": "Client",
+      "contact_handle": "Raj Mehta"
     },
     {
+      "party_id": "party_priya_02",
       "name": "Priya Sharma",
-      "role": "service_provider",
-      "identified_from": ["msg-002", "msg-004"]
+      "detected_role": "Service Provider",
+      "contact_handle": "Priya Sharma"
     }
   ],
   "extracted_terms": [
     {
-      "term_type": "scope",
-      "description": "Full website redesign",
-      "value": "Full redesign of client's website",
-      "source_message_ids": ["msg-001", "msg-002"],
-      "confidence": 0.9,
-      "status": "accepted"
+      "term_id": "term_scope_01",
+      "category": "scope",
+      "description": "Full website redesign including UI mockups and delivery",
+      "proposed_value": "Full redesign",
+      "accepted_value": "Full website redesign with initial mockups next week",
+      "status": "agreed",
+      "source_message_ids": ["msg_raj_001", "msg_priya_002", "msg_priya_010"],
+      "confidence": "high"
     },
     {
-      "term_type": "price",
-      "description": "Initial budget proposed by client",
-      "value": "₹75,000",
-      "source_message_ids": ["msg-003"],
-      "confidence": 0.95,
-      "status": "rejected"
+      "term_id": "term_price_01",
+      "category": "pricing",
+      "description": "Fixed project fee consideration",
+      "proposed_value": "₹75,000 (Raj) / ₹1,50,000 (Priya)",
+      "accepted_value": "₹1,00,000",
+      "status": "ambiguous",
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"],
+      "confidence": "medium"
     },
     {
-      "term_type": "price",
-      "description": "Service provider's standard rate",
-      "value": "₹1,50,000",
-      "source_message_ids": ["msg-004"],
-      "confidence": 0.95,
-      "status": "proposed"
+      "term_id": "term_payment_01",
+      "category": "payment_terms",
+      "description": "Advance payment condition required prior to kickoff",
+      "proposed_value": "50% upfront",
+      "accepted_value": "50% upfront (₹50,000)",
+      "status": "agreed",
+      "source_message_ids": ["msg_priya_008", "msg_raj_009"],
+      "confidence": "high"
     },
     {
-      "term_type": "price",
-      "description": "Negotiated middle-ground price",
-      "value": "₹1,00,000",
-      "source_message_ids": ["msg-005", "msg-008"],
-      "confidence": 0.85,
-      "status": "ambiguous"
-    },
-    {
-      "term_type": "deadline",
-      "description": "Project completion deadline",
-      "value": "End of April 2024",
-      "source_message_ids": ["msg-007"],
-      "confidence": 0.9,
-      "status": "proposed"
-    },
-    {
-      "term_type": "payment_terms",
-      "description": "Upfront payment requirement",
-      "value": "50% upfront payment",
-      "source_message_ids": ["msg-008"],
-      "confidence": 0.85,
-      "status": "ambiguous"
+      "term_id": "term_timeline_01",
+      "category": "timeline",
+      "description": "Final website redesign delivery deadline",
+      "proposed_value": "End of April 2024",
+      "accepted_value": "End of April 2024",
+      "status": "agreed",
+      "source_message_ids": ["msg_raj_007", "msg_priya_008"],
+      "confidence": "medium"
     }
   ],
   "conflicts": [
     {
-      "conflict_id": "conflict-001",
-      "description": "Price disagreement: Client proposed ₹75,000, provider quoted ₹1,50,000. A middle ground of ₹1,00,000 was discussed but acceptance is ambiguous — Priya said 'I might be able to do it' (conditional) and Raj said 'Sure, that works I think' (uncertain).",
-      "term_type": "price",
-      "parties_involved": ["Raj Mehta", "Priya Sharma"],
-      "source_message_ids": ["msg-003", "msg-004", "msg-005", "msg-008", "msg-009"],
+      "conflict_id": "conflict_price_01",
+      "term_category": "pricing",
+      "description": "Initial price gap (₹75,000 vs ₹1,50,000) resolved to ₹1,00,000 but qualified by ambiguous acceptance statement",
+      "party_positions": {
+        "Raj Mehta": "Budget ₹75,000 initially; conceded to ₹1,00,000 stating 'Sure, that works I think. Let's go ahead'",
+        "Priya Sharma": "Demanded ₹1,50,000; agreed to ₹1,00,000 conditioned strictly on 50% upfront"
+      },
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"],
       "severity": "high",
-      "suggested_resolution": "Both parties should explicitly confirm the agreed price of ₹1,00,000 and whether it is inclusive of all deliverables."
+      "resolution_suggestion": "Formally confirm consideration at ₹1,00,000 with ₹50,000 paid upon signing.",
+      "statutory_context": "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. The phrase 'that works I think' introduces legal ambiguity."
     }
   ],
   "missing_terms": [
     {
-      "term_type": "scope",
-      "description": "Specific deliverables and pages included in the redesign are not defined.",
-      "importance": "required"
+      "term_id": "missing_ip_01",
+      "category": "intellectual_property",
+      "description": "No clause regarding ownership or copyright assignment of designs and code",
+      "importance": "critical",
+      "recommendation": "Assign full copyright and source asset ownership to Client upon 100% receipt of agreed payment."
     },
     {
-      "term_type": "payment_terms",
-      "description": "Payment schedule for the remaining 50% is not specified.",
-      "importance": "required"
+      "term_id": "missing_termination_01",
+      "category": "termination",
+      "description": "No provision for project cancellation, delay remedies, or work-in-progress compensation",
+      "importance": "important",
+      "recommendation": "Add 7-day written termination notice with payment for completed milestones."
     },
     {
-      "term_type": "warranty",
-      "description": "No warranty or revision policy discussed.",
-      "importance": "recommended"
-    },
-    {
-      "term_type": "penalty",
-      "description": "No late delivery or non-payment penalties agreed upon.",
-      "importance": "recommended"
-    },
-    {
-      "term_type": "deliverable",
-      "description": "Timeline for mockup delivery and review cycles not specified.",
-      "importance": "recommended"
-    },
-    {
-      "term_type": "other",
-      "description": "Intellectual property ownership of the design not discussed.",
-      "importance": "recommended"
+      "term_id": "missing_dispute_01",
+      "category": "dispute_resolution",
+      "description": "No governing law, jurisdiction, or dispute resolution mechanism specified",
+      "importance": "recommended",
+      "recommendation": "Specify governing law as Indian Law with seat of arbitration or court jurisdiction."
     }
   ],
-  "confidence_score": 0.72,
+  "confidence_score": 0.85,
   "requires_human_review": true,
-  "analyzed_at": "2024-03-15T14:30:00Z"
+  "analyzed_at": "2024-03-12T11:00:00Z"
 }

@@ -56,13 +56,15 @@ Ingests a WhatsApp `.txt` export file or raw text.
   "party_names": ["Raj Mehta", "Priya Sharma"],
   "message_count": 10,
   "status": "parsed",
+  "date_format_inferred": "DD/MM/YYYY (unambiguously verified by day > 12)",
+  "is_date_ambiguous": false,
   "messages": [
     {
-      "message_id": "msg_rajmehta_000_c528f1",
+      "message_id": "msg_raj_001",
       "sender": "Raj Mehta",
       "content": "Hi Priya, regarding the website project we discussed",
       "timestamp": "2024-03-12T10:15:00Z",
-      "sequence_number": 0,
+      "sequence_number": 1,
       "raw_line": "12/03/24, 10:15 - Raj Mehta: Hi Priya, regarding the website project we discussed"
     }
   ]
@@ -108,8 +110,8 @@ Triggers structured extraction via OpenAI structured outputs.
       "description": "Total fixed consideration for website redesign",
       "proposed_value": "₹75,000 proposed by Raj; ₹1,50,000 proposed by Priya",
       "accepted_value": "₹1,00,000",
-      "status": "agreed",
-      "source_message_ids": ["msg_rajmehta_002_a1b2c3", "msg_priyasharma_007_d4e5f6"],
+      "status": "ambiguous",
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_priya_008", "msg_raj_009"],
       "confidence": "high"
     }
   ],
@@ -117,14 +119,15 @@ Triggers structured extraction via OpenAI structured outputs.
     {
       "conflict_id": "conflict_price_01",
       "term_category": "pricing",
-      "description": "Price negotiation discrepancy resolved with qualified acceptance",
+      "description": "Price negotiation discrepancy resolved with qualified acceptance statement",
       "party_positions": {
-        "Raj Mehta": "Budget was ₹75,000, accepted ₹1,00,000 conditionally",
+        "Raj Mehta": "Budget was ₹75,000, accepted ₹1,00,000 saying 'Sure, that works I think. Let's go ahead'",
         "Priya Sharma": "Standard rate ₹1,50,000, offered ₹1,00,000 with 50% upfront"
       },
-      "source_message_ids": ["msg_rajmehta_004_g7h8i9", "msg_priyasharma_007_d4e5f6"],
-      "severity": "medium",
-      "resolution_suggestion": "Confirm ₹1,00,000 fixed price with ₹50,000 upfront milestone."
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_priya_008", "msg_raj_009"],
+      "severity": "high",
+      "resolution_suggestion": "Confirm ₹1,00,000 fixed price with ₹50,000 upfront milestone upon signing.",
+      "statutory_context": "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. The phrase 'that works I think' introduces legal ambiguity."
     }
   ],
   "missing_terms": [

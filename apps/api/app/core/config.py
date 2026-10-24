@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"
     SUPABASE_SERVICE_ROLE_KEY: str = "placeholder-service-role-key"
 
+    # Security salts
+    IP_HASH_SALT: str = "dealshield-default-dev-salt-change-in-production"
+
     # OpenAI (Team C integration - placeholder allowed for local scaffold)
     OPENAI_API_KEY: str = "sk-placeholder-openai-key"
     OPENAI_MODEL: str = "gpt-4o-mini"

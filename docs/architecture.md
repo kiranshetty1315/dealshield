@@ -60,14 +60,15 @@ DealShield AI bridges this gap by ingesting raw WhatsApp chat exports, parsing m
 ## 3. End-to-End Data Flow
 
 1. **Ingestion & Sanitization:**
-   - User uploads WhatsApp `.txt` export file or pastes chat transcript.
-   - FastAPI parses lines, identifies timestamps and senders, and generates deterministic IDs (`msg_raj_001_abc123`).
+   - User uploads WhatsApp `.txt` export file (capped at 10 MB) or pastes chat transcript.
+   - FastAPI parses lines, disambiguates DD/MM vs MM/DD formats, validates timestamps without fallback to `now()`, and generates clean deterministic citation IDs (`msg_raj_001`, `msg_priya_002`).
    - Stored in Supabase private bucket and database `messages` table.
 
-2. **Structured Legal Extraction (Team C):**
+2. **Structured Legal Extraction & Section 7 Conflict Analysis (Team C):**
    - Normalized messages are passed to OpenAI using Pydantic structured schemas.
    - Extracts: Parties, Deliverables, Proposed Pricing, Accepted Pricing, Deadlines, Payment Terms.
-   - Detects: Price contradictions, ambiguous acceptances, and missing legal provisions (IP, termination).
+   - **Section 7 ICA Analysis:** Explicitly flags conditional statements ("that works I think", "depends on timeline") as qualified acceptances under Section 7 of the Indian Contract Act, 1872.
+   - Detects missing provisions: Intellectual property copyright transfer, termination notice, and dispute jurisdiction.
 
 3. **Human Review & Conflict Resolution (Team A & C):**
    - UI presents the extracted terms side-by-side with exact citation chips linking to source chat messages.
@@ -75,12 +76,13 @@ DealShield AI bridges this gap by ingesting raw WhatsApp chat exports, parsing m
 
 4. **Agreement Synthesis & Versioning (Team D):**
    - Once terms are confirmed or resolved, a plain-language agreement is drafted based on curated Indian Contract Act templates.
-   - Each revision increments the `version_number` under the parent `agreement_id`.
+   - Highlights that this is a plain-language term sheet, not an executed or stamp-duty-paid legal deed under the Indian Stamp Act, 1899.
+   - Each revision increments the `version_number` and computes `content_hash` under the parent `agreement_id`.
 
-5. **Two-Party Confirmation (Team D):**
-   - Each negotiating party receives a confirmation link.
-   - Parties review clauses and record acceptance or attach objection notes.
+5. **Token-Based Two-Party Confirmation (Team D):**
+   - Negotiating counterparty receives a secure, signed single-use token confirmation link.
+   - Counterparty reviews clauses and records acceptance or attaches objection notes without needing a prior platform account.
 
-6. **Tamper-Evident Evidence Vault:**
+6. **Tamper-Evident Evidence Vault & DPDP Act 2023 Compliance:**
    - Document SHA-256 fingerprint is recorded in `document_hashes`.
-   - Immutable audit log records actor, IP hash, and timestamp.
+   - Immutable append-only audit log records actor, salted IP hash (`hash_ip()` via `IP_HASH_SALT`), and timestamp for Section 65B Indian Evidence Act / BSA 2023 admissibility and DPDP Act 2023 data minimization.

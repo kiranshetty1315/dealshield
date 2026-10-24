@@ -8,6 +8,10 @@ from app.core.security import sanitize_filename
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
 
+# Maximum upload size: 10 MB (10 * 1024 * 1024 bytes) as promised in docs/security.md
+MAX_UPLOAD_SIZE_BYTES = 10 * 1024 * 1024
+
+
 @router.post(
     "/upload",
     response_model=ChatUploadResponse,
@@ -23,6 +27,18 @@ async def upload_chat(
     filename = "pasted-chat.txt"
     content = ""
 
+    # Check Content-Length header early if available
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Upload exceeds maximum allowed size of 10 MB."
+                )
+        except ValueError:
+            pass
+
     content_type = request.headers.get("content-type", "")
 
     if file:
@@ -32,27 +48,46 @@ async def upload_chat(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Only WhatsApp .txt export files are supported."
             )
-        raw_bytes = await file.read()
+        raw_bytes = await file.read(MAX_UPLOAD_SIZE_BYTES + 1)
+        if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File exceeds maximum allowed size of 10 MB."
+            )
         try:
             content = raw_bytes.decode("utf-8")
         except UnicodeDecodeError:
             content = raw_bytes.decode("latin-1")
     elif "text/plain" in content_type:
         raw_bytes = await request.body()
+        if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Payload exceeds maximum allowed size of 10 MB."
+            )
         content = raw_bytes.decode("utf-8", errors="replace")
     elif "application/json" in content_type:
         try:
             body = await request.json()
             content = body.get("raw_text", "")
             filename = body.get("filename", "chat-payload.txt")
+            if len(content.encode("utf-8")) > MAX_UPLOAD_SIZE_BYTES:
+                raise HTTPException(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail="Payload exceeds maximum allowed size of 10 MB."
+                )
         except Exception:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid JSON payload."
             )
     else:
-        # Check if multipart form with no file but raw body
         raw_bytes = await request.body()
+        if len(raw_bytes) > MAX_UPLOAD_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Payload exceeds maximum allowed size of 10 MB."
+            )
         if raw_bytes:
             content = raw_bytes.decode("utf-8", errors="replace")
         else:
@@ -67,7 +102,13 @@ async def upload_chat(
             detail="Chat transcript cannot be empty."
         )
 
-    messages, party_names = parse_whatsapp_chat(content)
+    try:
+        messages, party_names, date_meta = parse_whatsapp_chat(content)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Parsing rejected for evidentiary integrity: {str(e)}"
+        )
 
     if not messages:
         raise HTTPException(
@@ -83,7 +124,9 @@ async def upload_chat(
         party_names=party_names,
         message_count=len(messages),
         messages=messages,
-        status="parsed"
+        status="parsed",
+        date_format_inferred=date_meta.get("date_format"),
+        is_date_ambiguous=date_meta.get("is_date_ambiguous", False)
     )
 
 

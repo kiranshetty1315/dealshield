@@ -1,46 +1,94 @@
 {
-  "conversation_file": "sample-negotiation-01.txt",
-  "expected_parties": ["Raj Mehta", "Priya Sharma"],
-  "expected_message_count": 10,
-  "expected_conflicts": [
+  "analysis_id": "analysis_expected_01",
+  "chat_id": "chat_sample_negotiation_01",
+  "parties": [
     {
-      "type": "price_disagreement",
-      "description": "Multiple prices discussed: ₹75,000 (client), ₹1,50,000 (provider), ₹1,00,000 (proposed middle ground)",
-      "severity": "high"
+      "party_id": "party_raj_01",
+      "name": "Raj Mehta",
+      "detected_role": "Client",
+      "contact_handle": "Raj Mehta"
     },
     {
-      "type": "ambiguous_acceptance",
-      "description": "Both parties use uncertain language: 'I might be able to do it', 'that works I think'",
-      "severity": "medium"
+      "party_id": "party_priya_02",
+      "name": "Priya Sharma",
+      "detected_role": "Service Provider",
+      "contact_handle": "Priya Sharma"
     }
   ],
-  "expected_extracted_terms": [
+  "extracted_terms": [
     {
-      "term_type": "scope",
-      "value": "Full website redesign",
-      "status": "accepted"
+      "term_id": "term_scope_01",
+      "category": "scope",
+      "description": "Full website redesign",
+      "proposed_value": "Full redesign",
+      "accepted_value": "Full website redesign with mockups",
+      "status": "agreed",
+      "source_message_ids": ["msg_raj_001", "msg_priya_002", "msg_priya_010"],
+      "confidence": "high"
     },
     {
-      "term_type": "price",
-      "value": "₹1,00,000",
-      "status": "ambiguous"
+      "term_id": "term_price_01",
+      "category": "pricing",
+      "description": "Total project fee",
+      "proposed_value": "₹75,000 / ₹1,50,000",
+      "accepted_value": "₹1,00,000",
+      "status": "ambiguous",
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"],
+      "confidence": "medium"
     },
     {
-      "term_type": "deadline",
-      "value": "End of April",
-      "status": "proposed"
+      "term_id": "term_payment_01",
+      "category": "payment_terms",
+      "description": "Advance milestone payment",
+      "proposed_value": "50% upfront",
+      "accepted_value": "50% upfront (₹50,000)",
+      "status": "agreed",
+      "source_message_ids": ["msg_priya_008", "msg_raj_009"],
+      "confidence": "high"
     },
     {
-      "term_type": "payment_terms",
-      "value": "50% upfront",
-      "status": "ambiguous"
+      "term_id": "term_timeline_01",
+      "category": "timeline",
+      "description": "Delivery deadline",
+      "proposed_value": "End of April 2024",
+      "accepted_value": "End of April 2024",
+      "status": "agreed",
+      "source_message_ids": ["msg_raj_007", "msg_priya_008"],
+      "confidence": "medium"
     }
   ],
-  "expected_missing_terms": [
-    "Detailed deliverables/scope",
-    "Remaining payment schedule",
-    "Revision policy",
-    "Late delivery consequences",
-    "IP ownership"
-  ]
+  "conflicts": [
+    {
+      "conflict_id": "conflict_price_01",
+      "term_category": "pricing",
+      "description": "Price disagreement between ₹75,000 and ₹1,50,000 settled at ₹1,00,000 with ambiguous acceptance",
+      "party_positions": {
+        "Raj Mehta": "Offered ₹75,000, then agreed to ₹1,00,000 saying 'Sure, that works I think. Let's go ahead'",
+        "Priya Sharma": "Demanded ₹1,50,000, accepted ₹1,00,000 strictly subject to 50% upfront"
+      },
+      "source_message_ids": ["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"],
+      "severity": "high",
+      "resolution_suggestion": "Formally confirm consideration at ₹1,00,000 with ₹50,000 paid upon signing.",
+      "statutory_context": "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. The phrase 'that works I think' introduces legal ambiguity."
+    }
+  ],
+  "missing_terms": [
+    {
+      "term_id": "missing_ip_01",
+      "category": "intellectual_property",
+      "description": "No assignment of IP rights on source code and design files",
+      "importance": "critical",
+      "recommendation": "Assign IP to Client upon full receipt of consideration."
+    },
+    {
+      "term_id": "missing_termination_01",
+      "category": "termination",
+      "description": "No cancellation or work-in-progress compensation clause",
+      "importance": "important",
+      "recommendation": "Add 7-day termination notice with payment for delivered work."
+    }
+  ],
+  "confidence_score": 0.85,
+  "requires_human_review": true,
+  "analyzed_at": "2024-03-12T11:00:00Z"
 }

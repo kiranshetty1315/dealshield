@@ -13,6 +13,7 @@ IMPORTANT ARCHITECTURAL & LEGAL NOTE:
 import hashlib
 import hmac
 from typing import Optional
+from app.core.config import settings
 
 
 def compute_sha256(content: bytes) -> str:
@@ -24,9 +25,13 @@ def compute_sha256(content: bytes) -> str:
     return hashlib.sha256(content).hexdigest()
 
 
-def hash_ip(ip_address: str, salt: str = "dealshield-audit-salt") -> str:
-    """Anonymize and hash IP address for privacy-conscious audit logs."""
-    return hmac.new(salt.encode("utf-8"), ip_address.encode("utf-8"), hashlib.sha256).hexdigest()
+def hash_ip(ip_address: str, salt: Optional[str] = None) -> str:
+    """Anonymize and hash IP address for privacy-conscious audit logs (DPDP Act 2023 compliant).
+    
+    Reads secret salt from application settings by default.
+    """
+    effective_salt = salt or settings.IP_HASH_SALT
+    return hmac.new(effective_salt.encode("utf-8"), ip_address.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def sanitize_filename(filename: str) -> str:

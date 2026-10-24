@@ -49,12 +49,16 @@ class ExtractedTerm(BaseModel):
 
 class ConflictItem(BaseModel):
     conflict_id: str = Field(..., description="Unique conflict identifier")
-    term_category: str = Field(..., description="Subject category (e.g. pricing, deadline)")
-    description: str = Field(..., description="Explanation of contradiction or mismatch")
+    term_category: str = Field(..., description="Subject category (e.g. pricing, deadline, payment_terms)")
+    description: str = Field(..., description="Explanation of contradiction, price mismatch, or qualified acceptance")
     party_positions: Dict[str, str] = Field(default_factory=dict, description="Position held by each party")
-    source_message_ids: List[str] = Field(default_factory=list, description="Messages showing disagreement")
+    source_message_ids: List[str] = Field(default_factory=list, description="Messages showing disagreement or conditional acceptance")
     severity: ConflictSeverity = Field(default=ConflictSeverity.HIGH)
     resolution_suggestion: Optional[str] = Field(None, description="Plain language proposal to resolve")
+    statutory_context: Optional[str] = Field(
+        default="Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified.",
+        description="Statutory rule framing (e.g. Section 7 qualified acceptance)"
+    )
 
 
 class MissingTerm(BaseModel):

@@ -30,3 +30,5 @@ class ChatUploadResponse(BaseModel):
     message_count: int
     messages: List[Message]
     status: str = Field(default="parsed", description="Status of chat ingestion")
+    date_format_inferred: Optional[str] = Field(default="DD/MM/YYYY", description="Inferred date parsing format")
+    is_date_ambiguous: bool = Field(default=False, description="Whether all days/months in chat are <= 12")

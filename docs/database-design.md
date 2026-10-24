@@ -127,7 +127,8 @@ Represents an ingested WhatsApp chat file.
 Individual parsed chat lines with deterministic citation IDs.
 - **PK:** `id` UUID.
 - **FK:** `conversation_id` references `public.conversations(id)` ON DELETE CASCADE.
-- **Fields:** `message_id` (deterministic stable ID, UNIQUE), `sender`, `content`, `timestamp`, `raw_line`, `sequence_number`.
+- **Fields:** `message_id` (deterministic stable ID, e.g. `msg_raj_001`), `sender`, `content`, `timestamp`, `raw_line`, `sequence_number`.
+- **Constraint:** `UNIQUE (conversation_id, message_id)` (scoped per conversation to avoid cross-chat collisions).
 
 ### `analyses`
 Structured output from LLM analysis.
@@ -139,33 +140,34 @@ Structured output from LLM analysis.
 Contract parent container.
 - **PK:** `id` UUID.
 - **FK:** `analysis_id` references `public.analyses(id)` ON DELETE CASCADE.
-- **Fields:** `parties` (`TEXT[]`), `current_version` (INT), `status` (`draft`, `pending_confirmation`, `partially_confirmed`, `fully_confirmed`).
+- **Fields:** `parties` (`TEXT[]`), `current_version` (INT), `status` (`draft`, `pending_confirmation`, `partially_confirmed`, `fully_confirmed`, `superseded`).
 
 ### `agreement_versions`
 Immutable snapshot of contract clauses for each revision.
 - **PK:** `id` UUID.
 - **FK:** `agreement_id` references `public.agreements(id)` ON DELETE CASCADE.
 - **Constraint:** `UNIQUE (agreement_id, version_number)`.
-- **Fields:** `clauses` (`JSONB`), `status`, `generated_at`.
+- **Fields:** `clauses` (`JSONB`), `content_hash` (TEXT, SHA-256 digest), `status`, `generated_at`.
 
 ### `confirmations`
-Records party sign-off and objection notes.
+Records party sign-off, objection notes, and token-based external access.
 - **PK:** `id` UUID.
 - **FK:** `agreement_id` references `public.agreements(id)` ON DELETE CASCADE.
 - **FK:** `version_id` references `public.agreement_versions(id)` ON DELETE CASCADE.
-- **Fields:** `party_name`, `confirmed` (BOOLEAN), `notes`, `ip_hash` (anonymized IP), `confirmed_at`.
+- **Fields:** `party_name`, `party_email`, `confirmed` (BOOLEAN), `notes`, `confirmation_token` (TEXT UNIQUE, signed single-use link token), `token_expires_at` (TIMESTAMPTZ), `ip_hash` (anonymized IP for DPDP Act 2023), `confirmed_at`.
 
 ### `audit_events`
 Append-only tamper-evident event log.
 - **PK:** `id` UUID.
 - **FK:** `actor_id` references `public.users(id)` ON DELETE SET NULL.
 - **Fields:** `entity_type`, `entity_id`, `action`, `metadata` (`JSONB`), `created_at`.
-- **Integrity Rule:** `INSERT` is restricted to service role only.
+- **Integrity Rule:** `INSERT` is restricted to service role only. Immutability enforced via trigger `enforce_audit_append_only` (blocks UPDATE/DELETE).
 
 ### `document_hashes`
 Cryptographic SHA-256 fingerprints.
 - **PK:** `id` UUID.
 - **Fields:** `document_id`, `document_type`, `hash_algorithm` (`sha256`), `hash_value` (64-char hex), `created_at`.
+- **RLS Scope:** Scoped strictly to the entity owner.
 
 ---
 

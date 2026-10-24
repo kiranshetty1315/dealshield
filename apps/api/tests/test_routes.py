@@ -20,7 +20,35 @@ def test_chat_upload_text():
     assert "Raj Mehta" in data["party_names"]
     assert "Priya Sharma" in data["party_names"]
     assert len(data["messages"]) == 2
-    assert data["messages"][0]["message_id"].startswith("msg_")
+    assert data["messages"][0]["message_id"] == "msg_raj_001"
+    assert data["messages"][1]["message_id"] == "msg_priya_002"
+    assert "date_format_inferred" in data
+
+
+def test_chat_upload_file_size_limit():
+    # 10 MB limit check: header indicating oversized payload
+    oversized_headers = {
+        "Content-Type": "text/plain",
+        "Content-Length": str(11 * 1024 * 1024),  # 11 MB
+    }
+    response = client.post(
+        "/api/v1/chats/upload",
+        content="some small content but header declares 11MB",
+        headers=oversized_headers,
+    )
+    assert response.status_code == 413
+    assert "10 MB" in response.json()["detail"]
+
+
+def test_chat_upload_unparseable_timestamp_fails():
+    malformed_chat = "99/99/99, 99:99 - Fake User: Malformed timestamp line\n"
+    response = client.post(
+        "/api/v1/chats/upload",
+        content=malformed_chat,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 422
+    assert "Evidentiary Integrity Error" in response.json()["detail"]
 
 
 def test_evidence_verify_route():

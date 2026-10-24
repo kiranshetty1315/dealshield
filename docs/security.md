@@ -42,43 +42,53 @@ Every table in Supabase PostgreSQL enforces RLS:
 
 ---
 
-## 3. Cryptographic Hashes vs Legal Signatures
+## 3. Cryptographic Hashes vs Legal Signatures & Stamp Duty
 
 > [!WARNING]
 > **Statutory Limitation Notice:**
-> A cryptographic hash only establishes **data consistency against a trusted reference**. Do not confuse mathematical hashing with statutory legal execution.
+> A cryptographic hash only establishes **data consistency against a trusted reference**. Do not confuse mathematical hashing with statutory legal execution or stamped instruments.
 
 ### What SHA-256 Proves:
 - The exact bitstream of an agreement or chat transcript has not been altered since the hash was recorded.
-- Provides corroborative evidence under Section 65B of the Indian Evidence Act, 1872 / Section 63 of Bharatiya Sakshya Adhiniyam, 2023.
+- Provides corroborative electronic record evidence under Section 65B of the Indian Evidence Act, 1872 / Section 63 of Bharatiya Sakshya Adhiniyam, 2023.
 
 ### What SHA-256 Does NOT Prove:
 - **Identity:** A hash does not prove who authored or uploaded the text.
 - **Contractual Intention:** A hash does not prove mutual consensus ad idem.
 - **Statutory eSign:** A hash does not satisfy the criteria of an electronic signature under Section 3 / Section 3A of the Information Technology Act, 2000, which requires asymmetric crypto issued by a licensed Certifying Authority (CCA).
 
-Real two-party identity verification (e.g. Aadhaar eSign or DigiLocker integration) is a future production milestone.
+### Indian Stamp Act, 1899 & Legal Enforceability:
+- DealShield AI synthesizes a **plain-language summary agreement and term sheet**.
+- It is **not** an executed legal deed and does not pay state or central stamp duty under the **Indian Stamp Act, 1899**. In Indian courts, unstamped or defectively stamped instruments cannot be admitted into evidence until requisite duty and penalties are impounded and satisfied.
 
 ---
 
-## 4. Privacy & Consent Management
+## 4. Privacy & DPDP Act 2023 Compliance
 
-Conversations uploaded to DealShield AI contain private commercial conversations and personal identifiable information (PII).
+Conversations uploaded to DealShield AI contain private commercial conversations and personal data governed by the **Digital Personal Data Protection Act, 2023 (DPDP Act 2023)**.
 
-### Rules for Development:
-- **Fictional Data Only:** Real personal or production WhatsApp chats must never be committed to git or used in development environments. Use only the curated fixtures in `sample-data/whatsapp/`.
-- **IP Address Anonymization:** Raw IP addresses are never recorded in audit logs. The backend applies HMAC-SHA256 salt anonymization (`hash_ip()`) prior to persistence.
-
-### Production Data Lifecycle:
-- **Consent:** Prior to parsing, users must acknowledge that all conversation participants have consented to terms synthesis.
-- **Retention:** Raw chat files are retained in private storage for 30 days by default, after which they are purged unless marked for legal hold.
-- **Right to Deletion:** Deleting a conversation triggers an immediate cascading purge of raw text, messages, and unconfirmed drafts.
+### DPDP Act 2023 Obligations:
+- **Purpose Limitation & Notice:** Users uploading transcripts must warrant consent from all participants for the specific purpose of agreement summarization (Section 6, DPDP Act 2023).
+- **Salted IP Anonymization:** Raw IP addresses are never recorded in audit logs. The backend applies secret-salted HMAC-SHA256 (`hash_ip()` using `IP_HASH_SALT`) prior to persistence.
+- **Retention Limitation:** Raw chat files are retained in private storage for 30 days by default, after which they are purged unless marked for legal hold (Section 8(7), DPDP Act 2023).
+- **Right to Erasure:** Deleting a conversation triggers an immediate cascading purge of raw text, messages, and unconfirmed drafts (Section 12, DPDP Act 2023).
+- **Fictional Development Data:** Real personal chats must never be committed to git. All tests and fixtures use synthetic fictional dialogues.
 
 ---
 
-## 5. Input Validation & Defense in Depth
+## 5. Counterparty Access & Token Confirmation Model
+
+Because the negotiating counterparty often lacks a platform account, granting access through standard user ownership RLS would fail:
+1. **Single-Use Signed Tokens:** When an agreement version is ready for confirmation, Team D generates a cryptographic `confirmation_token` with an expiration timestamp (`token_expires_at`).
+2. **Security Definer Function:** The counterparty reviews and signs off using `get_agreement_by_confirmation_token(token)` and `submit_confirmation_by_token(...)` without exposing the uploader's internal user ID or bypassing entity-scoped RLS policies.
+3. **Append-Only Auditing:** The PostgreSQL database enforces immutability on `audit_events` via trigger `enforce_audit_append_only`, which raises an exception on any `UPDATE` or `DELETE` attempt.
+4. **Scoped Audit & Hash Access:** `audit_events` and `document_hashes` are strictly scoped to the entity owner, preventing cross-tenant information leakage.
+
+---
+
+## 6. Input Validation & Defense in Depth
 
 1. **Path Traversal Prevention:** Uploaded filenames are sanitized (`sanitize_filename()`) to strip path separators and non-standard symbols.
-2. **File Size Caps:** Upload endpoints enforce a 10MB limit on chat files.
+2. **10 MB File Limit Enforced:** Upload endpoints strictly reject files or payloads exceeding 10 MB with HTTP 413.
 3. **Pydantic Validation:** Every incoming payload is validated against strict Pydantic models before entering service business logic.
-4. **Rate Limiting:** In production, Render/Vercel reverse proxies enforce 60 requests/minute per IP on extraction endpoints.
+4. **Rate Limiting:** In production, reverse proxies enforce 60 requests/minute per IP on extraction endpoints.

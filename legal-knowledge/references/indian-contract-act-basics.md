@@ -1,4 +1,4 @@
-# Indian Contract Act, 1872 — Key Sections for Informal Agreements
+# Indian Contract Act, 1872 & Commercial Legal References
 
 ## Section 2(e) — Agreement Defined
 > Every promise and every set of promises, forming the consideration for each other, is an agreement.
@@ -19,13 +19,23 @@
 - Lawful consideration (the price/payment)
 - Lawful object (the work/service)
 
-## Section 7 — Acceptance Must Be Absolute
+## Section 7 — Acceptance Must Be Absolute and Unqualified
 > In order to convert a proposal into a promise, the acceptance must be absolute and unqualified.
 
-**Relevance:** This is critical for DealShield AI's conflict detection. Conditional acceptances like "I might be able to do it" or "that works I think" do NOT constitute absolute acceptance under Indian law.
+**Core Differentiator for DealShield AI:**
+This is the foundational statutory principle of DealShield AI's conflict detector. Under Indian commercial law, equivocal phrases like:
+- "Sure, that works I think. Let's go ahead"
+- "I could consider that, but it depends on the timeline"
+- "Wait, I thought that was included"
+do NOT constitute legal acceptance under Section 7. They operate as counter-proposals or conditional statements. DealShield AI explicitly flags these hedges to prompt users for mutual, unqualified sign-off.
 
-## Section 23 — What Considerations and Objects Are Lawful
-> The consideration or object of an agreement is lawful, unless it is forbidden by law, defeats any provision of law, is fraudulent, involves injury, or is immoral.
+## Indian Stamp Act, 1899 — Evidentiary Admissibility
+> Instruments chargeable with stamp duty cannot be admitted into evidence in civil courts under Section 35 of the Indian Stamp Act, 1899 unless duly stamped.
+
+**Relevance:** DealShield AI generates a plain-language summary agreement and term sheet. It is NOT an executed, stamp-duty-paid legal deed. Users must be transparently informed that judicial enforcement requires payment of applicable state stamp duty.
+
+## Digital Personal Data Protection Act, 2023 (DPDP Act 2023)
+Chat transcripts contain personal identifiable data (names, handles, financial negotiations). Processing must comply with purpose limitation (Section 6), data minimization, secret-salted IP hashing, and right to erasure (Section 12).
 
 ---
 

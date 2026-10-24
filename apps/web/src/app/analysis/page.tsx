@@ -1,6 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Clock, ShieldAlert, ArrowRight, UserCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, ShieldAlert, ArrowRight, UserCheck, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AnalysisPage() {
@@ -10,14 +10,16 @@ export default function AnalysisPage() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-3xl font-extrabold text-slate-900">Agreement Analysis</h1>
-            <Badge variant="warning">Human Review Recommended</Badge>
+            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 font-semibold">
+              Sample Demo Data
+            </Badge>
           </div>
           <p className="text-sm text-slate-500">
             Source: WhatsApp negotiation between Raj Mehta (Client) and Priya Sharma (Designer)
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">Confidence: 85%</Badge>
+          <Badge variant="secondary" className="text-xs">Extraction Confidence: High (85%)</Badge>
           <Button size="sm">Generate Agreement Draft</Button>
         </div>
       </div>
@@ -44,35 +46,38 @@ export default function AnalysisPage() {
         </CardContent>
       </Card>
 
-      {/* Conflicts & Contradictions */}
+      {/* Section 7 Contradictions & Ambiguities */}
       <Card className="border-amber-200">
         <CardHeader className="pb-3 bg-amber-50/50 rounded-t-xl">
-          <CardTitle className="text-base text-amber-900 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            Detected Contradictions & Ambiguities
-          </CardTitle>
-          <CardDescription className="text-xs text-amber-700">
-            Requires explicit resolution prior to formal agreement compilation.
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base text-amber-900 flex items-center gap-2">
+              <Scale className="h-4 w-4 text-amber-700" />
+              Indian Contract Act, 1872 — Section 7 Conflict Analysis
+            </CardTitle>
+            <Badge variant="destructive">High Severity</Badge>
+          </div>
+          <CardDescription className="text-xs text-amber-800">
+            Section 7 mandates: <em>&ldquo;In order to convert a proposal into a promise the acceptance must be absolute and unqualified.&rdquo;</em>
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4 space-y-4">
-          <div className="border border-amber-200 rounded-lg p-4 bg-white space-y-2 text-xs">
+          <div className="border border-amber-200 rounded-lg p-4 bg-white space-y-3 text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-amber-900">Price Negotiation & Acceptance Ambiguity</span>
-              <Badge variant="destructive">High Severity</Badge>
+              <span className="font-bold text-amber-900">Price Gap & Qualified Acceptance Flag</span>
+              <span className="text-[11px] font-mono text-slate-500">ID: conflict_price_01</span>
             </div>
-            <p className="text-slate-700">
-              Raj proposed ₹75,000. Priya countered with ₹1,50,000, then compromised at ₹1,00,000 with 50% advance.
-              Raj stated &ldquo;Sure, that works I think. Let&apos;s go ahead&rdquo; which contains qualifying language (&ldquo;I think&rdquo;).
+            <p className="text-slate-700 leading-relaxed">
+              Raj proposed ₹75,000 (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_raj_003</code>).
+              Priya countered with ₹1,50,000 (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_priya_004</code>).
+              They settled at ₹1,00,000 with 50% upfront (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_priya_008</code>).
+              However, Raj responded: <em>&ldquo;Sure, that works I think. Let&apos;s go ahead&rdquo;</em> (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_raj_009</code>).
+              The qualifier <strong>&ldquo;I think&rdquo;</strong> violates Section 7&apos;s requirement of unqualified acceptance.
             </p>
-            <div className="flex items-center gap-2 text-[11px] text-slate-500 font-mono bg-slate-50 p-2 rounded">
-              <span>Source citations:</span>
-              <span className="bg-slate-200 px-1 rounded">msg_raj_003</span>
-              <span className="bg-slate-200 px-1 rounded">msg_priya_004</span>
-              <span className="bg-slate-200 px-1 rounded">msg_raj_009</span>
-            </div>
-            <div className="p-2.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
-              <strong>Proposed Resolution:</strong> Standardize consideration to ₹1,00,000 payable as 50% (₹50,000) advance upon signing and 50% upon delivery.
+            <div className="p-2.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
+              <strong>Legal Resolution Proposal:</strong>
+              <p>
+                Prompt parties to confirm an unconditional fixed fee of ₹1,00,000 (INR) payable as ₹50,000 advance upon contract signing and ₹50,000 upon delivery.
+              </p>
             </div>
           </div>
         </CardContent>
@@ -92,13 +97,15 @@ export default function AnalysisPage() {
               <div>
                 <span className="font-semibold text-slate-800">Total Project Price:</span>
                 <span className="ml-2 text-slate-600">₹1,00,000 (INR)</span>
+                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_priya_008, msg_raj_009</span>
               </div>
-              <Badge variant="success">Agreed</Badge>
+              <Badge variant="warning">Ambiguous (Sec 7)</Badge>
             </div>
             <div className="py-2.5 flex items-center justify-between">
               <div>
                 <span className="font-semibold text-slate-800">Payment Milestone:</span>
-                <span className="ml-2 text-slate-600">50% upfront prior to commencement</span>
+                <span className="ml-2 text-slate-600">50% upfront prior to kickoff</span>
+                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_priya_008</span>
               </div>
               <Badge variant="success">Agreed</Badge>
             </div>
@@ -106,8 +113,9 @@ export default function AnalysisPage() {
               <div>
                 <span className="font-semibold text-slate-800">Delivery Deadline:</span>
                 <span className="ml-2 text-slate-600">End of April 2024</span>
+                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_raj_007, msg_priya_008</span>
               </div>
-              <Badge variant="warning">Tight Timeline</Badge>
+              <Badge variant="secondary">Agreed</Badge>
             </div>
           </div>
         </CardContent>
@@ -128,16 +136,16 @@ export default function AnalysisPage() {
               <Badge variant="destructive">Critical</Badge>
             </div>
             <p className="text-slate-600">
-              WhatsApp chat did not specify whether design source files and copyright transfer immediately or only upon 100% final payment.
+              WhatsApp chat did not specify whether copyright in design files transfers immediately or only upon 100% final payment.
             </p>
           </div>
           <div className="p-3 border rounded-lg bg-slate-50 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800">Dispute Resolution & Jurisdiction</span>
+              <span className="font-semibold text-slate-800">Termination & Cancellation Notice</span>
               <Badge variant="warning">Important</Badge>
             </div>
             <p className="text-slate-600">
-              No arbitration or local court jurisdiction stated. Recommended clause: Indian Arbitration and Conciliation Act 1996 seat.
+              No written cancellation period or compensation for work performed in progress.
             </p>
           </div>
         </CardContent>

@@ -1,15 +1,31 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, Users, ArrowRight } from "lucide-react";
+import { CheckCircle2, Clock, Users, ArrowRight, KeyRound, ShieldAlert } from "lucide-react";
 
 export default function ConfirmationsPage() {
   return (
     <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-4xl">
       <div>
-        <h1 className="text-3xl font-extrabold text-slate-900">Two-Party Agreement Confirmation</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-3xl font-extrabold text-slate-900">Two-Party Agreement Confirmation</h1>
+          <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 font-semibold">
+            Sample Demo Data
+          </Badge>
+        </div>
         <p className="text-sm text-slate-500">
-          Independent mutual sign-off workflow for negotiating parties.
+          Independent mutual sign-off workflow via secure token-based single-use links.
+        </p>
+      </div>
+
+      {/* Architecture Notice for Team D */}
+      <div className="border border-blue-200 bg-blue-50/60 rounded-xl p-4 text-xs text-blue-900 space-y-1">
+        <div className="font-bold flex items-center gap-2 text-blue-950">
+          <KeyRound className="h-4 w-4 text-blue-700" />
+          Token-Based Confirmation Architecture (Team D)
+        </div>
+        <p className="leading-relaxed">
+          Counterparties without an authenticated platform account access their confirmation view via secure, single-use signed tokens (`confirmation_token`), querying the backend function <code className="bg-blue-100 px-1 py-0.5 rounded font-mono">get_agreement_by_confirmation_token(token)</code> without exposing ownership RLS boundaries.
         </p>
       </div>
 
@@ -52,7 +68,7 @@ export default function ConfirmationsPage() {
                 </Badge>
               </div>
               <p className="text-xs text-slate-600">
-                Review link sent to WhatsApp handle. Not yet signed off.
+                Single-use review link dispatched via WhatsApp / Email. Not yet confirmed.
               </p>
               <Button size="sm" variant="outline" className="w-full text-xs">
                 Resend Confirmation Link
@@ -61,7 +77,7 @@ export default function ConfirmationsPage() {
           </div>
 
           <div className="border-t pt-4 text-xs text-slate-500">
-            <strong>Note:</strong> Agreement becomes active only once both parties confirm without pending objections.
+            <strong>Rule:</strong> The agreement becomes effective only once both parties record mutual, unqualified assent without pending objections.
           </div>
         </CardContent>
       </Card>

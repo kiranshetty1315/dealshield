@@ -46,10 +46,17 @@ export default function DashboardPage() {
       {/* Recent Activity Table Scaffold */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Recent WhatsApp Negotiations</CardTitle>
-          <CardDescription>
-            Conversations ingested and structured through the DealShield AI pipeline.
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Recent WhatsApp Negotiations</CardTitle>
+              <CardDescription>
+                Conversations ingested and structured through the DealShield AI pipeline.
+              </CardDescription>
+            </div>
+            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 font-semibold">
+              Sample Demo Data
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="divide-y divide-slate-100 text-sm">
