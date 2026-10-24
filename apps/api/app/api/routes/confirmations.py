@@ -1,8 +1,35 @@
+"""DealShield AI — Confirmation & Counterparty Verification Endpoints.
+
+Handles two-party confirmation workflow, email-OTP counterparty authentication,
+session issuance, assent recording, and audit trails.
+"""
+
+import asyncio
+from datetime import datetime, timezone
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Request
+import uuid
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from app.schemas.confirmation import ConfirmationStatus, ConfirmationRequest
-from app.db.repository import ConfirmationRepository, AuditRepository
+
+from app.api.deps import get_current_user
+from app.core.config import settings
+from app.core.security import decrypt_message_content
+from app.db.repository import (
+    ConfirmationRepository,
+    AuditRepository,
+    AgreementRepository,
+    user_owns_agreement,
+)
+from app.schemas.confirmation import (
+    ConfirmationStatus,
+    ConfirmationRequest,
+    TokenCreateRequest,
+    EmailCheckRequest,
+    OtpVerifyRequest,
+    SessionResponse,
+    TokenInspectResponse,
+)
 
 router = APIRouter(prefix="/confirmations", tags=["Confirmations"])
 
@@ -14,12 +41,6 @@ class TokenConfirmationRequest(BaseModel):
     action: str = Field("agree", description="'agree' or 'decline'")
     notes: Optional[str] = Field(None, description="Optional confirmation remarks")
     decline_reason: Optional[str] = Field(None, description="Reason for declining or requested changes")
-
-
-class TokenGenerateRequest(BaseModel):
-    agreement_id: str = Field(..., description="Target agreement UUID")
-    party_name: str = Field(..., description="Counterparty name to issue link for")
-    hours_valid: int = Field(72, description="Token validity window in hours")
 
 
 class TokenExecuteRequest(BaseModel):
@@ -34,20 +55,62 @@ class TokenExecuteRequest(BaseModel):
     summary="Generate Counterparty Single-Use Signed Token Link",
     description="Generates an unguessable 32-byte URL-safe token link for an external counterparty.",
 )
-async def generate_counterparty_token(payload: TokenGenerateRequest):
-    """Generate shareable single-use link for counterparties without an account."""
-    import uuid
+async def generate_counterparty_token(
+    payload: TokenCreateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Generate shareable single-use link for counterparties without requiring an account.
+    
+    Requires Bearer token. Enforces ownership check, counterparty email format,
+    rejects initiator's own email, and prevents regeneration for confirmed parties.
+    """
+    clean_email = payload.party_email.strip().lower()
+    if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide a valid counterparty email address.",
+        )
+
+    # Reject if party_email equals authenticated initiator's own email
+    initiator_email = current_user.get("email", "").strip().lower()
+    if clean_email == initiator_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Counterparty email cannot be your own initiator account email.",
+        )
+
+    # Ownership check
+    if not user_owns_agreement(conf_repo.client, current_user["id"], payload.agreement_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to generate confirmation links for this agreement.",
+        )
+
+    # Reject regeneration for a party who already confirmed
+    status_rec = conf_repo.get_confirmation_status(payload.agreement_id)
+    for p in status_rec.parties:
+        if p.party_name == payload.party_name and p.confirmed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Party '{payload.party_name}' has already confirmed this agreement. Regeneration is not permitted.",
+            )
+
     try:
         tokens = conf_repo.create_confirmation_tokens(
             agreement_id=payload.agreement_id,
             version_id=str(uuid.uuid4()),
             party_names=[payload.party_name],
+            party_email=clean_email,
+            initiator_user_id=current_user["id"],
             hours_valid=payload.hours_valid,
         )
         if not tokens:
             raise HTTPException(status_code=400, detail="Failed to generate confirmation token.")
 
         tok = tokens[0]
+        # Return URL without agreement_id query param to prevent URL leak
+        confirmation_url = f"/review?token={tok['raw_token']}"
+
         return {
             "status": "success",
             "agreement_id": payload.agreement_id,
@@ -56,56 +119,25 @@ async def generate_counterparty_token(payload: TokenGenerateRequest):
             "token": tok["raw_token"],
             "token_hash": tok["token_hash"],
             "expires_at": tok["expires_at"],
-            "confirmation_url": f"/review?token={tok['raw_token']}&agreement_id={payload.agreement_id}",
+            "confirmation_url": confirmation_url,
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post(
-    "/tokens/confirm",
-    summary="Execute Token Confirmation via JSON Payload",
-    description="Validates single-use signed token and executes confirmation or decline for external counterparty.",
-)
-async def execute_token_confirm_json(payload: TokenExecuteRequest, request: Request):
-    """JSON payload execution for single-use counterparty tokens."""
-    client_ip = request.client.host if request.client else None
-    try:
-        result = conf_repo.submit_confirmation_by_token(
-            raw_token=payload.token,
-            notes=payload.notes,
-            client_ip=client_ip,
-            action=payload.action,
-            decline_reason=payload.decline_reason,
-        )
-        audit_action = "counterparty_token_declined" if payload.action == "decline" else "counterparty_token_confirmed"
-        audit_repo.log_event(
-            entity_type="confirmation",
-            entity_id=result["agreement_id"],
-            action=audit_action,
-            metadata={
-                "party_name": result["party_name"],
-                "action": payload.action,
-                "reason": payload.decline_reason,
-            },
-        )
-        verb = "declined" if payload.action == "decline" else "confirmed"
-        return {
-            "status": result.get("status", verb),
-            "message": f"Agreement {verb} by {result['party_name']}",
-            **result,
-        }
-    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get(
     "/token/{token}",
+    response_model=TokenInspectResponse,
     summary="Inspect Token & Agreement Details",
-    description="Validates token and returns counterparty info and full legal agreement details for review prior to confirmation.",
+    description="Side-effect free endpoint. Returns counterparty metadata, masking email, and full agreement details only after successful session authentication.",
 )
-async def inspect_token(token: str):
-    """Returns token metadata and agreement clauses for counterparty review."""
+async def inspect_token(
+    token: str,
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
+):
+    """Side-effect free inspect endpoint safe for messaging/browser prefetches."""
     token_hash = conf_repo.hash_token(token)
     res = conf_repo.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
     data = res.data
@@ -113,105 +145,153 @@ async def inspect_token(token: str):
     if not row:
         raise HTTPException(status_code=404, detail="Invalid or expired confirmation link.")
 
-    agreement_id = row.get("agreement_id")
-    agreement_data = None
-    if agreement_id:
-        try:
-            from app.db.repository import AgreementRepository
-            from app.services.agreement_generator import AgreementGeneratorService
-            ag_repo = AgreementRepository(client=conf_repo.client)
-            ag = ag_repo.get_agreement(agreement_id)
-            if not ag and agreement_id == "sample-agreement-uuid":
-                gen = AgreementGeneratorService()
-                ag = gen.generate_draft(
-                    analysis_id="analysis_sample_01",
-                    parties=["Raj Mehta", "Priya Sharma"],
-                    agreement_id="sample-agreement-uuid",
-                )
-            if ag:
-                agreement_data = ag.model_dump()
-        except Exception:
-            agreement_data = None
-
-    return {
-        "token": token,
-        "agreement_id": agreement_id,
-        "party_name": row.get("party_name"),
-        "confirmed": bool(row.get("confirmed", False)),
-        "confirmed_at": row.get("confirmed_at"),
-        "declined": bool(row.get("declined", False)),
-        "declined_at": row.get("declined_at"),
-        "decline_reason": row.get("decline_reason"),
-        "expires_at": row.get("token_expires_at"),
-        "agreement": agreement_data,
-    }
-
-
-@router.post(
-    "",
-    response_model=ConfirmationStatus,
-    summary="Record Party Confirmation",
-    description="Records formal confirmation or notes from one of the negotiating parties and updates agreement status in Supabase.",
-)
-async def submit_confirmation(
-    payload: ConfirmationRequest,
-    request: Request,
-) -> ConfirmationStatus:
-    """Record two-party agreement confirmation with DPDP-compliant IP anonymization."""
-    client_ip = request.client.host if request.client else None
-
-    try:
-        conf_repo.submit_confirmation_by_party(
-            agreement_id=payload.agreement_id,
-            party_name=payload.party_name,
-            confirmed=payload.confirmed,
-            notes=payload.notes,
-            client_ip=client_ip,
-        )
-
-        # Append-only audit record
-        audit_repo.log_event(
-            entity_type="confirmation",
-            entity_id=payload.agreement_id,
-            action="party_confirmation_recorded",
-            metadata={
-                "party_name": payload.party_name,
-                "confirmed": payload.confirmed,
-                "version_number": payload.version_number,
-            },
-        )
-    except Exception as e:
+    if row.get("locked_at"):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to record confirmation: {str(e)}"
+            status_code=status.HTTP_423_LOCKED,
+            detail="This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.",
         )
 
-    return conf_repo.get_confirmation_status(
-        agreement_id=payload.agreement_id,
-        version_number=payload.version_number,
+    exp = row.get("token_expires_at")
+    if exp:
+        exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+        if exp_dt < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Confirmation link has expired.")
+
+    has_valid_session = conf_repo.is_session_valid(row, x_review_session)
+
+    # Agreement draft is strictly hidden until session token is verified (unless REQUIRE_EMAIL_OTP is False)
+    agreement_data = None
+    if (not settings.REQUIRE_EMAIL_OTP) or has_valid_session:
+        ag_id = row.get("agreement_id")
+        if ag_id:
+            try:
+                from app.services.agreement_generator import AgreementGeneratorService
+                ag_repo = AgreementRepository(client=conf_repo.client)
+                ag = ag_repo.get_agreement(ag_id)
+                if not ag and ag_id == "sample-agreement-uuid":
+                    gen = AgreementGeneratorService()
+                    ag = gen.generate_draft(
+                        analysis_id="analysis_sample_01",
+                        parties=["Raj Mehta", "Priya Sharma"],
+                        agreement_id="sample-agreement-uuid",
+                    )
+                if ag:
+                    agreement_data = ag.model_dump()
+            except Exception:
+                agreement_data = None
+
+    raw_email = None
+    if row.get("party_email_encrypted"):
+        try:
+            raw_email = decrypt_message_content(row["party_email_encrypted"])
+        except Exception:
+            pass
+    elif row.get("party_email"):
+        raw_email = row["party_email"]
+
+    masked = conf_repo.mask_email(raw_email) if raw_email else None
+    requires_verification = settings.REQUIRE_EMAIL_OTP and not has_valid_session
+
+    return TokenInspectResponse(
+        token=token,
+        party_name=row.get("party_name", ""),
+        masked_email=masked,
+        confirmed=bool(row.get("confirmed", False)),
+        confirmed_at=row.get("confirmed_at"),
+        declined=bool(row.get("declined", False)),
+        declined_at=row.get("declined_at"),
+        decline_reason=row.get("decline_reason"),
+        expires_at=row.get("token_expires_at"),
+        requires_email_verification=requires_verification,
+        agreement=agreement_data,
     )
 
 
-@router.get(
-    "/{agreement_id}",
-    response_model=ConfirmationStatus,
-    summary="Get Confirmation Status",
-    description="Check whether both parties have confirmed the latest agreement version from Supabase.",
+@router.post(
+    "/token/{token}/email-check",
+    summary="Verify Counterparty Email Hash",
+    description="Zero-knowledge email check: compares client-entered email HMAC to stored email hash.",
 )
-async def get_confirmation_status(agreement_id: str) -> ConfirmationStatus:
-    """Retrieve party confirmation status."""
-    return conf_repo.get_confirmation_status(agreement_id=agreement_id)
+async def check_counterparty_email(token: str, payload: EmailCheckRequest):
+    """Compares entered email to stored recipient hash. Locks after 5 failed guesses."""
+    clean_email = payload.email.strip().lower()
+    if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide a valid email address.",
+        )
+    try:
+        conf_repo.check_email(raw_token=token, typed_email=clean_email)
+        return {
+            "status": "verified",
+            "message": "Email address verified. You may now request a verification code.",
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/token/{token}/otp/send",
+    summary="Dispatch Single-Use Verification OTP",
+    description="Generates and emails a 6-digit verification code to the stored counterparty email address.",
+)
+async def send_counterparty_otp(token: str):
+    """Dispatches 6-digit OTP to stored email address subject to rolling rate limits."""
+    try:
+        result = await asyncio.to_thread(conf_repo.send_otp, raw_token=token)
+        return {
+            "status": "sent",
+            "masked_email": result["masked_email"],
+            "message": f"Verification code sent to {result['masked_email']}.",
+        }
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(e))
+    except TimeoutError as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post(
+    "/token/{token}/otp/verify",
+    response_model=SessionResponse,
+    summary="Verify Counterparty OTP & Issue Review Session",
+    description="Validates the 6-digit OTP and returns a 30-minute review session token.",
+)
+async def verify_counterparty_otp(token: str, payload: OtpVerifyRequest):
+    """Verifies OTP and issues a signed session token for viewing draft and agreeing."""
+    if not payload.otp or len(payload.otp.strip()) != 6:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Verification code must be exactly 6 digits.",
+        )
+    try:
+        result = conf_repo.verify_otp(raw_token=token, otp=payload.otp.strip())
+        return SessionResponse(
+            session_token=result["session_token"],
+            expires_at=result["expires_at"],
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post(
     "/token/{token}",
     summary="Execute Single-Use Token Confirmation",
-    description="Validates single-use signed token for unauthenticated counterparties and executes confirmation or decline.",
+    description="Validates review session and single-use signed token to record counterparty assent or decline.",
 )
 async def confirm_by_token(
     token: str,
     request: Request,
     payload: Optional[TokenConfirmationRequest] = None,
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
+    user_agent: Optional[str] = Header(None, alias="User-Agent"),
 ):
     """Executes single-use signed link confirmation without requiring user account."""
     client_ip = request.client.host if request.client else None
@@ -224,8 +304,10 @@ async def confirm_by_token(
             raw_token=token,
             notes=notes,
             client_ip=client_ip,
+            user_agent=user_agent,
             action=action,
             decline_reason=decline_reason,
+            session_token=x_review_session,
         )
         audit_action = "counterparty_token_declined" if action == "decline" else "counterparty_token_confirmed"
         audit_repo.log_event(
@@ -244,8 +326,183 @@ async def confirm_by_token(
             "message": f"Agreement {verb} by {result['party_name']}",
             **result,
         }
+    except PermissionError as e:
+        err_msg = str(e)
+        status_code = status.HTTP_401_UNAUTHORIZED if "Session" in err_msg or "session" in err_msg else status.HTTP_423_LOCKED
+        raise HTTPException(status_code=status_code, detail=err_msg)
     except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post(
+    "/tokens/confirm",
+    summary="Execute Token Confirmation via JSON Payload",
+    description="Validates review session and single-use signed token to record counterparty assent or decline.",
+)
+async def execute_token_confirm_json(
+    payload: TokenExecuteRequest,
+    request: Request,
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
+    user_agent: Optional[str] = Header(None, alias="User-Agent"),
+):
+    """JSON payload execution for single-use counterparty tokens."""
+    client_ip = request.client.host if request.client else None
+    try:
+        result = conf_repo.submit_confirmation_by_token(
+            raw_token=payload.token,
+            notes=payload.notes,
+            client_ip=client_ip,
+            user_agent=user_agent,
+            action=payload.action,
+            decline_reason=payload.decline_reason,
+            session_token=x_review_session,
+        )
+        audit_action = "counterparty_token_declined" if payload.action == "decline" else "counterparty_token_confirmed"
+        audit_repo.log_event(
+            entity_type="confirmation",
+            entity_id=result["agreement_id"],
+            action=audit_action,
+            metadata={
+                "party_name": result["party_name"],
+                "action": payload.action,
+                "reason": payload.decline_reason,
+            },
+        )
+        verb = "declined" if payload.action == "decline" else "confirmed"
+        return {
+            "status": result.get("status", verb),
+            "message": f"Agreement {verb} by {result['party_name']}",
+            **result,
+        }
+    except PermissionError as e:
+        err_msg = str(e)
+        status_code = status.HTTP_401_UNAUTHORIZED if "Session" in err_msg or "session" in err_msg else status.HTTP_423_LOCKED
+        raise HTTPException(status_code=status_code, detail=err_msg)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get(
+    "/token/{token}/download",
+    summary="Download Confirmed Agreement PDF via Counterparty Review Session",
+    description="Allows counterparty to download the signed agreement PDF record using their active review session.",
+)
+async def download_counterparty_pdf(
+    token: str,
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
+):
+    """Downloads confirmed agreement PDF using active counterparty session."""
+    try:
+        conf_row = conf_repo.validate_session(raw_token=token, session_token=x_review_session)
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+    if not conf_row.get("confirmed"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
+            detail="Agreement has not been confirmed yet. PDF download is available only after confirmation.",
         )
+
+    ag_id = conf_row.get("agreement_id")
+    from app.services.agreement_generator import AgreementGeneratorService
+    from app.services.stamp_pdf_generator import StampPaperPdfService
+
+    ag_repo = AgreementRepository(client=conf_repo.client)
+    agreement = ag_repo.get_agreement(ag_id)
+    if not agreement and ag_id == "sample-agreement-uuid":
+        gen = AgreementGeneratorService()
+        agreement = gen.generate_draft(
+            analysis_id="analysis_sample_01",
+            parties=["Raj Mehta", "Priya Sharma"],
+            agreement_id="sample-agreement-uuid",
+        )
+
+    if not agreement:
+        raise HTTPException(status_code=404, detail="Agreement record not found.")
+
+    pdf_bytes = StampPaperPdfService.generate_pdf(agreement)
+
+    # Log audit event
+    audit_repo.log_event(
+        entity_type="agreement",
+        entity_id=agreement.id,
+        action="agreement_pdf_exported",
+        metadata={
+            "format": "pdf",
+            "exporter": conf_row.get("party_name"),
+            "method": "counterparty_session",
+        },
+    )
+
+    filename = f"DealShield_Agreement_{agreement.id[:8]}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.post(
+    "",
+    response_model=ConfirmationStatus,
+    summary="Record Party Confirmation",
+    description="Records formal confirmation from the initiating party. Counterparties must confirm via secure email verification link.",
+)
+async def submit_confirmation(
+    payload: ConfirmationRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+) -> ConfirmationStatus:
+    """Record two-party agreement confirmation with Bearer token authentication."""
+    client_ip = request.client.host if request.client else None
+
+    try:
+        conf_repo.submit_confirmation_by_party(
+            agreement_id=payload.agreement_id,
+            party_name=payload.party_name,
+            confirmed=payload.confirmed,
+            notes=payload.notes,
+            client_ip=client_ip,
+            action=payload.action or "agree",
+            decline_reason=payload.decline_reason,
+        )
+
+        audit_repo.log_event(
+            entity_type="confirmation",
+            entity_id=payload.agreement_id,
+            action="party_confirmation_recorded",
+            actor_id=current_user.get("id"),
+            metadata={
+                "party_name": payload.party_name,
+                "confirmed": payload.confirmed,
+                "version_number": payload.version_number,
+                "method": "direct_initiator",
+            },
+        )
+    except PermissionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to record confirmation: {str(e)}",
+        )
+
+    return conf_repo.get_confirmation_status(
+        agreement_id=payload.agreement_id,
+        version_number=payload.version_number,
+    )
+
+
+@router.get(
+    "/{agreement_id}",
+    response_model=ConfirmationStatus,
+    summary="Get Confirmation Status",
+    description="Check whether parties have confirmed the latest agreement version.",
+)
+async def get_confirmation_status(agreement_id: str) -> ConfirmationStatus:
+    """Retrieve party confirmation status."""
+    return conf_repo.get_confirmation_status(agreement_id=agreement_id)

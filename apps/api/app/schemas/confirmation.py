@@ -1,10 +1,16 @@
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field
 
 
 class PartyConfirmationRecord(BaseModel):
     party_name: str
+    party_email: Optional[str] = None
+    masked_email: Optional[str] = None
+    verification_method: Optional[str] = None
+    email_verified_at: Optional[datetime] = None
+    agreed_version_number: Optional[int] = None
+    agreed_content_hash: Optional[str] = None
     confirmed: bool = False
     confirmed_at: Optional[datetime] = None
     declined: bool = False
@@ -31,3 +37,37 @@ class ConfirmationRequest(BaseModel):
     action: Optional[str] = "agree"
     decline_reason: Optional[str] = None
     notes: Optional[str] = None
+
+
+class TokenCreateRequest(BaseModel):
+    agreement_id: str = Field(..., description="Target agreement UUID")
+    party_name: str = Field(..., description="Counterparty name to issue link for")
+    party_email: str = Field(..., description="Counterparty email address for OTP verification")
+    hours_valid: int = Field(72, description="Token validity window in hours")
+
+
+class EmailCheckRequest(BaseModel):
+    email: str = Field(..., description="Client email address to verify against stored recipient")
+
+
+class OtpVerifyRequest(BaseModel):
+    otp: str = Field(..., description="6-digit verification code received by email")
+
+
+class SessionResponse(BaseModel):
+    session_token: str
+    expires_at: str
+
+
+class TokenInspectResponse(BaseModel):
+    token: str
+    party_name: str
+    masked_email: Optional[str] = None
+    confirmed: bool = False
+    confirmed_at: Optional[datetime] = None
+    declined: bool = False
+    declined_at: Optional[datetime] = None
+    decline_reason: Optional[str] = None
+    expires_at: Optional[str] = None
+    requires_email_verification: bool = True
+    agreement: Optional[Dict[str, Any]] = None

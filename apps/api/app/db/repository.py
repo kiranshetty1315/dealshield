@@ -6,11 +6,13 @@ PostgreSQL schema in infra/supabase/migrations/001_initial_schema.sql.
 """
 
 import hashlib
+import hmac
 import secrets
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.core.config import settings
 from app.db.client import get_supabase_client
 from app.schemas.chat import Message
 from app.schemas.analysis import AgreementAnalysis
@@ -297,8 +299,44 @@ class AgreementRepository:
         )
 
 
+def user_owns_agreement(client, user_id: str, agreement_id: str) -> bool:
+    """Checks whether the authenticated user owns the agreement via conversation.user_id.
+    
+    Returns True if:
+    - user_id matches conversation.user_id
+    - conversation.user_id == '00000000-0000-0000-0000-000000000001' (default demo user)
+    - the chain cannot be resolved (lenient for sample data or unattached records)
+    """
+    try:
+        ag_res = client.table("agreements").select("analysis_id").eq("id", agreement_id).execute()
+        ag_data = ag_res.data[0] if isinstance(ag_res.data, list) and ag_res.data else ag_res.data
+        if not ag_data or not ag_data.get("analysis_id"):
+            return True
+        analysis_id = ag_data["analysis_id"]
+
+        an_res = client.table("analyses").select("conversation_id").eq("id", analysis_id).execute()
+        an_data = an_res.data[0] if isinstance(an_res.data, list) and an_res.data else an_res.data
+        if not an_data or not an_data.get("conversation_id"):
+            return True
+        conv_id = an_data["conversation_id"]
+
+        conv_res = client.table("conversations").select("user_id").eq("id", conv_id).execute()
+        conv_data = conv_res.data[0] if isinstance(conv_res.data, list) and conv_res.data else conv_res.data
+        if not conv_data or not conv_data.get("user_id"):
+            return True
+        owner_id = str(conv_data["user_id"])
+
+        DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
+        if owner_id == DEMO_USER_ID:
+            return True
+
+        return owner_id == str(user_id)
+    except Exception:
+        return True
+
+
 class ConfirmationRepository:
-    """Manages token-based confirmation links and status."""
+    """Manages token-based confirmation links, OTP verification, and status."""
 
     def __init__(self, client=None):
         self.client = client or get_supabase_client()
@@ -308,20 +346,59 @@ class ConfirmationRepository:
         """Computes SHA-256 digest of secret token for database lookup."""
         return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
 
+    @staticmethod
+    def hash_email(email: str) -> str:
+        """Computes HMAC-SHA256 digest of normalized email keyed by settings.SECRET_KEY."""
+        normalized = email.strip().lower()
+        return hmac.new(
+            settings.SECRET_KEY.encode("utf-8"),
+            normalized.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+
+    @staticmethod
+    def hash_sha256(secret: str) -> str:
+        """Computes standard SHA-256 digest."""
+        return hashlib.sha256(secret.strip().encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def mask_email(email: Optional[str]) -> str:
+        """Mask email address for privacy (e.g. p*****@gmail.com)."""
+        if not email or "@" not in email:
+            return ""
+        user, domain = email.strip().lower().split("@", 1)
+        if len(user) <= 1:
+            masked_user = user + "*****"
+        else:
+            masked_user = user[0] + "*****"
+        return f"{masked_user}@{domain}"
+
     def create_confirmation_tokens(
         self,
         agreement_id: str,
         version_id: str,
         party_names: List[str],
+        party_email: Optional[str] = None,
+        initiator_user_id: Optional[str] = None,
         hours_valid: int = 72,
     ) -> List[Dict[str, Any]]:
-        """Generates single-use confirmation tokens for external counterparties."""
+        """Generates single-use confirmation tokens for external counterparties.
+        
+        Resets verification state, rate-limit counters, and locks on regeneration.
+        """
         results = []
         expires_at = (datetime.now(timezone.utc) + timedelta(hours=hours_valid)).isoformat()
 
         for party in party_names:
             raw_token = secrets.token_urlsafe(32)
             token_hash = self.hash_token(raw_token)
+
+            enc_email = None
+            email_hash = None
+            if party_email:
+                norm_email = party_email.strip().lower()
+                enc_email = encrypt_message_content(norm_email)
+                email_hash = self.hash_email(norm_email)
 
             # Check if record already exists for this party to prevent duplicate entries
             existing_res = (
@@ -337,11 +414,32 @@ class ConfirmationRepository:
                 else existing_res.data
             )
 
+            update_fields: Dict[str, Any] = {
+                "confirmation_token_hash": token_hash,
+                "token_expires_at": expires_at,
+                "party_email": None,  # never store plaintext email
+                "email_check_attempts": 0,
+                "email_check_passed_at": None,
+                "otp_hash": None,
+                "otp_expires_at": None,
+                "otp_attempts": 0,
+                "otp_total_failures": 0,
+                "otp_send_count": 0,
+                "otp_window_started_at": None,
+                "otp_last_sent_at": None,
+                "email_verified_at": None,
+                "session_token_hash": None,
+                "session_expires_at": None,
+                "locked_at": None,
+            }
+            if party_email:
+                update_fields["party_email_encrypted"] = enc_email
+                update_fields["party_email_hash"] = email_hash
+            if initiator_user_id:
+                update_fields["initiator_user_id"] = str(initiator_user_id)
+
             if existing:
-                self.client.table("confirmations").update({
-                    "confirmation_token_hash": token_hash,
-                    "token_expires_at": expires_at,
-                }).eq("id", existing["id"]).execute()
+                self.client.table("confirmations").update(update_fields).eq("id", existing["id"]).execute()
             else:
                 row = {
                     "id": str(uuid.uuid4()),
@@ -349,8 +447,7 @@ class ConfirmationRepository:
                     "version_id": version_id,
                     "party_name": party,
                     "confirmed": False,
-                    "confirmation_token_hash": token_hash,
-                    "token_expires_at": expires_at,
+                    **update_fields,
                 }
                 self.client.table("confirmations").insert(row).execute()
 
@@ -407,8 +504,33 @@ class ConfirmationRepository:
                 if isinstance(dec_at, str)
                 else None
             )
+            ev_at = row.get("email_verified_at")
+            dt_ev = (
+                datetime.fromisoformat(ev_at.replace("Z", "+00:00"))
+                if isinstance(ev_at, str)
+                else None
+            )
+
+            raw_email = None
+            if row.get("party_email_encrypted"):
+                try:
+                    raw_email = decrypt_message_content(row["party_email_encrypted"])
+                except Exception:
+                    pass
+            elif row.get("party_email"):
+                raw_email = row["party_email"]
+            masked = self.mask_email(raw_email) if raw_email else None
+
+            method = "email_otp" if row.get("email_verified_at") else ("direct" if row.get("confirmed") else None)
+
             rec = PartyConfirmationRecord(
                 party_name=p_name,
+                party_email=None,  # Never leak plaintext email
+                masked_email=masked,
+                verification_method=method,
+                email_verified_at=dt_ev,
+                agreed_version_number=row.get("agreed_version_number"),
+                agreed_content_hash=row.get("agreed_content_hash"),
                 confirmed=bool(row.get("confirmed", False)),
                 confirmed_at=dt,
                 declined=bool(row.get("declined", False)),
@@ -417,7 +539,6 @@ class ConfirmationRepository:
                 notes=row.get("notes"),
                 ip_hash=row.get("ip_hash"),
             )
-            # Deduplicate by party_name: preserve confirmed=True if any row is confirmed, or declined=True
             if p_name not in party_map:
                 party_map[p_name] = rec
             elif rec.confirmed and not party_map[p_name].confirmed:
@@ -437,6 +558,266 @@ class ConfirmationRepository:
             last_updated=datetime.now(timezone.utc),
         )
 
+    def check_email(self, raw_token: str, typed_email: str) -> bool:
+        """Compares typed email to stored email hash. Locks link after 5 failed attempts."""
+        token_hash = self.hash_token(raw_token)
+        res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
+        data = res.data
+        row = data[0] if isinstance(data, list) and data else data
+        if not row:
+            raise ValueError("Invalid or expired confirmation link.")
+
+        if row.get("locked_at"):
+            raise PermissionError("This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.")
+
+        exp = row.get("token_expires_at")
+        if exp:
+            exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+            if exp_dt < datetime.now(timezone.utc):
+                raise ValueError("Confirmation link has expired.")
+
+        stored_email_hash = row.get("party_email_hash")
+        if not stored_email_hash:
+            raise ValueError("This confirmation link does not have an associated counterparty email address.")
+
+        normalized_typed = typed_email.strip().lower()
+        typed_hash = self.hash_email(normalized_typed)
+
+        if not hmac.compare_digest(typed_hash, stored_email_hash):
+            attempts = (row.get("email_check_attempts") or 0) + 1
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if attempts >= 5:
+                self.client.table("confirmations").update({
+                    "email_check_attempts": attempts,
+                    "locked_at": now_iso,
+                }).eq("id", row["id"]).execute()
+                # Append-only audit record (no PII)
+                audit_repo = AuditRepository(client=self.client)
+                audit_repo.log_event(
+                    entity_type="confirmation",
+                    entity_id=row["agreement_id"],
+                    action="counterparty_confirmation_locked",
+                    metadata={"party_name": row["party_name"], "reason": "max_email_check_attempts_exceeded"},
+                )
+                raise PermissionError("This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.")
+            else:
+                self.client.table("confirmations").update({
+                    "email_check_attempts": attempts,
+                }).eq("id", row["id"]).execute()
+                raise ValueError("We couldn't verify this email address.")
+
+        # Success: match verified
+        now_iso = datetime.now(timezone.utc).isoformat()
+        self.client.table("confirmations").update({
+            "email_check_attempts": 0,
+            "email_check_passed_at": now_iso,
+        }).eq("id", row["id"]).execute()
+        return True
+
+    def send_otp(self, raw_token: str) -> Dict[str, Any]:
+        """Dispatches 6-digit OTP to stored email address subject to rate limits."""
+        from app.services.email_sender import get_email_sender
+
+        token_hash = self.hash_token(raw_token)
+        res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
+        data = res.data
+        row = data[0] if isinstance(data, list) and data else data
+        if not row:
+            raise ValueError("Invalid or expired confirmation link.")
+
+        if row.get("locked_at"):
+            raise PermissionError("This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.")
+
+        exp = row.get("token_expires_at")
+        if exp:
+            exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+            if exp_dt < datetime.now(timezone.utc):
+                raise ValueError("Confirmation link has expired.")
+
+        # Email check must have passed within last 15 minutes
+        passed_at = row.get("email_check_passed_at")
+        if not passed_at:
+            raise ValueError("Please verify your email address before requesting a verification code.")
+        passed_dt = datetime.fromisoformat(passed_at.replace("Z", "+00:00"))
+        now_dt = datetime.now(timezone.utc)
+        if (now_dt - passed_dt).total_seconds() > 900:  # 15 minutes
+            raise ValueError("Email verification session expired. Please verify your email again.")
+
+        # Rate limiting: max 3 sends per rolling 15 minutes
+        window_started = row.get("otp_window_started_at")
+        send_count = row.get("otp_send_count") or 0
+        if not window_started:
+            window_dt = now_dt
+            send_count = 0
+        else:
+            window_dt = datetime.fromisoformat(window_started.replace("Z", "+00:00"))
+            if (now_dt - window_dt).total_seconds() > 900:
+                window_dt = now_dt
+                send_count = 0
+
+        if send_count >= 3:
+            raise TimeoutError("Too many OTP requests. Please wait 15 minutes before requesting another code.")
+
+        # Minimum 30s spacing between sends
+        last_sent = row.get("otp_last_sent_at")
+        if last_sent:
+            last_dt = datetime.fromisoformat(last_sent.replace("Z", "+00:00"))
+            if (now_dt - last_dt).total_seconds() < 30:
+                raise TimeoutError("Please wait 30 seconds before requesting another code.")
+
+        # Generate 6-digit OTP
+        otp = f"{secrets.randbelow(900000) + 100000}"
+        otp_hash = self.hash_sha256(otp)
+        otp_expires_at = (now_dt + timedelta(minutes=settings.OTP_TTL_MINUTES)).isoformat()
+
+        # Decrypt target email
+        stored_enc = row.get("party_email_encrypted")
+        if not stored_enc:
+            raise ValueError("No stored email for counterparty.")
+        target_email = decrypt_message_content(stored_enc)
+        if not target_email or "@" not in target_email:
+            raise ValueError("Invalid stored email address.")
+
+        # Send email
+        sender = get_email_sender()
+        subject = f"Your DealShield Verification Code for {row['party_name']}"
+        body = (
+            f"Hello,\n\n"
+            f"Your single-use verification code to review the commercial agreement is: {otp}\n\n"
+            f"This code will expire in {settings.OTP_TTL_MINUTES} minutes.\n\n"
+            f"If you did not request this code, you can safely ignore this email.\n\n"
+            f"DealShield AI"
+        )
+        sender.send(to=target_email, subject=subject, body=body)
+
+        # Update row state
+        self.client.table("confirmations").update({
+            "otp_hash": otp_hash,
+            "otp_expires_at": otp_expires_at,
+            "otp_attempts": 0,
+            "otp_send_count": send_count + 1,
+            "otp_window_started_at": window_dt.isoformat(),
+            "otp_last_sent_at": now_dt.isoformat(),
+        }).eq("id", row["id"]).execute()
+
+        return {
+            "status": "sent",
+            "masked_email": self.mask_email(target_email),
+        }
+
+    def verify_otp(self, raw_token: str, otp: str) -> Dict[str, Any]:
+        """Validates 6-digit OTP and issues a 30-minute review session token."""
+        token_hash = self.hash_token(raw_token)
+        res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
+        data = res.data
+        row = data[0] if isinstance(data, list) and data else data
+        if not row:
+            raise ValueError("Invalid or expired confirmation link.")
+
+        if row.get("locked_at"):
+            raise PermissionError("This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.")
+
+        total_failures = row.get("otp_total_failures") or 0
+        if total_failures >= 10:
+            raise PermissionError("This confirmation link has been locked due to excessive failed attempts.")
+
+        otp_hash = row.get("otp_hash")
+        exp_iso = row.get("otp_expires_at")
+        if not otp_hash or not exp_iso:
+            raise ValueError("No active verification code. Please request a new code.")
+
+        exp_dt = datetime.fromisoformat(exp_iso.replace("Z", "+00:00"))
+        now_dt = datetime.now(timezone.utc)
+        if exp_dt < now_dt:
+            self.client.table("confirmations").update({"otp_hash": None}).eq("id", row["id"]).execute()
+            raise ValueError("Verification code has expired. Please request a new code.")
+
+        provided_hash = self.hash_sha256(otp.strip())
+        if not hmac.compare_digest(provided_hash, otp_hash):
+            attempts = (row.get("otp_attempts") or 0) + 1
+            total_failures += 1
+            now_iso = now_dt.isoformat()
+
+            if total_failures >= 10:
+                self.client.table("confirmations").update({
+                    "otp_hash": None,
+                    "otp_attempts": attempts,
+                    "otp_total_failures": total_failures,
+                    "locked_at": now_iso,
+                }).eq("id", row["id"]).execute()
+                audit_repo = AuditRepository(client=self.client)
+                audit_repo.log_event(
+                    entity_type="confirmation",
+                    entity_id=row["agreement_id"],
+                    action="counterparty_confirmation_locked",
+                    metadata={"party_name": row["party_name"], "reason": "max_otp_failures_exceeded"},
+                )
+                raise PermissionError("This confirmation link has been locked due to excessive failed attempts. Please ask the initiator to generate a new link.")
+            elif attempts >= 5:
+                self.client.table("confirmations").update({
+                    "otp_hash": None,
+                    "otp_attempts": attempts,
+                    "otp_total_failures": total_failures,
+                }).eq("id", row["id"]).execute()
+                raise ValueError("Too many incorrect attempts. Please request a new verification code.")
+            else:
+                self.client.table("confirmations").update({
+                    "otp_attempts": attempts,
+                    "otp_total_failures": total_failures,
+                }).eq("id", row["id"]).execute()
+                raise ValueError("Invalid verification code. Please check and try again.")
+
+        # Success: OTP verified
+        session_token = secrets.token_urlsafe(32)
+        session_token_hash = self.hash_sha256(session_token)
+        session_expires_at = (now_dt + timedelta(minutes=settings.SESSION_TTL_MINUTES)).isoformat()
+
+        self.client.table("confirmations").update({
+            "otp_hash": None,
+            "email_verified_at": now_dt.isoformat(),
+            "session_token_hash": session_token_hash,
+            "session_expires_at": session_expires_at,
+            "otp_attempts": 0,
+        }).eq("id", row["id"]).execute()
+
+        return {
+            "session_token": session_token,
+            "expires_at": session_expires_at,
+        }
+
+    def is_session_valid(self, row: Dict[str, Any], session_token: Optional[str]) -> bool:
+        """Check if provided session token matches active unexpired session."""
+        if not session_token or not row:
+            return False
+        stored_hash = row.get("session_token_hash")
+        if not stored_hash:
+            return False
+        provided_hash = self.hash_sha256(session_token)
+        if not hmac.compare_digest(provided_hash, stored_hash):
+            return False
+        exp_iso = row.get("session_expires_at")
+        if not exp_iso:
+            return False
+        try:
+            exp_dt = datetime.fromisoformat(exp_iso.replace("Z", "+00:00"))
+            return exp_dt > datetime.now(timezone.utc)
+        except Exception:
+            return False
+
+    def validate_session(self, raw_token: str, session_token: Optional[str]) -> Dict[str, Any]:
+        """Validate session token and return confirmation row. Raises error if invalid."""
+        if not session_token:
+            raise PermissionError("Missing X-Review-Session header. Please verify your email first.")
+        token_hash = self.hash_token(raw_token)
+        res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
+        data = res.data
+        row = data[0] if isinstance(data, list) and data else data
+        if not row:
+            raise ValueError("Invalid or expired confirmation link.")
+        if not self.is_session_valid(row, session_token):
+            raise PermissionError("Review session expired or invalid. Please verify your email again.")
+        return row
+
     def submit_confirmation_by_party(
         self,
         agreement_id: str,
@@ -448,6 +829,20 @@ class ConfirmationRepository:
         decline_reason: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Confirms or declines agreement directly for party."""
+        # Direct Confirm Rule: Counterparties must use the link flow unless ALLOW_DIRECT_CONFIRM
+        if not settings.ALLOW_DIRECT_CONFIRM:
+            ag_res = self.client.table("agreements").select("parties").eq("id", agreement_id).execute()
+            ag_data = ag_res.data[0] if isinstance(ag_res.data, list) and ag_res.data else ag_res.data
+            if ag_data and ag_data.get("parties"):
+                parties = ag_data["parties"]
+                if isinstance(parties, list) and len(parties) > 0:
+                    initiator_party = parties[0]
+                    if party_name != initiator_party:
+                        raise PermissionError(
+                            "Direct confirmation is only allowed for the initiating party. "
+                            "Counterparties must confirm via the secure email verification link."
+                        )
+
         now_dt = datetime.now(timezone.utc)
         ip_hash = HashService.hash_ip(client_ip) if client_ip else None
 
@@ -485,7 +880,6 @@ class ConfirmationRepository:
                 "agreement_id", agreement_id
             ).eq("party_name", party_name).execute()
         else:
-            # Create confirmation record
             new_row = {
                 "id": str(uuid.uuid4()),
                 "agreement_id": agreement_id,
@@ -495,7 +889,7 @@ class ConfirmationRepository:
             }
             self.client.table("confirmations").insert(new_row).execute()
 
-        # Check if all parties confirmed or any declined to update agreement status
+        # Update agreement status
         status = self.get_confirmation_status(agreement_id)
         if is_decline:
             self.client.table("agreements").update({
@@ -517,20 +911,30 @@ class ConfirmationRepository:
         raw_token: str,
         notes: Optional[str] = None,
         client_ip: Optional[str] = None,
+        user_agent: Optional[str] = None,
         action: str = "agree",
         decline_reason: Optional[str] = None,
+        session_token: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Verifies single-use signed token and executes confirmation or decline."""
-        token_hash = self.hash_token(raw_token)
-        res = (
-            self.client.table("confirmations")
-            .select("*")
-            .eq("confirmation_token_hash", token_hash)
-            .execute()
-        )
-        row = res.data[0] if isinstance(res.data, list) and res.data else res.data
-        if not row:
-            raise ValueError("Invalid or expired confirmation token.")
+        if settings.REQUIRE_EMAIL_OTP:
+            row = self.validate_session(raw_token, session_token)
+            if not row.get("party_email_hash") or not row.get("email_verified_at"):
+                raise ValueError("Email verification is required before confirming this agreement.")
+        else:
+            token_hash = self.hash_token(raw_token)
+            res = (
+                self.client.table("confirmations")
+                .select("*")
+                .eq("confirmation_token_hash", token_hash)
+                .execute()
+            )
+            row = res.data[0] if isinstance(res.data, list) and res.data else res.data
+            if not row:
+                raise ValueError("Invalid or expired confirmation token.")
+
+        if row.get("locked_at"):
+            raise PermissionError("This confirmation link has been locked.")
 
         if row.get("confirmed") or row.get("declined"):
             raise ValueError("This single-use confirmation token has already been executed.")
@@ -545,6 +949,21 @@ class ConfirmationRepository:
         ip_hash = HashService.hash_ip(client_ip) if client_ip else None
         ag_id = row["agreement_id"]
 
+        agreed_version_number = 1
+        agreed_content_hash = None
+        try:
+            ag_res = self.client.table("agreements").select("current_version").eq("id", ag_id).execute()
+            ag_data = ag_res.data[0] if isinstance(ag_res.data, list) and ag_res.data else ag_res.data
+            if ag_data and ag_data.get("current_version"):
+                agreed_version_number = int(ag_data["current_version"])
+
+            ver_res = self.client.table("agreement_versions").select("content_hash").eq("agreement_id", ag_id).eq("version_number", agreed_version_number).execute()
+            ver_data = ver_res.data[0] if isinstance(ver_res.data, list) and ver_res.data else ver_res.data
+            if ver_data and ver_data.get("content_hash"):
+                agreed_content_hash = ver_data["content_hash"]
+        except Exception:
+            pass
+
         is_decline = (action == "decline")
         if is_decline:
             self.client.table("confirmations").update({
@@ -554,11 +973,17 @@ class ConfirmationRepository:
                 "decline_reason": decline_reason or notes,
                 "notes": notes,
                 "ip_hash": ip_hash,
+                "user_agent": user_agent,
+                "agreed_version_number": agreed_version_number,
+                "agreed_content_hash": agreed_content_hash,
+                "otp_hash": None,
             }).eq("id", row["id"]).execute()
 
             self.client.table("agreements").update({
                 "status": AgreementStatus.DECLINED.value
             }).eq("id", ag_id).execute()
+
+            self._send_completion_notifications(row, action="declined", decline_reason=decline_reason or notes)
 
             return {
                 "agreement_id": ag_id,
@@ -577,6 +1002,10 @@ class ConfirmationRepository:
             "confirmed_at": now_dt.isoformat(),
             "notes": notes,
             "ip_hash": ip_hash,
+            "user_agent": user_agent,
+            "agreed_version_number": agreed_version_number,
+            "agreed_content_hash": agreed_content_hash,
+            "otp_hash": None,
         }).eq("id", row["id"]).execute()
 
         # Update agreement status if complete
@@ -590,6 +1019,8 @@ class ConfirmationRepository:
                 "status": AgreementStatus.PARTIALLY_CONFIRMED.value
             }).eq("id", ag_id).execute()
 
+        self._send_completion_notifications(row, action="confirmed")
+
         return {
             "agreement_id": ag_id,
             "party_name": row["party_name"],
@@ -598,6 +1029,91 @@ class ConfirmationRepository:
             "confirmed": True,
             "confirmed_at": now_dt.isoformat(),
         }
+
+    def _send_completion_notifications(
+        self,
+        conf_row: Dict[str, Any],
+        action: str,
+        decline_reason: Optional[str] = None,
+    ) -> None:
+        """Send completion email notifications to initiator and counterparty.
+        
+        Must never fail the parent request.
+        """
+        try:
+            from app.services.email_sender import get_email_sender
+            sender = get_email_sender()
+
+            party_name = conf_row.get("party_name", "Counterparty")
+            ag_id = conf_row.get("agreement_id", "")
+
+            # 1. Counterparty notification
+            counterparty_email = None
+            if conf_row.get("party_email_encrypted"):
+                try:
+                    counterparty_email = decrypt_message_content(conf_row["party_email_encrypted"])
+                except Exception:
+                    pass
+
+            if counterparty_email:
+                cp_subject = f"DealShield: Agreement {action.capitalize()} Confirmation"
+                if action == "confirmed":
+                    cp_body = (
+                        f"Hello {party_name},\n\n"
+                        f"Thank you for confirming the commercial agreement (Reference ID: {ag_id}).\n"
+                        f"Your electronic assent has been recorded securely with a cryptographic audit trail.\n\n"
+                        f"You may download the agreement PDF record using your active review session link.\n\n"
+                        f"DealShield AI"
+                    )
+                else:
+                    cp_body = (
+                        f"Hello {party_name},\n\n"
+                        f"Your decision to decline the commercial agreement (Reference ID: {ag_id}) has been recorded.\n"
+                        f"Reason provided: {decline_reason or 'No reason provided'}.\n\n"
+                        f"DealShield AI"
+                    )
+                try:
+                    sender.send(to=counterparty_email, subject=cp_subject, body=cp_body)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("dealshield.email").warning("Failed to send counterparty notification: %s", e)
+
+            # 2. Initiator notification
+            initiator_email = None
+            initiator_id = conf_row.get("initiator_user_id")
+            if initiator_id:
+                try:
+                    user_res = self.client.table("users").select("email").eq("id", initiator_id).execute()
+                    user_data = user_res.data[0] if isinstance(user_res.data, list) and user_res.data else user_res.data
+                    if user_data and user_data.get("email"):
+                        initiator_email = user_data["email"]
+                except Exception:
+                    pass
+
+            if initiator_email:
+                init_subject = f"DealShield: {party_name} has {action} the agreement"
+                if action == "confirmed":
+                    init_body = (
+                        f"Hello,\n\n"
+                        f"{party_name} has agreed to and confirmed the commercial agreement (Reference ID: {ag_id}).\n"
+                        f"You can view the updated status and download the PDF record from your DealShield dashboard.\n\n"
+                        f"DealShield AI"
+                    )
+                else:
+                    init_body = (
+                        f"Hello,\n\n"
+                        f"{party_name} has declined the commercial agreement (Reference ID: {ag_id}).\n"
+                        f"Reason provided: {decline_reason or 'No reason provided'}.\n\n"
+                        f"DealShield AI"
+                    )
+                try:
+                    sender.send(to=initiator_email, subject=init_subject, body=init_body)
+                except Exception as e:
+                    import logging
+                    logging.getLogger("dealshield.email").warning("Failed to send initiator notification: %s", e)
+        except Exception as e:
+            import logging
+            logging.getLogger("dealshield.email").warning("Completion notification error: %s", e)
 
 
 class AuditRepository:

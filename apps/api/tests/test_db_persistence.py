@@ -1,6 +1,10 @@
+import re
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.config import settings
+from app.core.security import create_access_token
+from app.services.email_sender import InMemoryEmailSender
 from app.db.repository import (
     ConversationRepository,
     AgreementRepository,
@@ -12,6 +16,8 @@ from app.schemas.chat import Message
 from app.services.hash_service import HashService
 
 client = TestClient(app)
+DEMO_AUTH_TOKEN = create_access_token("00000000-0000-0000-0000-000000000001", "demo@dealshield.local")
+AUTH_HEADERS = {"Authorization": f"Bearer {DEMO_AUTH_TOKEN}"}
 
 
 def test_conversation_and_message_repository():
@@ -104,6 +110,9 @@ def test_agreement_generation_and_retrieval():
 
 
 def test_two_party_confirmation_workflow():
+    settings.EMAIL_BACKEND = "memory"
+    InMemoryEmailSender.clear()
+
     # Create agreement
     res = client.post(
         "/api/v1/agreements",
@@ -111,7 +120,7 @@ def test_two_party_confirmation_workflow():
     )
     agreement_id = res.json()["id"]
 
-    # Party 1 confirms
+    # Party 1 (Initiator: Raj Mehta) confirms via direct authenticated route
     conf1_res = client.post(
         "/api/v1/confirmations",
         json={
@@ -121,6 +130,7 @@ def test_two_party_confirmation_workflow():
             "confirmed": True,
             "notes": "Agreed to 50k advance.",
         },
+        headers=AUTH_HEADERS,
     )
     assert conf1_res.status_code == 200
     data1 = conf1_res.json()
@@ -130,20 +140,48 @@ def test_two_party_confirmation_workflow():
     ag1 = client.get(f"/api/v1/agreements/{agreement_id}").json()
     assert ag1["status"] == "partially_confirmed"
 
-    # Party 2 confirms
-    conf2_res = client.post(
-        "/api/v1/confirmations",
+    # Initiator generates secure link for counterparty Priya Sharma
+    link_res = client.post(
+        "/api/v1/confirmations/tokens",
         json={
             "agreement_id": agreement_id,
-            "version_number": 1,
             "party_name": "Priya Sharma",
-            "confirmed": True,
-            "notes": "Ready to begin initial mockups.",
+            "party_email": "priya@example.com",
         },
+        headers=AUTH_HEADERS,
+    )
+    assert link_res.status_code == 200
+    raw_token = link_res.json()["raw_token"]
+
+    # Priya checks email
+    chk_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/email-check",
+        json={"email": "priya@example.com"},
+    )
+    assert chk_res.status_code == 200
+
+    # Dispatch OTP
+    send_res = client.post(f"/api/v1/confirmations/token/{raw_token}/otp/send")
+    assert send_res.status_code == 200
+    assert len(InMemoryEmailSender.outbox) > 0
+    otp = re.search(r"\b(\d{6})\b", InMemoryEmailSender.outbox[-1]["body"]).group(1)
+
+    # Verify OTP and get session token
+    v_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/otp/verify",
+        json={"otp": otp},
+    )
+    assert v_res.status_code == 200
+    session_token = v_res.json()["session_token"]
+
+    # Priya confirms using active review session
+    conf2_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}",
+        json={"notes": "Ready to begin initial mockups.", "action": "agree"},
+        headers={"X-Review-Session": session_token},
     )
     assert conf2_res.status_code == 200
-    data2 = conf2_res.json()
-    assert data2["all_confirmed"] is True
+    assert conf2_res.json()["status"] == "confirmed"
 
     # Check agreement status: fully_confirmed
     ag2 = client.get(f"/api/v1/agreements/{agreement_id}").json()
@@ -151,42 +189,67 @@ def test_two_party_confirmation_workflow():
 
 
 def test_single_use_token_confirmation():
+    settings.EMAIL_BACKEND = "memory"
+    InMemoryEmailSender.clear()
+
     conf_repo = ConfirmationRepository()
     agreement_id = "test_ag_tokens_01"
     version_id = "test_ver_01"
 
-    # Create single-use tokens for parties
+    # Create single-use tokens for parties with party_email
     tokens = conf_repo.create_confirmation_tokens(
         agreement_id=agreement_id,
         version_id=version_id,
         party_names=["Counterparty Client"],
+        party_email="client@example.com",
     )
     assert len(tokens) == 1
     raw_token = tokens[0]["raw_token"]
 
-    # 1. Execute confirmation with valid token
+    # 1. Verification flow: email check -> OTP -> session
+    client.post(
+        f"/api/v1/confirmations/token/{raw_token}/email-check",
+        json={"email": "client@example.com"},
+    )
+    client.post(f"/api/v1/confirmations/token/{raw_token}/otp/send")
+    otp = re.search(r"\b(\d{6})\b", InMemoryEmailSender.outbox[-1]["body"]).group(1)
+    v_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/otp/verify",
+        json={"otp": otp},
+    )
+    session_token = v_res.json()["session_token"]
+
+    # 2. Execute confirmation with valid token & session
     tok_res = client.post(
         f"/api/v1/confirmations/token/{raw_token}",
         json={"notes": "Confirmed via secure email link"},
+        headers={"X-Review-Session": session_token},
     )
     assert tok_res.status_code == 200
     assert tok_res.json()["status"] == "confirmed"
 
-    # 2. Replay attack attempt: same token MUST be rejected
+    # 3. Replay attack attempt: same token MUST be rejected
     replay_res = client.post(
         f"/api/v1/confirmations/token/{raw_token}",
         json={"notes": "Trying again"},
+        headers={"X-Review-Session": session_token},
     )
     assert replay_res.status_code == 400
     assert "already been executed" in replay_res.json()["detail"]
 
-    # 3. Invalid token rejection
-    bad_res = client.post("/api/v1/confirmations/token/invalid-token-xyz")
+    # 4. Invalid token rejection
+    bad_res = client.post(
+        "/api/v1/confirmations/token/invalid-token-xyz",
+        headers={"X-Review-Session": session_token},
+    )
     assert bad_res.status_code == 400
     assert "Invalid or expired" in bad_res.json()["detail"]
 
 
 def test_single_use_token_decline_workflow():
+    settings.EMAIL_BACKEND = "memory"
+    InMemoryEmailSender.clear()
+
     conf_repo = ConfirmationRepository()
     agreement_id = "test_ag_tokens_decline_01"
     version_id = "test_ver_decline_01"
@@ -195,24 +258,41 @@ def test_single_use_token_decline_workflow():
         agreement_id=agreement_id,
         version_id=version_id,
         party_names=["Declining Counterparty"],
+        party_email="declining@example.com",
     )
     raw_token = tokens[0]["raw_token"]
 
-    # 1. Inspect token prior to action
+    # 1. Inspect token prior to action (no draft revealed without session)
     inspect_res = client.get(f"/api/v1/confirmations/token/{raw_token}")
     assert inspect_res.status_code == 200
     ins_data = inspect_res.json()
     assert ins_data["party_name"] == "Declining Counterparty"
     assert ins_data["confirmed"] is False
     assert ins_data["declined"] is False
+    assert ins_data["requires_email_verification"] is True
+    assert ins_data["agreement"] is None
 
-    # 2. Execute decline with reason
+    # Complete OTP verification to obtain session
+    client.post(
+        f"/api/v1/confirmations/token/{raw_token}/email-check",
+        json={"email": "declining@example.com"},
+    )
+    client.post(f"/api/v1/confirmations/token/{raw_token}/otp/send")
+    otp = re.search(r"\b(\d{6})\b", InMemoryEmailSender.outbox[-1]["body"]).group(1)
+    v_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/otp/verify",
+        json={"otp": otp},
+    )
+    session_token = v_res.json()["session_token"]
+
+    # 2. Execute decline with reason and valid session
     dec_res = client.post(
         f"/api/v1/confirmations/token/{raw_token}",
         json={
             "action": "decline",
             "decline_reason": "Payment milestone 50% advance is unacceptable; requesting 25%.",
         },
+        headers={"X-Review-Session": session_token},
     )
     assert dec_res.status_code == 200
     res_json = dec_res.json()
@@ -231,6 +311,7 @@ def test_single_use_token_decline_workflow():
     replay_res = client.post(
         f"/api/v1/confirmations/token/{raw_token}",
         json={"action": "agree"},
+        headers={"X-Review-Session": session_token},
     )
     assert replay_res.status_code == 400
     assert "already been executed" in replay_res.json()["detail"]
