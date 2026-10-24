@@ -10,3 +10,4 @@ supabase>=2.3.0,<3.0.0
 openai>=1.14.0,<3.0.0
 cryptography>=42.0.0
 psycopg2-binary>=2.9.9
+reportlab>=4.0.0

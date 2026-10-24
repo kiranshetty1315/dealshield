@@ -15,6 +15,8 @@ import {
   Check,
   Undo2,
   ExternalLink,
+  Award,
+  Download,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { api } from "@/lib/api/client";
 import { Agreement, Clause } from "@/types";
+import { StampPaperModal } from "@/components/agreements/StampPaperModal";
 
 function formatAssentDate(dateStr: string | undefined): string {
   if (!dateStr) return "Just now";
@@ -66,6 +69,7 @@ function ReviewContent() {
   const [declineError, setDeclineError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -459,24 +463,69 @@ function ReviewContent() {
         <div className="bg-white rounded-xl border border-slate-200/80 shadow-sm p-6 sm:p-8 space-y-6">
           {/* Confirmed State View */}
           {decisionStatus === "confirmed" && (
-            <div className="rounded-lg bg-emerald-50/70 border border-emerald-200 p-6 space-y-3 text-center sm:text-left sm:flex sm:items-center sm:justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 font-bold text-emerald-900 text-lg">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
-                  <span>Agreement Formally Confirmed & Complete</span>
+            <div className="rounded-lg bg-emerald-50/70 border border-emerald-200 p-6 space-y-4">
+              <div className="text-center sm:text-left sm:flex sm:items-center sm:justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-bold text-emerald-900 text-lg">
+                    <CheckCircle2 className="h-6 w-6 text-emerald-600 shrink-0" />
+                    <span>Agreement Formally Confirmed & Complete</span>
+                  </div>
+                  <p className="text-sm text-emerald-800">
+                    Confirmed by <strong className="font-semibold">{partyName}</strong> on{" "}
+                    <span suppressHydrationWarning>{formatAssentDate(confirmedAt || undefined)}</span>.
+                  </p>
+                  <p className="text-xs text-emerald-700">
+                    Full mutual assent is sealed in the cryptographic audit ledger under Section 7 of the Indian Contract Act.
+                  </p>
                 </div>
-                <p className="text-sm text-emerald-800">
-                  Confirmed by <strong className="font-semibold">{partyName}</strong> on{" "}
-                  <span suppressHydrationWarning>{formatAssentDate(confirmedAt || undefined)}</span>.
-                </p>
-                <p className="text-xs text-emerald-700">
-                  Full mutual assent is sealed in the cryptographic audit ledger under Section 7 of the Indian Contract Act.
-                </p>
+                <div className="shrink-0 pt-2 sm:pt-0">
+                  <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white px-3 py-1 text-xs">
+                    Assent Recorded
+                  </Badge>
+                </div>
               </div>
-              <div className="shrink-0 pt-3 sm:pt-0">
-                <Badge className="bg-emerald-600 hover:bg-emerald-600 text-white px-3 py-1 text-xs">
-                  Assent Recorded
-                </Badge>
+
+              {/* Download Executed e-Stamp Contract Action */}
+              <div className="pt-3 border-t border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-xs text-emerald-950 flex items-center gap-1.5">
+                    <Award className="h-4 w-4 text-amber-600" />
+                    Official Indian Non-Judicial e-Stamp Contract (PDF)
+                  </span>
+                  <p className="text-[11px] text-emerald-800">
+                    Your executed contract has been compiled with electronic verification seals. You can download and keep a certified copy.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {agreement && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsStampModalOpen(true)}
+                      className="text-xs gap-1.5 border-emerald-300 bg-white text-emerald-900 hover:bg-emerald-100"
+                    >
+                      <Award className="h-3.5 w-3.5 text-amber-600" />
+                      Preview Stamp Deed
+                    </Button>
+                  )}
+
+                  <Button
+                    size="sm"
+                    asChild
+                    className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs gap-1.5 shadow-xs"
+                  >
+                    <a
+                      href={api.getAgreementPdfUrl(agreementId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      Download Stamped PDF
+                    </a>
+                  </Button>
+                </div>
               </div>
             </div>
           )}
@@ -628,6 +677,15 @@ function ReviewContent() {
           )}
         </div>
       </div>
+
+      {/* Indian Non-Judicial Stamp Paper Modal */}
+      {agreement && (
+        <StampPaperModal
+          isOpen={isStampModalOpen}
+          onClose={() => setIsStampModalOpen(false)}
+          agreement={agreement}
+        />
+      )}
     </div>
   );
 }

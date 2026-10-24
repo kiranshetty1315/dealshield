@@ -31,6 +31,9 @@ import {
   GitCompare,
   Info,
   RefreshCw,
+  Award,
+  Download,
+  Eye,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import {
@@ -45,6 +48,7 @@ import {
   UpdatedChatComparisonModal,
   ResolutionDiffSummary,
 } from "@/components/analysis/UpdatedChatComparisonModal";
+import { StampPaperModal } from "@/components/agreements/StampPaperModal";
 
 function formatAssentDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "Pending formal record";
@@ -99,6 +103,9 @@ function ConfirmationsContent() {
   // Follow-up Chat Comparison Modal
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
   const [resolutionBanner, setResolutionBanner] = useState<ResolutionDiffSummary | null>(null);
+
+  // Indian Non-Judicial Stamp Paper Modal
+  const [isStampModalOpen, setIsStampModalOpen] = useState(false);
 
   // 1. Load all conversations on mount
   useEffect(() => {
@@ -526,6 +533,19 @@ function ConfirmationsContent() {
               <span>Refresh Status</span>
             </Button>
 
+            {agreement && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsStampModalOpen(true)}
+                className="gap-1.5 text-xs border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100"
+                title="Preview authentic Indian Non-Judicial Stamp Paper contract"
+              >
+                <Award className="h-3.5 w-3.5 text-amber-600" />
+                <span>e-Stamp Contract</span>
+              </Button>
+            )}
+
             <Button
               variant="outline"
               size="sm"
@@ -901,6 +921,49 @@ function ConfirmationsContent() {
                 </p>
               </div>
 
+              {/* Official Non-Judicial e-Stamp Download & Client Sharing Banner */}
+              {agreement && (
+                <div className="border border-amber-300 bg-amber-50/90 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs shadow-xs">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Award className="h-4 w-4 text-amber-700 shrink-0" />
+                      <span className="font-bold text-amber-950 text-sm">
+                        Official Non-Judicial e-Stamp Contract (PDF)
+                      </span>
+                      <Badge className="bg-amber-200 text-amber-900 border-amber-400 text-[10px] font-semibold">
+                        ₹ 100 Non-Judicial e-Stamp
+                      </Badge>
+                    </div>
+                    <p className="text-amber-900 text-[11px] leading-relaxed">
+                      The commercial contract is finalized with two-party mutual assent under Section 10A IT Act, 2000. Download the official Indian Stamp Paper PDF format to share directly with your client or counterparty.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsStampModalOpen(true)}
+                      className="text-xs gap-1.5 border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
+                    >
+                      <Eye className="h-3.5 w-3.5 text-amber-700" />
+                      <span>Preview Stamp Deed</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      asChild
+                      className="text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs"
+                    >
+                      <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download Stamp PDF</span>
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* DPDP Act Message Erasure Option */}
               <div className="border border-blue-200 bg-blue-50/70 p-4 rounded-xl flex items-center justify-between gap-3 text-xs">
                 <div className="space-y-0.5">
@@ -1033,6 +1096,16 @@ function ConfirmationsContent() {
         currentAnalysis={currentAnalysis}
         onUpdateCompleted={handleUpdateCompleted}
       />
+
+      {/* Indian Non-Judicial Stamp Paper Modal */}
+      {agreement && (
+        <StampPaperModal
+          isOpen={isStampModalOpen}
+          onClose={() => setIsStampModalOpen(false)}
+          agreement={agreement}
+          confirmationStatus={confirmationStatus}
+        />
+      )}
     </div>
   );
 }

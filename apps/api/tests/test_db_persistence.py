@@ -91,11 +91,16 @@ def test_agreement_generation_and_retrieval():
     assert get_res.status_code == 200
     assert get_res.json()["id"] == agreement_id
 
-    # 3. Export agreement as document with SHA-256 header
+    # 3. Export agreement as Indian Stamp Paper PDF and TXT with SHA-256 header
     export_res = client.get(f"/api/v1/agreements/{agreement_id}/pdf")
     assert export_res.status_code == 200
     assert "X-DealShield-Hash" in export_res.headers
-    assert "DEALSHIELD AI" in export_res.text
+    assert export_res.content.startswith(b"%PDF")
+    assert export_res.headers["content-type"] == "application/pdf"
+
+    export_txt = client.get(f"/api/v1/agreements/{agreement_id}/pdf?format=txt")
+    assert export_txt.status_code == 200
+    assert "DEALSHIELD AI" in export_txt.text
 
 
 def test_two_party_confirmation_workflow():

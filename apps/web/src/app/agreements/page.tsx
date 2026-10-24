@@ -25,6 +25,7 @@ import {
   MessageSquare,
   AlertTriangle,
   CheckCircle2,
+  Award,
 } from "lucide-react";
 import { AgreementPreview } from "@/components/agreements/AgreementPreview";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
@@ -32,6 +33,7 @@ import {
   UpdatedChatComparisonModal,
   ResolutionDiffSummary,
 } from "@/components/analysis/UpdatedChatComparisonModal";
+import { StampPaperModal } from "@/components/agreements/StampPaperModal";
 import { Agreement, Message, ConversationRecord, AgreementAnalysis, ChatUploadResponse } from "@/types";
 import { api } from "@/lib/api/client";
 
@@ -60,6 +62,9 @@ function AgreementsContent() {
   // Follow-up comparison state
   const [isComparisonModalOpen, setIsComparisonModalOpen] = useState<boolean>(false);
   const [resolutionBanner, setResolutionBanner] = useState<ResolutionDiffSummary | null>(null);
+
+  // Indian Non-Judicial Stamp Paper Modal
+  const [isStampModalOpen, setIsStampModalOpen] = useState<boolean>(false);
 
   // 1. Fetch conversations list
   const loadConversations = useCallback(async () => {
@@ -420,9 +425,18 @@ function AgreementsContent() {
                 </Badge>
               )}
 
-              <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm" className="gap-2 text-xs h-9">
-                  <Download className="h-4 w-4" /> Export Plain-Text / PDF
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsStampModalOpen(true)}
+                className="gap-2 text-xs h-9 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+              >
+                <Award className="h-4 w-4 text-amber-600" /> Preview e-Stamp
+              </Button>
+
+              <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
+                <Button size="sm" className="gap-2 text-xs h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs">
+                  <Download className="h-4 w-4" /> Download e-Stamp PDF
                 </Button>
               </a>
 
@@ -527,6 +541,15 @@ function AgreementsContent() {
         currentAnalysis={currentAnalysis}
         onUpdateCompleted={handleUpdateCompleted}
       />
+
+      {/* Indian Non-Judicial Stamp Paper Modal */}
+      {agreement && (
+        <StampPaperModal
+          isOpen={isStampModalOpen}
+          onClose={() => setIsStampModalOpen(false)}
+          agreement={agreement}
+        />
+      )}
     </div>
   );
 }

@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException, status, Response
 from app.schemas.agreement import Agreement, AgreementCreateRequest
 from app.services.agreement_generator import AgreementGeneratorService
@@ -114,10 +115,13 @@ async def get_agreement(agreement_id: str) -> Agreement:
 
 @router.get(
     "/{agreement_id}/pdf",
-    summary="Export Agreement as Document",
-    description="Generates document export with SHA-256 fingerprint audit stamp.",
+    summary="Export Agreement as Indian Stamp Paper PDF or Document",
+    description="Generates Indian Non-Judicial Stamp Paper PDF with SHA-256 fingerprint audit stamp.",
 )
-async def export_agreement_pdf(agreement_id: str):
+async def export_agreement_pdf(
+    agreement_id: str,
+    format: Optional[str] = None,
+):
     """Export formatted agreement document with cryptographic header."""
     agreement = agreement_repo.get_agreement(agreement_id)
     if not agreement:
@@ -133,9 +137,31 @@ async def export_agreement_pdf(agreement_id: str):
                 detail=f"Agreement {agreement_id} not found."
             )
 
-    text_content = generator_service.render_plain_text(agreement)
+    # If explicitly requested as plain text
+    if format in ("txt", "text"):
+        text_content = generator_service.render_plain_text(agreement)
+        headers = {
+            "Content-Disposition": f'attachment; filename="agreement-{agreement_id[:8]}.txt"',
+            "X-DealShield-Hash": agreement.versions[-1].content_hash or "",
+        }
+        return Response(content=text_content, media_type="text/plain; charset=utf-8", headers=headers)
+
+    # Default: Generate authentic Indian Non-Judicial e-Stamp Paper PDF
+    from app.services.stamp_pdf_generator import StampPaperPdfService
+    from app.db.repository import ConfirmationRepository
+
+    conf_repo = ConfirmationRepository(client=agreement_repo.client)
+    try:
+        conf_status = conf_repo.get_confirmation_status(agreement_id)
+    except Exception:
+        conf_status = None
+
+    pdf_bytes = StampPaperPdfService.generate_pdf(agreement=agreement, confirmation_status=conf_status)
+
     headers = {
-        "Content-Disposition": f'attachment; filename="agreement-{agreement_id[:8]}.txt"',
+        "Content-Disposition": f'attachment; filename="DealShield-Stamp-Agreement-{agreement_id[:8]}.pdf"',
+        "Content-Type": "application/pdf",
         "X-DealShield-Hash": agreement.versions[-1].content_hash or "",
+        "X-Stamp-Paper": "Indian-Non-Judicial-Article-5C",
     }
-    return Response(content=text_content, media_type="text/plain; charset=utf-8", headers=headers)
+    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
