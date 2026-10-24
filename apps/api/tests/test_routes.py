@@ -131,3 +131,14 @@ def test_analysis_nonexistent_chat_fails():
     res = client.post("/api/v1/analysis", json={"chat_id": "nonexistent-chat-uuid"})
     assert res.status_code == 404
     assert "not found" in res.json()["detail"].lower()
+
+
+def test_sample_agreement_uuid_auto_seeds_cleanly():
+    """Verify sample-agreement-uuid returns 200 OK and autoseeds default agreement."""
+    res = client.get("/api/v1/agreements/sample-agreement-uuid")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["id"] == "sample-agreement-uuid"
+    assert "Raj Mehta" in data["parties"]
+    assert "Priya Sharma" in data["parties"]
+    assert len(data["versions"]) >= 1

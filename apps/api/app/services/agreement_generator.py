@@ -38,6 +38,7 @@ class AgreementGeneratorService:
         analysis_id: str,
         parties: Optional[List[str]] = None,
         terms: Optional[List[Dict]] = None,
+        agreement_id: Optional[str] = None,
     ) -> Agreement:
         """Generate Version 1 draft agreement from structured analysis."""
         contracting_parties = parties or ["Raj Mehta", "Priya Sharma"]
@@ -103,6 +104,7 @@ class AgreementGeneratorService:
             parties=contracting_parties,
             clauses=clauses,
             content_hash=content_hash,
+            agreement_id=agreement_id,
         )
 
         # 2. Persist Document Hash in Evidence Vault
