@@ -14,6 +14,103 @@ class TokenConfirmationRequest(BaseModel):
     notes: Optional[str] = Field(None, description="Optional confirmation remarks")
 
 
+class TokenGenerateRequest(BaseModel):
+    agreement_id: str = Field(..., description="Target agreement UUID")
+    party_name: str = Field(..., description="Counterparty name to issue link for")
+    hours_valid: int = Field(72, description="Token validity window in hours")
+
+
+class TokenExecuteRequest(BaseModel):
+    token: str = Field(..., description="Raw confirmation secret token")
+    notes: Optional[str] = Field(None, description="Optional confirmation remarks")
+
+
+@router.post(
+    "/tokens",
+    summary="Generate Counterparty Single-Use Signed Token Link",
+    description="Generates an unguessable 32-byte URL-safe token link for an external counterparty.",
+)
+async def generate_counterparty_token(payload: TokenGenerateRequest):
+    """Generate shareable single-use link for counterparties without an account."""
+    import uuid
+    try:
+        tokens = conf_repo.create_confirmation_tokens(
+            agreement_id=payload.agreement_id,
+            version_id=str(uuid.uuid4()),
+            party_names=[payload.party_name],
+            hours_valid=payload.hours_valid,
+        )
+        if not tokens:
+            raise HTTPException(status_code=400, detail="Failed to generate confirmation token.")
+
+        tok = tokens[0]
+        return {
+            "status": "success",
+            "agreement_id": payload.agreement_id,
+            "party_name": payload.party_name,
+            "raw_token": tok["raw_token"],
+            "token": tok["raw_token"],
+            "token_hash": tok["token_hash"],
+            "expires_at": tok["expires_at"],
+            "confirmation_url": f"/confirmations?token={tok['raw_token']}",
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post(
+    "/tokens/confirm",
+    summary="Execute Token Confirmation via JSON Payload",
+    description="Validates single-use signed token and executes confirmation for external counterparty.",
+)
+async def execute_token_confirm_json(payload: TokenExecuteRequest, request: Request):
+    """JSON payload execution for single-use counterparty tokens."""
+    client_ip = request.client.host if request.client else None
+    try:
+        result = conf_repo.submit_confirmation_by_token(
+            raw_token=payload.token,
+            notes=payload.notes,
+            client_ip=client_ip,
+        )
+        audit_repo.log_event(
+            entity_type="confirmation",
+            entity_id=result["agreement_id"],
+            action="counterparty_token_confirmed",
+            metadata={"party_name": result["party_name"]},
+        )
+        return {
+            "status": "confirmed",
+            "message": f"Agreement confirmed by {result['party_name']}",
+            **result,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get(
+    "/token/{token}",
+    summary="Inspect Token & Agreement Details",
+    description="Validates token and returns counterparty info for review prior to confirmation.",
+)
+async def inspect_token(token: str):
+    """Returns token metadata so counterparty can review agreement before clicking confirm."""
+    token_hash = conf_repo.hash_token(token)
+    res = conf_repo.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
+    data = res.data
+    row = data[0] if isinstance(data, list) and data else data
+    if not row:
+        raise HTTPException(status_code=404, detail="Invalid or expired confirmation link.")
+
+    return {
+        "token": token,
+        "agreement_id": row.get("agreement_id"),
+        "party_name": row.get("party_name"),
+        "confirmed": bool(row.get("confirmed", False)),
+        "confirmed_at": row.get("confirmed_at"),
+        "expires_at": row.get("token_expires_at"),
+    }
+
+
 @router.post(
     "",
     response_model=ConfirmationStatus,
