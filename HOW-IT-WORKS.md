@@ -18,7 +18,7 @@ DealShield AI converts informal WhatsApp commercial negotiations into structured
 * Assigns **verbatim citation IDs** (`msg_raj_001`, `msg_priya_004`) to every line for downstream legal citation.
 
 ### 2. AI Extraction & Section 7 Conflict Resolution (`/analysis`)
-* **AI Extraction:** Uses OpenAI `gpt-4o-mini` with Pydantic structured output validation ([`AgreementAnalysis`](apps/api/app/schemas/analysis.py)) to extract terms: scope, pricing, payment terms, and timeline.
+* **AI Extraction:** Uses Google Gemini 3.8 Flash (`gemini-3.8-flash`) with Pydantic structured output validation ([`AgreementAnalysis`](apps/api/app/schemas/analysis.py)) to extract terms: scope, pricing, payment terms, and timeline.
 * **Section 7 Conflict Detector:** Enforces Section 7 of the Indian Contract Act, 1872 (*"Acceptance must be absolute and unqualified"*). Flags hedged statements (e.g. *"Sure, that works I think"*, *"depends on timeline"*) and price disputes.
 * **Legal Knowledge Retriever:** Flags missing statutory protections under the **Copyright Act, 1957** (IP assignment upon full payment) and **Section 73 ICA 1872** (cancellation remedies & 7-day termination notice).
 * **Interactive Drawer:** Parties can select compromise terms to turn ambiguous proposals into unconditional agreements.

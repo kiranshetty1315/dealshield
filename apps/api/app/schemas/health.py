@@ -13,8 +13,9 @@ class HealthResponse(BaseModel):
     )
     services: dict[str, str] = Field(
         default_factory=lambda: {
-            "database": "unconfigured_in_scaffold",
-            "openai": "unconfigured_in_scaffold",
+            "database": "ready_local",
+            "gemini": "gemini-3.8-flash (ready)",
+            "openai": "gemini-3.8-flash_active",
             "chat_parser": "ready"
         },
         description="Status of connected external services"

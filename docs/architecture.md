@@ -38,7 +38,7 @@ DealShield AI bridges this gap by ingesting raw WhatsApp chat exports, parsing m
 |        v                  v                    v                     v            |
 |  +--------------+  +---------------+  +------------------+  +-------------------+ |
 |  | Chat Parser  |  | AI Extractor  |  | Legal Retriever  |  | Agreement & Hash  | |
-|  | (Deterministic| | (OpenAI       |  | (Indian Contract |  | (WeasyPrint PDF,  | |
+|  | (Deterministic| | (Gemini 3.8   |  | (Indian Contract |  | (WeasyPrint PDF,  | |
 |  |  message IDs)|  |  Structured)  |  |  Act & Templates)|  |  SHA-256 Digest)  | |
 |  +--------------+  +---------------+  +------------------+  +-------------------+ |
 +------------------------------------------+----------------------------------------+
@@ -65,7 +65,7 @@ DealShield AI bridges this gap by ingesting raw WhatsApp chat exports, parsing m
    - Stored in Supabase private bucket and database `messages` table.
 
 2. **Structured Legal Extraction & Section 7 Conflict Analysis (Team C):**
-   - Normalized messages are passed to OpenAI using Pydantic structured schemas.
+   - Normalized messages are passed to Google Gemini 3.8 Flash using Pydantic structured schemas.
    - Extracts: Parties, Deliverables, Proposed Pricing, Accepted Pricing, Deadlines, Payment Terms.
    - **Section 7 ICA Analysis:** Explicitly flags conditional statements ("that works I think", "depends on timeline") as qualified acceptances under Section 7 of the Indian Contract Act, 1872.
    - Detects missing provisions: Intellectual property copyright transfer, termination notice, and dispute jurisdiction.

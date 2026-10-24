@@ -1,13 +1,15 @@
 """AI Extractor Service (Owned by Team C: AI and Legal Intelligence).
 
-Extracts structured agreement terms using OpenAI structured outputs with Pydantic
-schema validation (AgreementAnalysis). Supports live OpenAI API calls with an
+Extracts structured agreement terms using Google Gemini 3.8 Flash (gemini-3.8-flash)
+structured outputs with Pydantic schema validation (AgreementAnalysis). Supports
+live Gemini API calls (via Google AI Studio OpenAI-compatible endpoint) with an
 intelligent deterministic fallback for offline evaluation matching
 sample-negotiation-01-expected.json.
 """
 
 import json
 import logging
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -59,50 +61,102 @@ EXTRACTION INSTRUCTIONS:
 
 
 class AIExtractorService:
-    """Service boundary for OpenAI LLM structured analysis and deterministic fallback."""
+    """Service boundary for Google Gemini 3.8 Flash structured analysis and deterministic fallback."""
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        self.api_key = api_key if api_key is not None else settings.OPENAI_API_KEY
-        self.model = model or settings.OPENAI_MODEL
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+    ):
+        gemini_key = api_key or os.getenv("GEMINI_API_KEY") or getattr(settings, "GEMINI_API_KEY", "")
+        openai_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
+
+        raw_model = model or os.getenv("GEMINI_MODEL") or getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
+        self.model = self._normalize_model_name(raw_model)
+
+        if self._is_valid_key(gemini_key):
+            self.provider = "gemini"
+            self.api_key = gemini_key
+            self.base_url = base_url or getattr(settings, "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+        elif self._is_valid_key(openai_key):
+            self.provider = "openai"
+            self.api_key = openai_key
+            self.base_url = base_url
+            if not model:
+                self.model = getattr(settings, "OPENAI_MODEL", "gpt-4o-mini")
+        else:
+            self.provider = "gemini"
+            self.api_key = gemini_key or "AIzaSy-placeholder-gemini-key"
+            self.base_url = base_url or getattr(settings, "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/")
+
         self.conflict_detector = ConflictDetectorService()
         self.legal_retriever = LegalRetrieverService()
 
-    def _is_live_openai_configured(self) -> bool:
-        """Verify whether a valid live OpenAI API key is present."""
-        if not self.api_key:
+    @staticmethod
+    def _normalize_model_name(model_name: str) -> str:
+        """Map user-friendly names like 'Gemini 3.8 Flash' to Google API model identifier."""
+        clean = model_name.strip()
+        lower = clean.lower()
+        if lower in ("gemini 3.8 flash", "gemini-3.8-flash", "gemini 3.8", "gemini-3.8"):
+            return "gemini-3.8-flash"
+        if lower in ("gemini 2.0 flash", "gemini-2.0-flash"):
+            return "gemini-2.0-flash"
+        if lower in ("gemini 1.5 flash", "gemini-1.5-flash"):
+            return "gemini-1.5-flash"
+        return clean
+
+    @staticmethod
+    def _is_valid_key(key: Optional[str]) -> bool:
+        """Verify whether an API key is non-empty and non-placeholder."""
+        if not key:
             return False
-        key = self.api_key.strip()
-        if key.startswith("sk-placeholder") or "placeholder" in key.lower() or len(key) < 15:
+        k = key.strip()
+        if "placeholder" in k.lower() or len(k) < 15:
             return False
         return True
+
+    def _is_live_configured(self) -> bool:
+        """Verify whether a live LLM API key (Gemini 3.8 Flash or OpenAI) is present."""
+        return self._is_valid_key(self.api_key)
+
+    def _is_live_gemini_configured(self) -> bool:
+        return self.provider == "gemini" and self._is_valid_key(self.api_key)
+
+    def _is_live_openai_configured(self) -> bool:
+        return self._is_live_configured()
 
     async def analyze_chat(
         self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None
     ) -> AgreementAnalysis:
-        """Extract structured agreement terms using OpenAI structured outputs or intelligent fallback."""
-        if self._is_live_openai_configured():
+        """Extract structured agreement terms using Gemini 3.8 Flash structured outputs or intelligent fallback."""
+        if self._is_live_configured():
             try:
-                return await self._call_openai_extractor(chat_id, messages, focus_areas)
+                return await self._call_llm_extractor(chat_id, messages, focus_areas)
             except Exception as e:
                 logger.warning(
-                    f"Live OpenAI extraction failed ({type(e).__name__}: {str(e)}). "
+                    f"Live {self.provider.upper()} extraction failed ({type(e).__name__}: {str(e)}). "
                     "Flipping to intelligent deterministic extraction engine."
                 )
 
         # Fallback to intelligent deterministic extraction
         return self._deterministic_extract(chat_id, messages, focus_areas)
 
-    async def _call_openai_extractor(
+    async def _call_llm_extractor(
         self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None
     ) -> AgreementAnalysis:
-        """Invoke live OpenAI API with structured output schema validation."""
+        """Invoke live Gemini 3.8 Flash (or OpenAI fallback) with structured output schema validation."""
         try:
             from openai import AsyncOpenAI
         except ImportError:
-            logger.warning("openai package not available, falling back to deterministic extractor.")
+            logger.warning("openai client package not available, falling back to deterministic extractor.")
             return self._deterministic_extract(chat_id, messages, focus_areas)
 
-        client = AsyncOpenAI(api_key=self.api_key)
+        client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+
+        client = AsyncOpenAI(**client_kwargs)
 
         # Format chat transcript for LLM context
         transcript_lines = []
@@ -120,7 +174,6 @@ class AIExtractorService:
             user_content += f"\nPriority focus areas: {', '.join(focus_areas)}\n"
 
         try:
-            # Use OpenAI beta parse with Pydantic model for structured outputs
             completion = await client.beta.chat.completions.parse(
                 model=self.model,
                 messages=[
@@ -129,13 +182,12 @@ class AIExtractorService:
                 ],
                 response_format=AgreementAnalysis,
             )
-            parsed: AgreementAnalysis = completion.choices[0].message.parsed
+            parsed: Optional[AgreementAnalysis] = completion.choices[0].message.parsed
             if parsed:
-                # Ensure chat_id matches request
                 parsed.chat_id = chat_id
                 return parsed
         except Exception as parse_err:
-            logger.info(f"OpenAI beta.chat.completions.parse failed ({parse_err}), trying JSON mode fallback.")
+            logger.info(f"{self.provider.upper()} structured parse failed ({parse_err}), trying JSON mode fallback.")
             response = await client.chat.completions.create(
                 model=self.model,
                 response_format={"type": "json_object"},
@@ -155,6 +207,12 @@ class AIExtractorService:
             return AgreementAnalysis.model_validate(data)
 
         return self._deterministic_extract(chat_id, messages, focus_areas)
+
+    async def _call_openai_extractor(
+        self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None
+    ) -> AgreementAnalysis:
+        """Alias for backward compatibility."""
+        return await self._call_llm_extractor(chat_id, messages, focus_areas)
 
     def _deterministic_extract(
         self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None

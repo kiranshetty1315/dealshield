@@ -49,7 +49,7 @@ These negotiations suffer from:
 - **Testing:** Pytest 8.4+ & Pytest-Asyncio (42 passing unit & integration tests)
 
 ### AI & Legal Intelligence Engine
-- **LLM Engine:** OpenAI API (`gpt-4o-mini`) with Pydantic structured output validation (`response_format=AgreementAnalysis`)
+- **LLM Engine:** Google Gemini 3.8 Flash (`gemini-3.8-flash`) with Pydantic structured output validation (`response_format=AgreementAnalysis`)
 - **Deterministic Offline Engine:** Intelligent heuristic fallback engine guaranteeing 100% precision evaluation against legal fixtures without requiring live API keys
 - **Conflict Detector:** Section 7 Indian Contract Act 1872 conflict detection engine mapping counter-proposals and qualified acceptance hedges to exact verbatim message citations
 - **Legal Retriever:** Curated statutory knowledge engine (ICA 1872 Sections 2(h), 7, 10, 73; Copyright Act 1957 Sections 17 & 19; IT Act 2000 Section 10A; Indian Stamp Act 1899 Section 35)
@@ -105,7 +105,7 @@ dealshield/
 
 ## ⚡ Quick Start (No Paid Keys Required)
 
-You can clone, install, test, and run both applications **without requiring real OpenAI or Supabase keys** to run all tests, parse conversations, detect Section 7 conflicts, generate agreements, and test two-party confirmations.
+You can clone, install, test, and run both applications **without requiring real Gemini, OpenAI, or Supabase keys** to run all tests, parse conversations, detect Section 7 conflicts, generate agreements, and test two-party confirmations.
 
 ### 1. Clone
 ```bash
@@ -170,7 +170,7 @@ npm run dev
 
 ## 🔒 Security & Evidentiary Limitations
 
-- **Service-Role Isolation:** The Supabase `service_role` key and `OPENAI_API_KEY` are backend-only credentials. Browser code only accesses public anon keys under strict PostgreSQL Row Level Security.
+- **Service-Role Isolation:** The Supabase `service_role` key, `GEMINI_API_KEY`, and `OPENAI_API_KEY` are backend-only credentials. Browser code only accesses public anon keys under strict PostgreSQL Row Level Security.
 - **SHA-256 vs Statutory eSign:** A cryptographic hash mathematically proves file consistency since the digest was recorded (admissible as corroborative evidence under Section 65B of the Indian Evidence Act / Section 63 BSA 2023). It does **not** substitute for a digital signature certificate issued by a Certifying Authority (CCA) under Section 3/3A of the Information Technology Act 2000.
 - **Indian Stamp Act, 1899 Compliance:** Generated agreements are plain-language term sheets and summaries. Full judicial admissibility in civil court requires assessment and payment of applicable state stamp duty.
 - **Privacy & Data Minimization:** DPDP Act 2023 compliance enforced through secret-salted IP hashing and data minimization. Real personal chats must never be committed; tests use synthetic fixtures in `sample-data/whatsapp/`.

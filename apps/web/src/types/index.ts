@@ -10,7 +10,8 @@ export interface HealthResponse {
   timestamp: string;
   services: {
     database: string;
-    openai: string;
+    gemini?: string;
+    openai?: string;
     chat_parser: string;
     hash_service?: string;
     [key: string]: string | undefined;

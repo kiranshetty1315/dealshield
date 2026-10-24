@@ -48,7 +48,7 @@ This document provides the presentation script and live demonstration plan for D
 | **API Health & Diagnostic Status** | Live & Polled | Multi-service health monitoring across database, AI, and parser |
 | **SHA-256 Hash Verification** | Live & Functional | Cryptographic digest computation & Section 65B tamper verification |
 | **UI Components & Responsive Layout** | Live (Tailwind + shadcn) | Interactive conflict resolution drawer, citation viewer, and agreement preview |
-| **OpenAI Structured Extraction** | Live & Functional | GPT-4o-mini structured outputs with deterministic fallback (34/34 tests passing) |
+| **Gemini 3.8 Flash Extraction** | Live & Functional | Gemini 3.8 Flash structured outputs with deterministic fallback (34/34 tests passing) |
 | **Section 7 Conflict Detector** | Live & Functional | Flags ambiguous acceptance hedges and price counter-proposals with citations |
 | **Two-Party Confirmation Auth** | Live & Functional | Dashboard sign-off + single-use signed token links with DPDP-compliant IP hashing |
 | **Plain-Language Agreement Generation** | Live & Functional | Transforms chat terms into 4 formal legal clauses with SHA-256 hash |

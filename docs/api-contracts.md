@@ -74,7 +74,7 @@ Ingests a WhatsApp `.txt` export file or raw text.
 ---
 
 ### `POST /api/v1/analysis` (Assigned to Team C)
-Triggers structured extraction via OpenAI structured outputs.
+Triggers structured extraction via Google Gemini 3.8 Flash structured outputs.
 
 **Request:**
 ```json

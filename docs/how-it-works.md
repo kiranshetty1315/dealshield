@@ -37,7 +37,7 @@ flowchart TD
     end
 
     subgraph Step2 ["Step 2: AI Extraction & Section 7 Intelligence"]
-        C --> D["ai_extractor.py (OpenAI gpt-4o-mini)"]
+        C --> D["ai_extractor.py (Gemini 3.8 Flash)"]
         D --> E["conflict_detector.py<br/>Detects Section 7 Hedges & Price Gaps"]
         D --> F["legal_retriever.py<br/>Flags Missing IP & Termination Clauses"]
         E & F --> G["Interactive Resolution Drawer<br/>Parties resolve ambiguities"]

@@ -65,7 +65,12 @@ class Settings(BaseSettings):
     IP_HASH_SALT: str = "dealshield-default-dev-salt-change-in-production"
     ENCRYPTION_KEY: str = "rUqpl4OBAPgr-k1M_wughKIjIBOWpJn-YTRIEq6f3Wk="
 
-    # OpenAI (Team C integration - placeholder allowed for local scaffold)
+    # Primary LLM: Google Gemini 3.8 Flash (Team C integration)
+    GEMINI_API_KEY: str = "AIzaSy-placeholder-gemini-key"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+    # Legacy / Optional Fallback OpenAI configuration
     OPENAI_API_KEY: str = "sk-placeholder-openai-key"
     OPENAI_MODEL: str = "gpt-4o-mini"
 

@@ -140,3 +140,72 @@ async def test_pydantic_schema_serialization(extractor, sample_01_messages):
     assert isinstance(data["missing_terms"], list)
     assert isinstance(data["confidence_score"], float)
     assert isinstance(data["requires_human_review"], bool)
+
+
+@pytest.mark.asyncio
+async def test_gemini_3_8_flash_model_normalization_and_defaults():
+    """Verify Gemini 3.8 Flash is configured as primary LLM with name normalization."""
+    default_extractor = AIExtractorService()
+    assert default_extractor.model == "gemini-3.8-flash"
+    assert default_extractor.provider == "gemini"
+    assert "googleapis.com" in default_extractor.base_url
+
+    # Check user-friendly model name normalization
+    ext1 = AIExtractorService(model="Gemini 3.8 Flash")
+    assert ext1.model == "gemini-3.8-flash"
+
+    ext2 = AIExtractorService(model="Gemini 3.8")
+    assert ext2.model == "gemini-3.8-flash"
+
+    ext3 = AIExtractorService(model="gemini-3.8-flash")
+    assert ext3.model == "gemini-3.8-flash"
+
+
+@pytest.mark.asyncio
+async def test_gemini_provider_precedence():
+    """Verify Gemini is preferred when valid key is provided."""
+    # Live Gemini key provided
+    gemini_ext = AIExtractorService(api_key="AIzaSyRealGeminiKeyExample123456")
+    assert gemini_ext.provider == "gemini"
+    assert gemini_ext.model == "gemini-3.8-flash"
+    assert gemini_ext._is_live_configured() is True
+    assert gemini_ext._is_live_gemini_configured() is True
+
+    # Placeholder keys fallback to deterministic engine
+    placeholder_ext = AIExtractorService(api_key="AIzaSy-placeholder-key")
+    assert placeholder_ext._is_live_configured() is False
+
+
+@pytest.mark.asyncio
+async def test_gemini_mocked_live_call(sample_01_messages, sample_01_fixture):
+    """Verify live Gemini call path via AsyncOpenAI client interface."""
+    from unittest.mock import AsyncMock, patch, MagicMock
+
+    ext = AIExtractorService(api_key="AIzaSyRealGeminiKeyExample123456", model="Gemini 3.8 Flash")
+    assert ext.model == "gemini-3.8-flash"
+
+    expected_analysis = AgreementAnalysis.model_validate(sample_01_fixture)
+
+    mock_parsed_completion = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.parsed = expected_analysis
+    mock_parsed_completion.choices = [mock_choice]
+
+    mock_client = MagicMock()
+    mock_client.beta.chat.completions.parse = AsyncMock(return_value=mock_parsed_completion)
+
+    mock_openai_module = MagicMock()
+    mock_openai_module.AsyncOpenAI = MagicMock(return_value=mock_client)
+
+    with patch.dict("sys.modules", {"openai": mock_openai_module}):
+        result = await ext.analyze_chat("chat_gemini_test", sample_01_messages)
+        assert result.confidence_score == 0.85
+        assert len(result.parties) == 2
+        mock_openai_module.AsyncOpenAI.assert_called_once_with(
+            api_key="AIzaSyRealGeminiKeyExample123456",
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
+        mock_client.beta.chat.completions.parse.assert_awaited_once()
+        call_kwargs = mock_client.beta.chat.completions.parse.await_args.kwargs
+        assert call_kwargs["model"] == "gemini-3.8-flash"
+        assert call_kwargs["response_format"] == AgreementAnalysis

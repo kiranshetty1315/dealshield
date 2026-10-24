@@ -20,7 +20,7 @@ extractor_service = AIExtractorService()
     response_model=AgreementAnalysis,
     status_code=status.HTTP_200_OK,
     summary="Trigger AI Agreement Analysis",
-    description="Extracts terms, detects Section 7 contradictions, and identifies missing clauses via OpenAI structured outputs.",
+    description="Extracts terms, detects Section 7 contradictions, and identifies missing clauses via Gemini 3.8 Flash structured outputs.",
 )
 async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
     """Trigger AI agreement extraction and legal analysis.

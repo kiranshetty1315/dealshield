@@ -9,7 +9,7 @@ DealShield AI processes commercially sensitive negotiations. Protecting client p
 | Credential | Scope | Location | Access Rules |
 |---|---|---|---|
 | `SUPABASE_SERVICE_ROLE_KEY` | Backend Only | `apps/api/.env` | **CRITICAL: NEVER expose to frontend or git.** Bypasses RLS to write audit logs and access storage. |
-| `OPENAI_API_KEY` | Backend Only | `apps/api/.env` | Never exposed to browser. Used only by backend LLM extractor. |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | Backend Only | `apps/api/.env` | Never exposed to browser. Used only by backend LLM extractor (Gemini 3.8 Flash). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Frontend & Public | `apps/web/.env.local` | Subject to strict PostgreSQL Row Level Security (RLS). |
 | `NEXT_PUBLIC_API_URL` | Frontend & Public | `apps/web/.env.local` | Public API endpoint address. |
 
