@@ -43,7 +43,7 @@ function AnalysisContent() {
   const analysisIdParam = searchParams.get("analysis_id");
   const chatIdParam = searchParams.get("chat_id");
 
-  const [isLoading, setIsLoading] = useState(Boolean(analysisIdParam));
+  const [isLoading, setIsLoading] = useState(Boolean(analysisIdParam || chatIdParam));
   const [isGenerating, setIsGenerating] = useState(false);
   const [analysis, setAnalysis] = useState<AgreementAnalysis>(SAMPLE_ANALYSIS);
   const [messages, setMessages] = useState<Message[]>(SAMPLE_MESSAGES);
@@ -53,11 +53,16 @@ function AnalysisContent() {
 
   useEffect(() => {
     async function loadLiveData() {
-      if (!analysisIdParam) return;
+      if (!analysisIdParam && !chatIdParam) return;
 
       setIsLoading(true);
       try {
-        const fetchedAnalysis = await api.getAnalysis(analysisIdParam);
+        let fetchedAnalysis: AgreementAnalysis;
+        if (analysisIdParam) {
+          fetchedAnalysis = await api.getAnalysis(analysisIdParam);
+        } else {
+          fetchedAnalysis = await api.analyzeChat(chatIdParam!);
+        }
         setAnalysis(fetchedAnalysis);
         setIsLive(true);
 

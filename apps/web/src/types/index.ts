@@ -42,6 +42,8 @@ export interface ChatUploadResponse {
   message_count: number;
   messages: Message[];
   status: string;
+  date_format_inferred?: string | null;
+  is_date_ambiguous?: boolean;
 }
 
 export type ConfidenceLevel = "high" | "medium" | "low";

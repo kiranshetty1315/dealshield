@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, UploadFile, HTTPException, status, Request
 from app.schemas.chat import ChatUploadResponse, Message
 from app.services.chat_parser import parse_whatsapp_chat
 from app.services.hash_service import HashService
-from app.core.security import sanitize_filename
+from app.core.security import sanitize_filename, verify_access_token
 from app.db.repository import ConversationRepository, EvidenceRepository, AuditRepository
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -122,12 +122,22 @@ async def upload_chat(
 
     chat_id = str(uuid.uuid4())
 
+    # Extract authenticated user_id if Bearer token present
+    user_id = None
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        payload = verify_access_token(token)
+        if payload:
+            user_id = payload.get("sub")
+
     # 1. Persist Conversation in Supabase
     conv_repo.create_conversation(
         conversation_id=chat_id,
         filename=filename,
         party_names=party_names,
         message_count=len(messages),
+        user_id=user_id,
     )
 
     # 2. Persist Messages with unique (conversation_id, message_id)
@@ -146,6 +156,7 @@ async def upload_chat(
         entity_type="conversation",
         entity_id=chat_id,
         action="chat_uploaded_and_parsed",
+        actor_id=user_id,
         metadata={
             "filename": filename,
             "message_count": len(messages),

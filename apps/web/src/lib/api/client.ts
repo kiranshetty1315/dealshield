@@ -26,6 +26,20 @@ export class ApiClient {
     return this.baseUrl;
   }
 
+  private getAuthHeaders(): Record<string, string> {
+    if (typeof window !== "undefined") {
+      try {
+        const token = localStorage.getItem("dealshield_auth_token");
+        if (token) {
+          return { Authorization: `Bearer ${token}` };
+        }
+      } catch {
+        // Ignore localStorage access issues
+      }
+    }
+    return {};
+  }
+
   async checkHealth(): Promise<HealthResponse> {
     const res = await fetch(`${this.baseUrl}/health`, {
       method: "GET",
@@ -103,6 +117,7 @@ export class ApiClient {
 
     const res = await fetch(`${this.baseUrl}/api/v1/chats/upload`, {
       method: "POST",
+      headers: this.getAuthHeaders(),
       body: formData,
     });
 
@@ -116,7 +131,10 @@ export class ApiClient {
   async uploadChatText(text: string): Promise<ChatUploadResponse> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats/upload`, {
       method: "POST",
-      headers: { "Content-Type": "text/plain" },
+      headers: {
+        "Content-Type": "text/plain",
+        ...this.getAuthHeaders(),
+      },
       body: text,
     });
 
