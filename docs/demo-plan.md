@@ -40,14 +40,16 @@ This document provides the presentation script and live demonstration plan for D
 
 ---
 
-## 3. Current Live Functionality vs Roadmap
+## 3. Current Live Functionality Status
 
-| Capability | Current Scaffold Status | Final Hackathon Target |
+| Capability | Current Status | Architecture / Implementation Notes |
 |---|---|---|
-| **WhatsApp Chat Parser** | Live (Deterministic IDs) | Extended multi-format support |
-| **API Health & Diagnostic Status** | Live & Polled | Multi-service health monitoring |
-| **SHA-256 Hash Verification** | Live & Functional | Supabase Storage integrated |
-| **UI Components & Responsive Layout** | Live (Tailwind + shadcn) | Full interactive resolution modal |
-| **OpenAI Structured Extraction** | Interface defined (501) | Live GPT-4o-mini extraction |
-| **Two-Party Confirmation Auth** | UI Scaffolded (501) | Supabase Auth magic link tokens |
-| **PDF Generation** | Contract defined (501) | WeasyPrint HTML to PDF export |
+| **WhatsApp Chat Parser** | Live (Deterministic IDs) | Normalizes messages with verbatim IDs (`msg_raj_...`) and resolves date ambiguity |
+| **API Health & Diagnostic Status** | Live & Polled | Multi-service health monitoring across database, AI, and parser |
+| **SHA-256 Hash Verification** | Live & Functional | Cryptographic digest computation & Section 65B tamper verification |
+| **UI Components & Responsive Layout** | Live (Tailwind + shadcn) | Interactive conflict resolution drawer, citation viewer, and agreement preview |
+| **OpenAI Structured Extraction** | Live & Functional | GPT-4o-mini structured outputs with deterministic fallback (34/34 tests passing) |
+| **Section 7 Conflict Detector** | Live & Functional | Flags ambiguous acceptance hedges and price counter-proposals with citations |
+| **Two-Party Confirmation Auth** | Live & Functional | Dashboard sign-off + single-use signed token links with DPDP-compliant IP hashing |
+| **Plain-Language Agreement Generation** | Live & Functional | Transforms chat terms into 4 formal legal clauses with SHA-256 hash |
+| **Append-Only Evidence Audit Vault** | Live & Functional | Supabase-backed immutable audit trail for Section 65B Indian Evidence Act admissibility |

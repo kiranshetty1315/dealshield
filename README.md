@@ -166,6 +166,7 @@ npm run dev
 
 ## 📚 Documentation Index
 
+- [Complete Project Working & Architecture Guide](docs/how-it-works.md) (or [HOW-IT-WORKS.md](HOW-IT-WORKS.md))
 - [Architecture & System Flow](docs/architecture.md)
 - [API Contracts & Payload Examples](docs/api-contracts.md)
 - [Database Schema & Entity Diagrams](docs/database-design.md)
