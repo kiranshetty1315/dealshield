@@ -1,155 +1,263 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, Clock, ShieldAlert, ArrowRight, UserCheck, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  ShieldAlert,
+  ArrowRight,
+  UserCheck,
+  Scale,
+  Sparkles,
+  FileText,
+  ExternalLink,
+} from "lucide-react";
+import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
+import {
+  ConflictResolutionDrawer,
+  ResolvedConflictState,
+} from "@/components/analysis/ConflictResolutionDrawer";
+import { TermCard } from "@/components/analysis/TermCard";
+import { CitationChip } from "@/components/analysis/CitationChip";
+import { SAMPLE_MESSAGES, SAMPLE_ANALYSIS } from "@/lib/sample-data";
+import { ExtractedTerm, Message } from "@/types";
 
 export default function AnalysisPage() {
+  const [messages] = useState<Message[]>(SAMPLE_MESSAGES);
+  const [activeCitationId, setActiveCitationId] = useState<string | null>("msg_raj_009");
+  const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, ResolvedConflictState>>({});
+
+  // When conflict is resolved, dynamically update the ambiguous price term to agreed
+  const terms: ExtractedTerm[] = SAMPLE_ANALYSIS.extracted_terms.map((term) => {
+    if (term.term_id === "term_price_01" && resolvedConflicts["conflict_price_01"]) {
+      return {
+        ...term,
+        status: "agreed",
+        accepted_value: "₹1,00,000 (unconditional)",
+        description: `Resolved via compromise: ${resolvedConflicts["conflict_price_01"].resolutionText}`,
+      };
+    }
+    return term;
+  });
+
+  const isAllResolved =
+    SAMPLE_ANALYSIS.conflicts.length > 0 &&
+    SAMPLE_ANALYSIS.conflicts.every((c) => Boolean(resolvedConflicts[c.conflict_id]));
+
+  const handleConflictResolved = (resolution: ResolvedConflictState) => {
+    setResolvedConflicts((prev) => ({
+      ...prev,
+      [resolution.conflict_id]: resolution,
+    }));
+  };
+
+  const handleConflictReopened = (conflictId: string) => {
+    setResolvedConflicts((prev) => {
+      const copy = { ...prev };
+      delete copy[conflictId];
+      return copy;
+    });
+  };
+
+  const handleCitationClick = (citationId: string) => {
+    setActiveCitationId(citationId);
+  };
+
+  const handleMessageSelect = (msg: Message) => {
+    setActiveCitationId(msg.message_id);
+  };
+
   return (
-    <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-6xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-7xl">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-200 pb-6">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold text-slate-900">Agreement Analysis</h1>
-            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 font-semibold">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+              Agreement Analysis & Verification
+            </h1>
+            <Badge
+              variant="outline"
+              className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs"
+            >
               Sample Demo Data
             </Badge>
           </div>
-          <p className="text-sm text-slate-500">
-            Source: WhatsApp negotiation between Raj Mehta (Client) and Priya Sharma (Designer)
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Verified WhatsApp negotiation between{" "}
+            <strong className="text-slate-800">Raj Mehta</strong> (Client) and{" "}
+            <strong className="text-slate-800">Priya Sharma</strong> (Service Provider)
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-xs">Extraction Confidence: High (85%)</Badge>
-          <Button size="sm">Generate Agreement Draft</Button>
+
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          {isAllResolved ? (
+            <Badge variant="success" className="gap-1.5 py-1 px-3 text-xs bg-emerald-600 text-white font-medium">
+              <CheckCircle className="h-3.5 w-3.5" />
+              All Conflicts Resolved
+            </Badge>
+          ) : (
+            <Badge variant="warning" className="gap-1.5 py-1 px-3 text-xs font-medium">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              Requires Human Review (1 Conflict)
+            </Badge>
+          )}
+
+          <Link href="/agreements">
+            <Button
+              className="gap-2 text-xs font-semibold shadow-sm"
+              variant={isAllResolved ? "default" : "secondary"}
+            >
+              <FileText className="h-4 w-4" />
+              Review Synthesized Agreement
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Button>
+          </Link>
         </div>
       </div>
 
-      {/* Identified Parties */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <UserCheck className="h-4 w-4 text-blue-600" />
-            Identified Contracting Parties
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="p-3 border rounded-lg bg-slate-50 text-xs space-y-1">
-            <p className="font-bold text-slate-900">Raj Mehta</p>
-            <p className="text-slate-600">Role: Client / Project Sponsor</p>
-            <p className="text-slate-400 font-mono">Chat ID: party_raj_01</p>
-          </div>
-          <div className="p-3 border rounded-lg bg-slate-50 text-xs space-y-1">
-            <p className="font-bold text-slate-900">Priya Sharma</p>
-            <p className="text-slate-600">Role: Service Provider / Lead Designer</p>
-            <p className="text-slate-400 font-mono">Chat ID: party_priya_02</p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Split Pane: Analysis & Resolution (Left) vs. Verbatim Chat Evidence (Right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Pane (7 cols): Analysis, Conflicts, Terms, Legal Safeguards */}
+        <div className="lg:col-span-7 space-y-6">
+          {/* Identified Contracting Parties */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900">
+                <UserCheck className="h-4 w-4 text-blue-600" />
+                Identified Contracting Parties
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {SAMPLE_ANALYSIS.parties.map((party, idx) => (
+                <div
+                  key={party.party_id}
+                  className="p-3 border border-slate-200 rounded-lg bg-white space-y-1 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900">{party.name}</span>
+                    <Badge variant="outline" className="text-[10px]">
+                      {party.detected_role}
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    ID: {party.party_id}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
 
-      {/* Section 7 Contradictions & Ambiguities */}
-      <Card className="border-amber-200">
-        <CardHeader className="pb-3 bg-amber-50/50 rounded-t-xl">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base text-amber-900 flex items-center gap-2">
-              <Scale className="h-4 w-4 text-amber-700" />
-              Indian Contract Act, 1872 — Section 7 Conflict Analysis
-            </CardTitle>
-            <Badge variant="destructive">High Severity</Badge>
-          </div>
-          <CardDescription className="text-xs text-amber-800">
-            Section 7 mandates: <em>&ldquo;In order to convert a proposal into a promise the acceptance must be absolute and unqualified.&rdquo;</em>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="pt-4 space-y-4">
-          <div className="border border-amber-200 rounded-lg p-4 bg-white space-y-3 text-xs">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-amber-900">Price Gap & Qualified Acceptance Flag</span>
-              <span className="text-[11px] font-mono text-slate-500">ID: conflict_price_01</span>
-            </div>
-            <p className="text-slate-700 leading-relaxed">
-              Raj proposed ₹75,000 (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_raj_003</code>).
-              Priya countered with ₹1,50,000 (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_priya_004</code>).
-              They settled at ₹1,00,000 with 50% upfront (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_priya_008</code>).
-              However, Raj responded: <em>&ldquo;Sure, that works I think. Let&apos;s go ahead&rdquo;</em> (<code className="font-mono bg-slate-100 px-1 py-0.5 rounded">msg_raj_009</code>).
-              The qualifier <strong>&ldquo;I think&rdquo;</strong> violates Section 7&apos;s requirement of unqualified acceptance.
-            </p>
-            <div className="p-2.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs space-y-1">
-              <strong>Legal Resolution Proposal:</strong>
-              <p>
-                Prompt parties to confirm an unconditional fixed fee of ₹1,00,000 (INR) payable as ₹50,000 advance upon contract signing and ₹50,000 upon delivery.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          {/* Section 7 Conflict Resolution Drawer */}
+          <ConflictResolutionDrawer
+            conflicts={SAMPLE_ANALYSIS.conflicts}
+            activeCitationId={activeCitationId}
+            onCitationClick={handleCitationClick}
+            onConflictResolved={handleConflictResolved}
+            onConflictReopened={handleConflictReopened}
+            resolvedConflicts={resolvedConflicts}
+          />
 
-      {/* Extracted Agreed Terms */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle className="h-4 w-4 text-emerald-600" />
-            Extracted Business Terms
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="divide-y divide-slate-100 text-xs">
-            <div className="py-2.5 flex items-center justify-between">
-              <div>
-                <span className="font-semibold text-slate-800">Total Project Price:</span>
-                <span className="ml-2 text-slate-600">₹1,00,000 (INR)</span>
-                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_priya_008, msg_raj_009</span>
+          {/* Extracted Terms with Citations */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
+                  Extracted Business Terms & Citations
+                </CardTitle>
+                <Badge variant="secondary" className="text-[10px]">
+                  {terms.length} Terms Extracted
+                </Badge>
               </div>
-              <Badge variant="warning">Ambiguous (Sec 7)</Badge>
-            </div>
-            <div className="py-2.5 flex items-center justify-between">
-              <div>
-                <span className="font-semibold text-slate-800">Payment Milestone:</span>
-                <span className="ml-2 text-slate-600">50% upfront prior to kickoff</span>
-                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_priya_008</span>
-              </div>
-              <Badge variant="success">Agreed</Badge>
-            </div>
-            <div className="py-2.5 flex items-center justify-between">
-              <div>
-                <span className="font-semibold text-slate-800">Delivery Deadline:</span>
-                <span className="ml-2 text-slate-600">End of April 2024</span>
-                <span className="ml-2 font-mono text-[10px] text-slate-400">cited: msg_raj_007, msg_priya_008</span>
-              </div>
-              <Badge variant="secondary">Agreed</Badge>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              <CardDescription className="text-xs text-slate-500">
+                Click any citation tag below to highlight the exact original message in the chat viewer.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              {terms.map((term) => (
+                <TermCard
+                  key={term.term_id}
+                  term={term}
+                  activeCitationId={activeCitationId}
+                  onCitationClick={handleCitationClick}
+                />
+              ))}
+            </CardContent>
+          </Card>
 
-      {/* Missing Legal Provisions */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <ShieldAlert className="h-4 w-4 text-blue-600" />
-            Missing Legal Safeguards (Indian Commercial Standards)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-xs">
-          <div className="p-3 border rounded-lg bg-slate-50 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800">Intellectual Property Ownership</span>
-              <Badge variant="destructive">Critical</Badge>
+          {/* Missing Legal Safeguards */}
+          <Card className="border-slate-200 shadow-sm">
+            <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900">
+                <ShieldAlert className="h-4 w-4 text-blue-600" />
+                Missing Legal Safeguards (Indian Commercial Standards)
+              </CardTitle>
+              <CardDescription className="text-xs text-slate-500">
+                Provisions missing in informal WhatsApp chat that must be formalized before contract execution.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-3">
+              {SAMPLE_ANALYSIS.missing_terms.map((missing) => (
+                <div
+                  key={missing.term_id}
+                  className="p-3.5 border border-slate-200 rounded-lg bg-slate-50/60 space-y-1.5 text-xs"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 capitalize">
+                      {missing.category.replace("_", " ")}: {missing.description}
+                    </span>
+                    <Badge
+                      variant={missing.importance === "critical" ? "destructive" : "warning"}
+                      className="text-[10px] uppercase font-bold"
+                    >
+                      {missing.importance}
+                    </Badge>
+                  </div>
+                  <p className="text-slate-600 text-[11px] leading-relaxed">
+                    <strong className="text-slate-700">Recommended Clause:</strong>{" "}
+                    {missing.recommendation}
+                  </p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Pane (5 cols): Interactive Verbatim WhatsApp Transcript */}
+        <div className="lg:col-span-5 lg:sticky lg:top-20 space-y-4">
+          <ChatMessageViewer
+            messages={messages}
+            activeCitationIds={activeCitationId ? [activeCitationId] : []}
+            onSelectMessage={handleMessageSelect}
+            title="Verbatim WhatsApp Transcript"
+          />
+
+          {/* Citation Guidance Tip */}
+          <div className="rounded-xl border border-blue-200 bg-blue-50/60 p-4 text-xs text-blue-900 space-y-1.5 shadow-sm">
+            <div className="font-bold flex items-center gap-1.5 text-blue-950">
+              <Sparkles className="h-4 w-4 text-blue-600" />
+              Tamper-Evident Citation Linking
             </div>
-            <p className="text-slate-600">
-              WhatsApp chat did not specify whether copyright in design files transfers immediately or only upon 100% final payment.
+            <p className="leading-relaxed text-[11px] text-blue-800">
+              Every extracted term and conflict is tied to an immutable 1-based citation ID (e.g.,{" "}
+              <code className="font-mono bg-blue-100 text-blue-900 px-1 py-0.5 rounded">msg_raj_003</code>).
+              Section 65B Indian Evidence Act compliant hashing ensures the original chat export is cryptographically matched with each generated agreement clause.
             </p>
           </div>
-          <div className="p-3 border rounded-lg bg-slate-50 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800">Termination & Cancellation Notice</span>
-              <Badge variant="warning">Important</Badge>
-            </div>
-            <p className="text-slate-600">
-              No written cancellation period or compensation for work performed in progress.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
