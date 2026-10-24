@@ -142,3 +142,26 @@ def test_sample_agreement_uuid_auto_seeds_cleanly():
     assert "Raj Mehta" in data["parties"]
     assert "Priya Sharma" in data["parties"]
     assert len(data["versions"]) >= 1
+
+
+def test_dashboard_stats_endpoint():
+    """Verify GET /api/v1/dashboard/stats returns real aggregate metrics and recent list."""
+    res = client.get("/api/v1/dashboard/stats")
+    assert res.status_code == 200
+    data = res.json()
+    assert "total_conversations" in data
+    assert "total_agreements" in data
+    assert "confirmed_agreements" in data
+    assert "pending_review_count" in data
+    assert "total_hashes" in data
+    assert "recent_conversations" in data
+    assert isinstance(data["recent_conversations"], list)
+    if data["recent_conversations"]:
+        first = data["recent_conversations"][0]
+        assert "id" in first
+        assert "filename" in first
+        assert "party_names" in first
+        assert "message_count" in first
+        assert "status" in first
+        assert "status_variant" in first
+

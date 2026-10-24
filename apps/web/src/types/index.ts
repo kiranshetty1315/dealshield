@@ -220,3 +220,33 @@ export interface AuthResponse {
   token_type: string;
   user: User;
 }
+
+export type DashboardStatusVariant =
+  | "default"
+  | "secondary"
+  | "destructive"
+  | "outline"
+  | "warning"
+  | "success";
+
+export interface DashboardRecentConversation {
+  id: string;
+  filename: string;
+  party_names: string[];
+  message_count: number;
+  uploaded_at: string;
+  analysis_id?: string | null;
+  agreement_id?: string | null;
+  requires_human_review?: boolean | null;
+  status: string;
+  status_variant: DashboardStatusVariant;
+}
+
+export interface DashboardStats {
+  total_conversations: number;
+  total_agreements: number;
+  confirmed_agreements: number;
+  pending_review_count: number;
+  total_hashes: number;
+  recent_conversations: DashboardRecentConversation[];
+}

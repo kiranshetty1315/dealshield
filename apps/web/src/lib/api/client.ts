@@ -10,6 +10,7 @@ import {
   TokenConfirmationResponse,
   User,
   AuthResponse,
+  DashboardStats,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -376,6 +377,27 @@ export class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Audit trail not found" }));
       throw new Error(err.detail || `Failed to fetch audit log (${res.status})`);
+    }
+    return res.json();
+  }
+
+  // --- Workspace Dashboard ---
+
+  async getDashboardStats(userId?: string): Promise<DashboardStats> {
+    const url = new URL(`${this.baseUrl}/api/v1/dashboard/stats`);
+    if (userId) {
+      url.searchParams.set("user_id", userId);
+    }
+
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to fetch dashboard stats" }));
+      throw new Error(err.detail || `Failed to fetch dashboard stats (${res.status})`);
     }
     return res.json();
   }

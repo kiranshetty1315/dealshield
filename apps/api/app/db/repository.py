@@ -771,3 +771,113 @@ class UserRepository:
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
 
 
+class DashboardRepository:
+    """Manages workspace metrics aggregation and dashboard statistics."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def get_dashboard_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
+        """Calculates live workspace metrics and retrieves recent negotiations from database."""
+        # 1. Fetch conversations
+        c_query = self.client.table("conversations").select("*")
+        if user_id:
+            c_query = c_query.eq("user_id", user_id)
+        c_res = c_query.order("uploaded_at", desc=True).execute()
+        conversations = c_res.data if isinstance(c_res.data, list) else ([c_res.data] if c_res.data else [])
+
+        # 2. Fetch agreements
+        ag_res = self.client.table("agreements").select("*").execute()
+        agreements = ag_res.data if isinstance(ag_res.data, list) else ([ag_res.data] if ag_res.data else [])
+
+        # 3. Fetch analyses
+        an_res = self.client.table("analyses").select("*").execute()
+        analyses = an_res.data if isinstance(an_res.data, list) else ([an_res.data] if an_res.data else [])
+
+        # 4. Fetch document hashes (integrity vault)
+        h_res = self.client.table("document_hashes").select("*").execute()
+        hashes = h_res.data if isinstance(h_res.data, list) else ([h_res.data] if h_res.data else [])
+
+        # 5. Fetch confirmations
+        conf_res = self.client.table("confirmations").select("*").execute()
+        confirmations = conf_res.data if isinstance(conf_res.data, list) else ([conf_res.data] if conf_res.data else [])
+
+        # Map lookup structures
+        analyses_by_conv: Dict[str, Dict[str, Any]] = {}
+        for a in analyses:
+            cid = a.get("conversation_id")
+            if cid:
+                analyses_by_conv[str(cid)] = a
+
+        agreements_by_analysis: Dict[str, Dict[str, Any]] = {}
+        for ag in agreements:
+            an_id = ag.get("analysis_id")
+            if an_id:
+                agreements_by_analysis[str(an_id)] = ag
+
+        # Aggregate counts
+        total_conversations = len(conversations)
+        total_agreements = len(agreements)
+        confirmed_agreements = sum(1 for ag in agreements if ag.get("status") == "fully_confirmed")
+        if confirmed_agreements == 0:
+            confirmed_agreements = sum(1 for conf in confirmations if conf.get("confirmed") is True)
+
+        pending_review_count = sum(1 for a in analyses if a.get("requires_human_review") is True)
+        total_hashes = len(hashes)
+
+        recent = []
+        for c in conversations[:10]:
+            cid = str(c.get("id"))
+            analysis = analyses_by_conv.get(cid)
+            agreement = agreements_by_analysis.get(str(analysis.get("id"))) if analysis else None
+
+            # Determine human-friendly status and UI badge variant
+            if agreement:
+                ag_status = agreement.get("status", "draft")
+                if ag_status == "fully_confirmed":
+                    st = "Fully Confirmed"
+                    variant = "success"
+                elif ag_status == "partially_confirmed":
+                    st = "Partially Confirmed"
+                    variant = "warning"
+                elif ag_status == "declined":
+                    st = "Declined"
+                    variant = "destructive"
+                else:
+                    st = "Agreement Generated"
+                    variant = "default"
+            elif analysis:
+                if analysis.get("requires_human_review"):
+                    st = "Requires Human Review"
+                    variant = "warning"
+                else:
+                    st = "Analyzed"
+                    variant = "secondary"
+            else:
+                st = "Ready for Analysis"
+                variant = "outline"
+
+            recent.append({
+                "id": cid,
+                "filename": c.get("filename", "chat.txt"),
+                "party_names": c.get("party_names") or [],
+                "message_count": c.get("message_count", 0),
+                "uploaded_at": str(c.get("uploaded_at", "")),
+                "analysis_id": analysis.get("id") if analysis else None,
+                "agreement_id": agreement.get("id") if agreement else None,
+                "requires_human_review": analysis.get("requires_human_review") if analysis else None,
+                "status": st,
+                "status_variant": variant,
+            })
+
+        return {
+            "total_conversations": total_conversations,
+            "total_agreements": total_agreements,
+            "confirmed_agreements": confirmed_agreements,
+            "pending_review_count": pending_review_count,
+            "total_hashes": total_hashes,
+            "recent_conversations": recent,
+        }
+
+
+

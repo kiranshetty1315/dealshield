@@ -5,6 +5,7 @@ from app.api.routes.agreements import router as agreements_router
 from app.api.routes.confirmations import router as confirmations_router
 from app.api.routes.evidence import router as evidence_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.dashboard import router as dashboard_router
 
 __all__ = [
     "health_router",
@@ -14,4 +15,5 @@ __all__ = [
     "confirmations_router",
     "evidence_router",
     "auth_router",
+    "dashboard_router",
 ]

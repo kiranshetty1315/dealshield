@@ -31,6 +31,10 @@ from app.schemas.auth import (
     UserResponse,
     AuthResponse,
 )
+from app.schemas.dashboard import (
+    DashboardRecentConversation,
+    DashboardStats,
+)
 
 __all__ = [
     "HealthResponse",
@@ -61,4 +65,6 @@ __all__ = [
     "UserLoginRequest",
     "UserResponse",
     "AuthResponse",
+    "DashboardRecentConversation",
+    "DashboardStats",
 ]
