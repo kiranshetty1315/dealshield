@@ -323,16 +323,37 @@ class ConfirmationRepository:
             raw_token = secrets.token_urlsafe(32)
             token_hash = self.hash_token(raw_token)
 
-            row = {
-                "id": str(uuid.uuid4()),
-                "agreement_id": agreement_id,
-                "version_id": version_id,
-                "party_name": party,
-                "confirmed": False,
-                "confirmation_token_hash": token_hash,
-                "token_expires_at": expires_at,
-            }
-            self.client.table("confirmations").insert(row).execute()
+            # Check if record already exists for this party to prevent duplicate entries
+            existing_res = (
+                self.client.table("confirmations")
+                .select("*")
+                .eq("agreement_id", agreement_id)
+                .eq("party_name", party)
+                .execute()
+            )
+            existing = (
+                existing_res.data[0]
+                if isinstance(existing_res.data, list) and existing_res.data
+                else existing_res.data
+            )
+
+            if existing:
+                self.client.table("confirmations").update({
+                    "confirmation_token_hash": token_hash,
+                    "token_expires_at": expires_at,
+                }).eq("id", existing["id"]).execute()
+            else:
+                row = {
+                    "id": str(uuid.uuid4()),
+                    "agreement_id": agreement_id,
+                    "version_id": version_id,
+                    "party_name": party,
+                    "confirmed": False,
+                    "confirmation_token_hash": token_hash,
+                    "token_expires_at": expires_at,
+                }
+                self.client.table("confirmations").insert(row).execute()
+
             results.append({
                 "party_name": party,
                 "raw_token": raw_token,
@@ -349,27 +370,30 @@ class ConfirmationRepository:
             .execute()
         )
         data = res.data if isinstance(res.data, list) else [res.data]
-        records: List[PartyConfirmationRecord] = []
+        party_map: Dict[str, PartyConfirmationRecord] = {}
 
         for row in data:
-            if not row:
+            if not row or not row.get("party_name"):
                 continue
+            p_name = row["party_name"]
             conf_at = row.get("confirmed_at")
             dt = (
                 datetime.fromisoformat(conf_at.replace("Z", "+00:00"))
                 if isinstance(conf_at, str)
                 else None
             )
-            records.append(
-                PartyConfirmationRecord(
-                    party_name=row["party_name"],
-                    confirmed=bool(row.get("confirmed", False)),
-                    confirmed_at=dt,
-                    notes=row.get("notes"),
-                    ip_hash=row.get("ip_hash"),
-                )
+            rec = PartyConfirmationRecord(
+                party_name=p_name,
+                confirmed=bool(row.get("confirmed", False)),
+                confirmed_at=dt,
+                notes=row.get("notes"),
+                ip_hash=row.get("ip_hash"),
             )
+            # Deduplicate by party_name: preserve confirmed=True if any row is confirmed
+            if p_name not in party_map or (rec.confirmed and not party_map[p_name].confirmed):
+                party_map[p_name] = rec
 
+        records = list(party_map.values())
         all_conf = len(records) > 0 and all(r.confirmed for r in records)
         return ConfirmationStatus(
             agreement_id=agreement_id,

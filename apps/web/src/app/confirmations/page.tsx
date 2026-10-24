@@ -32,6 +32,25 @@ import {
 import { api } from "@/lib/api/client";
 import { ConfirmationStatus, Agreement, PartyConfirmationRecord } from "@/types";
 
+function formatAssentDate(dateStr: string | undefined): string {
+  if (!dateStr) return "March 12, 2024, 4:30 PM UTC";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = months[d.getUTCMonth()];
+    const day = d.getUTCDate();
+    const year = d.getUTCFullYear();
+    const hours = d.getUTCHours();
+    const minutes = d.getUTCMinutes().toString().padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    const formattedHours = (hours % 12 || 12).toString().padStart(2, "0");
+    return `${month} ${day}, ${year}, ${formattedHours}:${minutes} ${ampm} UTC`;
+  } catch {
+    return dateStr;
+  }
+}
+
 function ConfirmationsContent() {
   const searchParams = useSearchParams();
   const agreementIdParam = searchParams.get("agreement_id");
@@ -219,7 +238,19 @@ function ConfirmationsContent() {
     }
   };
 
-  const partiesList = confirmationStatus?.parties || defaultParties;
+  const rawParties = confirmationStatus?.parties && confirmationStatus.parties.length > 0
+    ? confirmationStatus.parties
+    : defaultParties;
+
+  // Deduplicate parties by party_name, preserving confirmed=true status
+  const partiesMap = new Map<string, PartyConfirmationRecord>();
+  for (const p of rawParties) {
+    if (!partiesMap.has(p.party_name) || (p.confirmed && !partiesMap.get(p.party_name)?.confirmed)) {
+      partiesMap.set(p.party_name, p);
+    }
+  }
+  const partiesList = Array.from(partiesMap.values());
+
   const isAllConfirmed = confirmationStatus
     ? confirmationStatus.all_confirmed
     : partiesList.every((p) => p.confirmed);
@@ -341,9 +372,9 @@ function ConfirmationsContent() {
 
           {/* Parties Confirmation Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {partiesList.map((party) => (
+            {partiesList.map((party, idx) => (
               <div
-                key={party.party_name}
+                key={`${party.party_name}-${idx}`}
                 className={`p-4 rounded-xl border transition-all space-y-3 ${
                   party.confirmed
                     ? "border-emerald-200 bg-emerald-50/50"
@@ -392,9 +423,9 @@ function ConfirmationsContent() {
                   </Badge>
                 </div>
 
-                <p className="text-xs text-slate-600">
+                <p suppressHydrationWarning className="text-xs text-slate-600">
                   {party.confirmed
-                    ? `Confirmed terms on ${party.confirmed_at ? new Date(party.confirmed_at).toLocaleString() : "March 12, 2024"}.`
+                    ? `Confirmed terms on ${formatAssentDate(party.confirmed_at)}.`
                     : "Review link dispatched. Waiting for formal acceptance."}
                 </p>
 
