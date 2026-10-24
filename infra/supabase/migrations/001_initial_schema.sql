@@ -10,7 +10,7 @@
 -- UUID generation
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- pgcrypto for additional cryptographic functions
+-- pgcrypto for cryptographic functions (SHA-256 token hashing)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- ============================================================================
@@ -101,19 +101,20 @@ CREATE TABLE IF NOT EXISTS public.confirmations (
     party_email TEXT,
     confirmed BOOLEAN NOT NULL DEFAULT FALSE,
     notes TEXT,
-    confirmation_token TEXT UNIQUE,  -- Cryptographic token for external counterparty access
-    token_expires_at TIMESTAMPTZ,    -- Expiration timestamp for security
+    confirmation_token_hash TEXT UNIQUE,  -- SHA-256 digest of secret token for external counterparty access
+    token_expires_at TIMESTAMPTZ,         -- Expiration timestamp for security
     confirmed_at TIMESTAMPTZ,
-    ip_hash TEXT,                    -- HMAC-SHA256 anonymized IP for DPDP Act 2023 compliance
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    ip_hash TEXT,                         -- HMAC-SHA256 anonymized IP for DPDP Act 2023 compliance
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (agreement_id, version_id, party_name)
 );
 
 -- Audit trail (append-only, immutable)
 CREATE TABLE IF NOT EXISTS public.audit_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    entity_type TEXT NOT NULL,  -- 'conversation', 'analysis', 'agreement', etc.
+    entity_type TEXT NOT NULL,  -- 'conversation', 'analysis', 'agreement', 'confirmation', etc.
     entity_id UUID NOT NULL,
-    action TEXT NOT NULL,       -- 'created', 'updated', 'confirmed', 'exported', etc.
+    action TEXT NOT NULL,       -- 'created', 'updated', 'party_confirmed', 'exported', etc.
     actor_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
     metadata JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -140,7 +141,7 @@ CREATE INDEX IF NOT EXISTS idx_analyses_conversation_id ON public.analyses(conve
 CREATE INDEX IF NOT EXISTS idx_agreements_analysis_id ON public.agreements(analysis_id);
 CREATE INDEX IF NOT EXISTS idx_agreement_versions_agreement_id ON public.agreement_versions(agreement_id);
 CREATE INDEX IF NOT EXISTS idx_confirmations_agreement_id ON public.confirmations(agreement_id);
-CREATE INDEX IF NOT EXISTS idx_confirmations_token ON public.confirmations(confirmation_token);
+CREATE INDEX IF NOT EXISTS idx_confirmations_token_hash ON public.confirmations(confirmation_token_hash);
 CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON public.audit_events(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_events_actor ON public.audit_events(actor_id);
 CREATE INDEX IF NOT EXISTS idx_document_hashes_document ON public.document_hashes(document_id, document_type);
@@ -273,6 +274,29 @@ CREATE POLICY document_hashes_select_own ON public.document_hashes
 -- FUNCTIONS & TRIGGERS
 -- ============================================================================
 
+-- Auto-provision public.users row on auth.users creation (Supabase Auth Signup)
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.users (id, email, full_name, created_at, updated_at)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
+        NOW(),
+        NOW()
+    )
+    ON CONFLICT (id) DO NOTHING;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger listening to Supabase Auth signup events
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
 -- Auto-update updated_at timestamp
 CREATE OR REPLACE FUNCTION public.update_updated_at()
 RETURNS TRIGGER AS $$
@@ -290,10 +314,16 @@ CREATE TRIGGER set_updated_at_agreements
     BEFORE UPDATE ON public.agreements
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
--- Enforce append-only integrity on audit_events (blocks UPDATE and DELETE)
+-- Enforce append-only integrity on audit_events
+-- DPDP Act 2023 Erasure Exception: Allows actor_id ON DELETE SET NULL when user profile is deleted
 CREATE OR REPLACE FUNCTION public.prevent_audit_modification()
 RETURNS TRIGGER AS $$
 BEGIN
+    IF TG_OP = 'UPDATE' AND OLD.actor_id IS NOT NULL AND NEW.actor_id IS NULL
+        AND (to_jsonb(NEW) - 'actor_id') = (to_jsonb(OLD) - 'actor_id') THEN
+        RETURN NEW;
+    END IF;
+
     RAISE EXCEPTION 'audit_events is append-only. UPDATE and DELETE operations are strictly forbidden.'
         USING ERRCODE = 'integrity_constraint_violation';
 END;
@@ -304,7 +334,10 @@ CREATE TRIGGER enforce_audit_append_only
     FOR EACH ROW EXECUTE FUNCTION public.prevent_audit_modification();
 
 -- Token-based counterparty confirmation access functions
--- Allows external party to review agreement without an existing platform account
+-- Tokens are stored as SHA-256 digests; input token is hashed before comparison.
+-- Enforces single-use consumption and generates immutable audit_events.
+-- Routed via FastAPI using service_role (EXECUTE revoked from public/anon).
+
 CREATE OR REPLACE FUNCTION public.get_agreement_by_confirmation_token(p_token TEXT)
 RETURNS TABLE (
     confirmation_id UUID,
@@ -316,9 +349,13 @@ RETURNS TABLE (
     content_hash TEXT
 )
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
+DECLARE
+    v_token_hash TEXT;
 BEGIN
+    v_token_hash := encode(digest(p_token, 'sha256'), 'hex');
+
     RETURN QUERY
     SELECT
         c.id AS confirmation_id,
@@ -330,7 +367,7 @@ BEGIN
         av.content_hash
     FROM public.confirmations c
     JOIN public.agreement_versions av ON av.id = c.version_id
-    WHERE c.confirmation_token = p_token
+    WHERE c.confirmation_token_hash = v_token_hash
       AND (c.token_expires_at IS NULL OR c.token_expires_at > NOW());
 END;
 $$ LANGUAGE plpgsql;
@@ -343,28 +380,69 @@ CREATE OR REPLACE FUNCTION public.submit_confirmation_by_token(
 )
 RETURNS BOOLEAN
 SECURITY DEFINER
-SET search_path = public
+SET search_path = public, extensions
 AS $$
 DECLARE
-    v_conf_id UUID;
+    v_conf RECORD;
+    v_token_hash TEXT;
 BEGIN
-    SELECT id INTO v_conf_id
+    v_token_hash := encode(digest(p_token, 'sha256'), 'hex');
+
+    SELECT id, agreement_id, version_id, party_name, confirmed_at
+    INTO v_conf
     FROM public.confirmations
-    WHERE confirmation_token = p_token
+    WHERE confirmation_token_hash = v_token_hash
       AND (token_expires_at IS NULL OR token_expires_at > NOW());
 
-    IF v_conf_id IS NULL THEN
+    IF v_conf.id IS NULL THEN
         RAISE EXCEPTION 'Invalid or expired confirmation token';
     END IF;
 
+    -- Enforce Single-Use: prevent overwriting an already submitted confirmation
+    IF v_conf.confirmed_at IS NOT NULL THEN
+        RAISE EXCEPTION 'Single-use violation: this confirmation token has already been consumed.';
+    END IF;
+
+    -- Record confirmation
     UPDATE public.confirmations
     SET
         confirmed = p_confirmed,
         notes = p_notes,
         ip_hash = p_ip_hash,
         confirmed_at = NOW()
-    WHERE id = v_conf_id;
+    WHERE id = v_conf.id;
+
+    -- Write immutable audit_events entry
+    INSERT INTO public.audit_events (
+        entity_type,
+        entity_id,
+        action,
+        actor_id,
+        metadata,
+        created_at
+    ) VALUES (
+        'confirmation',
+        v_conf.id,
+        CASE WHEN p_confirmed THEN 'party_confirmed' ELSE 'party_declined' END,
+        NULL,
+        jsonb_build_object(
+            'agreement_id', v_conf.agreement_id,
+            'version_id', v_conf.version_id,
+            'party_name', v_conf.party_name,
+            'ip_hash', p_ip_hash,
+            'notes', p_notes,
+            'token_hash_prefix', substring(v_token_hash from 1 for 8)
+        ),
+        NOW()
+    );
 
     RETURN TRUE;
 END;
 $$ LANGUAGE plpgsql;
+
+-- Lock down execution: REVOKE from public/anon; allow only service_role via backend API
+REVOKE EXECUTE ON FUNCTION public.get_agreement_by_confirmation_token(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_agreement_by_confirmation_token(TEXT) TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.submit_confirmation_by_token(TEXT, BOOLEAN, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_confirmation_by_token(TEXT, BOOLEAN, TEXT, TEXT) TO service_role;

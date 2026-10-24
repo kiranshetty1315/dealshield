@@ -79,10 +79,12 @@ Conversations uploaded to DealShield AI contain private commercial conversations
 ## 5. Counterparty Access & Token Confirmation Model
 
 Because the negotiating counterparty often lacks a platform account, granting access through standard user ownership RLS would fail:
-1. **Single-Use Signed Tokens:** When an agreement version is ready for confirmation, Team D generates a cryptographic `confirmation_token` with an expiration timestamp (`token_expires_at`).
-2. **Security Definer Function:** The counterparty reviews and signs off using `get_agreement_by_confirmation_token(token)` and `submit_confirmation_by_token(...)` without exposing the uploader's internal user ID or bypassing entity-scoped RLS policies.
-3. **Append-Only Auditing:** The PostgreSQL database enforces immutability on `audit_events` via trigger `enforce_audit_append_only`, which raises an exception on any `UPDATE` or `DELETE` attempt.
-4. **Scoped Audit & Hash Access:** `audit_events` and `document_hashes` are strictly scoped to the entity owner, preventing cross-tenant information leakage.
+1. **Hashed Single-Use Tokens:** When an agreement version is ready for confirmation, Team D generates a random cryptographic secret token and stores its **SHA-256 digest** (`confirmation_token_hash`) in `confirmations` alongside an expiration timestamp (`token_expires_at`). Plaintext tokens are never stored in the database.
+2. **Strict Single-Use Enforcement:** `submit_confirmation_by_token(...)` checks `confirmed_at IS NULL`. Any subsequent attempt to submit with the same token raises an exception, preventing confirmation overwrite.
+3. **Automatic Audit Trail:** Successful token confirmation automatically appends an event to `audit_events` with entity type `confirmation`, action `party_confirmed`/`party_declined`, IP hash, and token hash prefix.
+4. **RPC Lockdown & Service Role:** PostgreSQL grants EXECUTE to PUBLIC by default. The migration strictly executes `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` and `GRANT EXECUTE ... TO service_role`. Confirmations are routed through FastAPI using the backend service role, closing direct anon RPC exposure.
+5. **Append-Only Auditing with DPDP Erasure Exception:** The database enforces immutability on `audit_events` via trigger `enforce_audit_append_only` (blocking UPDATE/DELETE). It includes an explicit exception allowing `actor_id` to be `SET NULL` on user deletion, ensuring DPDP Act 2023 erasure requests succeed without violating audit record immutability.
+6. **Scoped Audit & Hash Access:** `audit_events` and `document_hashes` are strictly scoped to the entity owner, preventing cross-tenant information leakage.
 
 ---
 

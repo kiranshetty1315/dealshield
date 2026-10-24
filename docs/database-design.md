@@ -116,6 +116,7 @@ erDiagram
 Extends Supabase `auth.users` with profile metadata.
 - **PK:** `id` UUID references `auth.users(id)` ON DELETE CASCADE.
 - **Fields:** `email` (UNIQUE), `full_name`, `created_at`, `updated_at`.
+- **Auto-Provisioning:** Trigger `on_auth_user_created` on `auth.users` automatically inserts a corresponding row in `public.users` upon signup so initial uploads never fail foreign key checks.
 
 ### `conversations`
 Represents an ingested WhatsApp chat file.
@@ -154,14 +155,17 @@ Records party sign-off, objection notes, and token-based external access.
 - **PK:** `id` UUID.
 - **FK:** `agreement_id` references `public.agreements(id)` ON DELETE CASCADE.
 - **FK:** `version_id` references `public.agreement_versions(id)` ON DELETE CASCADE.
-- **Fields:** `party_name`, `party_email`, `confirmed` (BOOLEAN), `notes`, `confirmation_token` (TEXT UNIQUE, signed single-use link token), `token_expires_at` (TIMESTAMPTZ), `ip_hash` (anonymized IP for DPDP Act 2023), `confirmed_at`.
+- **Constraint:** `UNIQUE (agreement_id, version_id, party_name)` (prevents duplicate entries per party per version).
+- **Fields:** `party_name`, `party_email`, `confirmed` (BOOLEAN), `notes`, `confirmation_token_hash` (TEXT UNIQUE, SHA-256 hash of secret link token), `token_expires_at` (TIMESTAMPTZ), `ip_hash` (anonymized IP for DPDP Act 2023), `confirmed_at`.
+- **Security & Single-Use:** Input tokens are matched via `digest(p_token, 'sha256')`. Single-use is strictly enforced by checking `confirmed_at IS NULL`. Each confirmation automatically appends an immutable record to `audit_events`.
+- **RPC Lockdown:** `REVOKE EXECUTE FROM PUBLIC, anon, authenticated` ensures calls route exclusively via backend FastAPI using `service_role`.
 
 ### `audit_events`
 Append-only tamper-evident event log.
 - **PK:** `id` UUID.
 - **FK:** `actor_id` references `public.users(id)` ON DELETE SET NULL.
 - **Fields:** `entity_type`, `entity_id`, `action`, `metadata` (`JSONB`), `created_at`.
-- **Integrity Rule:** `INSERT` is restricted to service role only. Immutability enforced via trigger `enforce_audit_append_only` (blocks UPDATE/DELETE).
+- **Integrity Rule:** `INSERT` is restricted to service role only. Immutability enforced via trigger `enforce_audit_append_only` (blocks UPDATE/DELETE with an explicit exception allowing `actor_id ON DELETE SET NULL` for DPDP Act 2023 user erasure compliance).
 
 ### `document_hashes`
 Cryptographic SHA-256 fingerprints.
