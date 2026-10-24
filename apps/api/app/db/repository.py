@@ -370,6 +370,25 @@ class ConfirmationRepository:
             .execute()
         )
         data = res.data if isinstance(res.data, list) else [res.data]
+
+        valid_rows = [r for r in data if r and r.get("party_name")]
+        if not valid_rows:
+            try:
+                ag_res = self.client.table("agreements").select("parties").eq("id", agreement_id).execute()
+                ag_data = ag_res.data if isinstance(ag_res.data, list) else [ag_res.data]
+                if ag_data and ag_data[0] and ag_data[0].get("parties"):
+                    parties = ag_data[0]["parties"]
+                    if isinstance(parties, list) and parties:
+                        self.create_confirmation_tokens(
+                            agreement_id=agreement_id,
+                            version_id=agreement_id,
+                            party_names=parties,
+                        )
+                        res = self.client.table("confirmations").select("*").eq("agreement_id", agreement_id).execute()
+                        data = res.data if isinstance(res.data, list) else [res.data]
+            except Exception:
+                pass
+
         party_map: Dict[str, PartyConfirmationRecord] = {}
 
         for row in data:

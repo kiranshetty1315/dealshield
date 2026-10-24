@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
   XCircle,
@@ -20,21 +20,33 @@ import {
   Send,
   Loader2,
   Database,
-  FileCheck2,
   Sparkles,
   Trash2,
   Share2,
   Copy,
   Check,
   Link2,
-  ExternalLink,
+  ChevronDown,
+  Upload,
+  GitCompare,
   Info,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { ConfirmationStatus, Agreement, PartyConfirmationRecord } from "@/types";
+import {
+  ConfirmationStatus,
+  Agreement,
+  PartyConfirmationRecord,
+  ConversationRecord,
+  AgreementAnalysis,
+  ChatUploadResponse,
+} from "@/types";
+import {
+  UpdatedChatComparisonModal,
+  ResolutionDiffSummary,
+} from "@/components/analysis/UpdatedChatComparisonModal";
 
-function formatAssentDate(dateStr: string | undefined): string {
-  if (!dateStr) return "March 12, 2024, 4:30 PM UTC";
+function formatAssentDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "Pending formal record";
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
@@ -55,57 +67,125 @@ function formatAssentDate(dateStr: string | undefined): string {
 function ConfirmationsContent() {
   const searchParams = useSearchParams();
   const agreementIdParam = searchParams.get("agreement_id");
+  const chatIdParam = searchParams.get("chat_id");
   const tokenParam = searchParams.get("token");
 
-  const [agreementId, setAgreementId] = useState<string>(agreementIdParam || "sample-agreement-uuid");
+  // Negotiations / Conversations list
+  const [conversations, setConversations] = useState<ConversationRecord[]>([]);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(chatIdParam);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+
+  // Active Agreement & Confirmation Data
   const [agreement, setAgreement] = useState<Agreement | null>(null);
+  const [currentAnalysis, setCurrentAnalysis] = useState<AgreementAnalysis | null>(null);
   const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(Boolean(agreementIdParam));
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Token testing state
   const [tokenInput, setTokenInput] = useState(tokenParam || "");
   const [tokenNotes, setTokenNotes] = useState("");
   const [tokenResult, setTokenResult] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Shareable link state
   const [shareableLink, setShareableLink] = useState<{ partyName: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGeneratingToken, setIsGeneratingToken] = useState<string | null>(null);
 
-  // Default demo fallback if no live agreement
-  const defaultParties: PartyConfirmationRecord[] = [
-    {
-      party_name: "Raj Mehta",
-      confirmed: true,
-      confirmed_at: "2024-03-12T11:00:00Z",
-      notes: "Agreed to 50% advance upon contract signing",
-    },
-    {
-      party_name: "Priya Sharma",
-      confirmed: false,
-    },
-  ];
+  // Follow-up Chat Comparison Modal
+  const [isComparisonModalOpen, setIsComparisonModalOpen] = useState(false);
+  const [resolutionBanner, setResolutionBanner] = useState<ResolutionDiffSummary | null>(null);
 
-  const refreshStatus = async (targetId: string) => {
+  // 1. Load all conversations on mount
+  useEffect(() => {
+    async function fetchConversations() {
+      setIsLoadingConversations(true);
+      try {
+        const chats = await api.listChats();
+        setConversations(chats);
+
+        if (!selectedChatId && !agreementIdParam && chats.length > 0) {
+          setSelectedChatId(chats[0].id);
+        }
+      } catch (err) {
+        console.warn("Could not list conversations:", err);
+      } finally {
+        setIsLoadingConversations(false);
+      }
+    }
+    fetchConversations();
+  }, [selectedChatId, agreementIdParam]);
+
+  // 2. Load Agreement, Confirmations & Analysis for selected negotiation
+  const refreshStatus = useCallback(async (targetAgreementId: string) => {
     try {
       const [statusData, agData] = await Promise.all([
-        api.getConfirmationStatus(targetId).catch(() => null),
-        api.getAgreement(targetId).catch(() => null),
+        api.getConfirmationStatus(targetAgreementId).catch(() => null),
+        api.getAgreement(targetAgreementId).catch(() => null),
       ]);
       if (statusData) setConfirmationStatus(statusData);
-      if (agData) setAgreement(agData);
+      if (agData) {
+        setAgreement(agData);
+        if (agData.analysis_id) {
+          api.getAnalysis(agData.analysis_id)
+            .then(setCurrentAnalysis)
+            .catch(() => null);
+        }
+      }
     } catch (e) {
       console.warn("Could not fetch confirmation status:", e);
     }
-  };
+  }, []);
+
+  const loadDataForSelection = useCallback(
+    async (chatId: string | null, agreementId: string | null) => {
+      setIsLoadingStatus(true);
+      setErrorMessage(null);
+      try {
+        let activeAg: Agreement;
+        if (agreementId) {
+          activeAg = await api.getAgreement(agreementId);
+        } else if (chatId) {
+          activeAg = await api.getAgreementForChat(chatId);
+        } else {
+          setIsLoadingStatus(false);
+          return;
+        }
+
+        setAgreement(activeAg);
+
+        // Fetch associated confirmation records & analysis
+        const [statusData, analysisData] = await Promise.all([
+          api.getConfirmationStatus(activeAg.id).catch(() => null),
+          activeAg.analysis_id ? api.getAnalysis(activeAg.analysis_id).catch(() => null) : null,
+        ]);
+
+        if (statusData) setConfirmationStatus(statusData);
+        if (analysisData) setCurrentAnalysis(analysisData);
+      } catch (err: any) {
+        console.error("Failed to load confirmations for agreement:", err);
+        setErrorMessage(err?.message || "Failed to load agreement confirmations from Supabase.");
+        setAgreement(null);
+        setConfirmationStatus(null);
+      } finally {
+        setIsLoadingStatus(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
-    if (!agreementIdParam) return;
-
-    setIsLoading(true);
-    refreshStatus(agreementIdParam).finally(() => setIsLoading(false));
-  }, [agreementIdParam]);
+    if (agreementIdParam) {
+      loadDataForSelection(null, agreementIdParam);
+    } else if (selectedChatId) {
+      loadDataForSelection(selectedChatId, null);
+    } else if (!isLoadingConversations && conversations.length === 0) {
+      setIsLoadingStatus(false);
+    }
+  }, [selectedChatId, agreementIdParam, loadDataForSelection, isLoadingConversations, conversations.length]);
 
   useEffect(() => {
     if (tokenParam) {
@@ -113,63 +193,58 @@ function ConfirmationsContent() {
     }
   }, [tokenParam]);
 
+  // Handle switching negotiation
+  const handleSelectConversation = (chatId: string) => {
+    setSelectedChatId(chatId);
+    setResolutionBanner(null);
+    setShareableLink(null);
+    setFeedbackMessage(null);
+    setErrorMessage(null);
+
+    const url = new URL(window.location.href);
+    url.searchParams.set("chat_id", chatId);
+    url.searchParams.delete("agreement_id");
+    url.searchParams.delete("token");
+    window.history.replaceState(null, "", url.toString());
+  };
+
+  // Direct confirm on behalf of party
   const handleConfirmAsParty = async (partyName: string) => {
+    if (!agreement) return;
     setActionLoading(partyName);
     setFeedbackMessage(null);
+    setErrorMessage(null);
     try {
-      if (agreement) {
-        const updatedStatus = await api.submitConfirmation(
-          agreement.id,
-          partyName,
-          true,
-          `Direct dashboard confirmation by ${partyName}`
-        );
-        setConfirmationStatus(updatedStatus);
-        await refreshStatus(agreement.id);
-        setFeedbackMessage(`Successfully recorded confirmation for ${partyName} in database.`);
-      } else {
-        // Local simulation for demo mode
-        setConfirmationStatus((prev) => {
-          const currentParties = prev?.parties || defaultParties;
-          const nextParties = currentParties.map((p) =>
-            p.party_name === partyName
-              ? { ...p, confirmed: true, confirmed_at: new Date().toISOString() }
-              : p
-          );
-          return {
-            agreement_id: agreementId,
-            version_number: 1,
-            parties: nextParties,
-            all_confirmed: nextParties.every((p) => p.confirmed),
-            last_updated: new Date().toISOString(),
-          };
-        });
-        setFeedbackMessage(`Demo mode: Recorded confirmation for ${partyName}.`);
-      }
+      const updatedStatus = await api.submitConfirmation(
+        agreement.id,
+        partyName,
+        true,
+        `Direct dashboard confirmation by ${partyName}`
+      );
+      setConfirmationStatus(updatedStatus);
+      await refreshStatus(agreement.id);
+      setFeedbackMessage(`Successfully recorded formal assent for ${partyName} in database.`);
     } catch (err: any) {
-      alert(`Confirmation failed: ${err.message || err}`);
+      setErrorMessage(`Confirmation failed: ${err.message || err}`);
     } finally {
       setActionLoading(null);
     }
   };
 
+  // Generate single-use signed link for external counterparty
   const handleGenerateShareableToken = async (partyName: string) => {
+    if (!agreement) return;
     setIsGeneratingToken(partyName);
     setCopied(false);
+    setErrorMessage(null);
     try {
-      const targetId = agreement?.id || agreementId;
-      const res = await api.generatePartyToken(targetId, partyName);
+      const res = await api.generatePartyToken(agreement.id, partyName);
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const fullUrl = `${origin}/review?token=${res.token}&agreement_id=${encodeURIComponent(targetId)}`;
+      const fullUrl = `${origin}/review?token=${res.token}&agreement_id=${encodeURIComponent(agreement.id)}`;
       setShareableLink({ partyName, url: fullUrl });
       setTokenInput(res.token);
-    } catch {
-      // Local fallback token generation if backend is in local demo
-      const randomTok = `tok_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
-      const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const fullUrl = `${origin}/review?token=${randomTok}&agreement_id=${encodeURIComponent(agreement?.id || agreementId)}`;
-      setShareableLink({ partyName, url: fullUrl });
-      setTokenInput(randomTok);
+    } catch (err: any) {
+      setErrorMessage(`Failed to generate token: ${err.message || err}`);
     } finally {
       setIsGeneratingToken(null);
     }
@@ -183,6 +258,7 @@ function ConfirmationsContent() {
     }
   };
 
+  // Execute token confirmation directly
   const handleExecuteToken = async () => {
     if (!tokenInput.trim()) return;
 
@@ -194,56 +270,98 @@ function ConfirmationsContent() {
       setTokenResult(`Success: Agreement confirmed by ${res.party_name}!`);
       if (res.agreement_id) {
         await refreshStatus(res.agreement_id);
-      } else {
-        // Local demo update
-        setConfirmationStatus((prev) => {
-          const currentParties = prev?.parties || defaultParties;
-          const nextParties = currentParties.map((p) =>
-            p.party_name === res.party_name || !p.confirmed
-              ? { ...p, confirmed: true, confirmed_at: new Date().toISOString() }
-              : p
-          );
-          return {
-            agreement_id: agreementId,
-            version_number: 1,
-            parties: nextParties,
-            all_confirmed: nextParties.every((p) => p.confirmed),
-            last_updated: new Date().toISOString(),
-          };
-        });
+      } else if (agreement) {
+        await refreshStatus(agreement.id);
       }
     } catch (err: any) {
-      // Offline fallback: if using simulated demo token
-      if (tokenInput.startsWith("tok_") || tokenInput.startsWith("demo_")) {
-        setTokenResult("Success: Agreement confirmed by counterparty via single-use signed token!");
-        setConfirmationStatus((prev) => {
-          const currentParties = prev?.parties || defaultParties;
-          const nextParties = currentParties.map((p) => ({
-            ...p,
-            confirmed: true,
-            confirmed_at: p.confirmed_at || new Date().toISOString(),
-          }));
-          return {
-            agreement_id: agreementId,
-            version_number: 1,
-            parties: nextParties,
-            all_confirmed: true,
-            last_updated: new Date().toISOString(),
-          };
-        });
-      } else {
-        setTokenError(err.message || "Failed to confirm via token");
-      }
+      setTokenError(err.message || "Failed to confirm via token");
     } finally {
       setActionLoading(null);
     }
   };
 
+  // Callback when a follow-up chat is uploaded & verified
+  const handleUpdateCompleted = async (
+    newChat: ChatUploadResponse,
+    newAnalysis: AgreementAnalysis,
+    summary: ResolutionDiffSummary
+  ) => {
+    try {
+      let updatedAgreement: Agreement;
+      if (agreement) {
+        updatedAgreement = await api.createAgreementVersion(agreement.id, newAnalysis.analysis_id);
+      } else {
+        const partyNames = newAnalysis.parties.map((p) => p.name);
+        updatedAgreement = await api.createAgreement(newAnalysis.analysis_id, partyNames);
+      }
+
+      setConversations((prev) => [
+        {
+          id: newChat.chat_id,
+          filename: newChat.filename,
+          party_names: newChat.party_names,
+          message_count: newChat.message_count,
+          uploaded_at: new Date().toISOString(),
+        },
+        ...prev.filter((c) => c.id !== newChat.chat_id),
+      ]);
+
+      setSelectedChatId(newChat.chat_id);
+      setAgreement(updatedAgreement);
+      setCurrentAnalysis(newAnalysis);
+      setResolutionBanner(summary);
+      setIsComparisonModalOpen(false);
+
+      // Refresh confirmation records for new version
+      await refreshStatus(updatedAgreement.id);
+    } catch (err: any) {
+      console.error("Failed to update agreement version:", err);
+      alert(`Could not synthesize new version: ${err.message}`);
+    }
+  };
+
+  // 1. Initial Page Loading
+  if (isLoadingConversations) {
+    return (
+      <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-sm font-medium text-slate-700">Loading negotiations from Supabase...</p>
+      </div>
+    );
+  }
+
+  // 2. Empty State: No chats in workspace
+  if (conversations.length === 0 && !agreement) {
+    return (
+      <div className="container mx-auto px-4 py-16 max-w-4xl">
+        <Card className="border-slate-200 shadow-sm text-center py-12 px-6">
+          <div className="mx-auto h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-4">
+            <Users className="h-6 w-6" />
+          </div>
+          <CardTitle className="text-xl font-bold text-slate-900">
+            No Negotiated Agreements Found
+          </CardTitle>
+          <CardDescription className="text-sm text-slate-500 max-w-md mx-auto mt-2 mb-6">
+            Upload an exported WhatsApp negotiation to analyze mutual terms, synthesize an enforceable agreement, and collect two-party confirmations under Section 7 of the Indian Contract Act.
+          </CardDescription>
+          <Button asChild className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-sm">
+            <Link href="/upload">
+              <Upload className="h-4 w-4" /> Upload First Negotiation
+            </Link>
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  // Deduplicate and assemble parties from confirmationStatus or agreement
   const rawParties = confirmationStatus?.parties && confirmationStatus.parties.length > 0
     ? confirmationStatus.parties
-    : defaultParties;
+    : (agreement?.parties || []).map((name) => ({
+        party_name: name,
+        confirmed: false,
+      }));
 
-  // Deduplicate parties by party_name, preserving confirmed=true status
   const partiesMap = new Map<string, PartyConfirmationRecord>();
   for (const p of rawParties) {
     if (!partiesMap.has(p.party_name) || (p.confirmed && !partiesMap.get(p.party_name)?.confirmed)) {
@@ -254,36 +372,127 @@ function ConfirmationsContent() {
 
   const isAllConfirmed = confirmationStatus
     ? confirmationStatus.all_confirmed
-    : partiesList.every((p) => p.confirmed);
+    : partiesList.length > 0 && partiesList.every((p) => p.confirmed);
 
   const confirmedCount = partiesList.filter((p) => p.confirmed).length;
   const totalCount = partiesList.length;
-
   const unconfirmedParty = partiesList.find((p) => !p.confirmed);
 
+  const currentConversation = conversations.find((c) => c.id === selectedChatId) || null;
+  const latestVersion = agreement?.versions?.[agreement.versions.length - 1];
+
   return (
-    <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-4xl">
-      <div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <h1 className="text-3xl font-extrabold text-slate-900">Two-Party Agreement Confirmation</h1>
-          {agreement ? (
-            <Badge
+    <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-5xl">
+      {/* Top Header & Negotiation Selector */}
+      <div className="space-y-4">
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-3xl font-extrabold text-slate-900">Two-Party Agreement Confirmation</h1>
+            {agreement && (
+              <Badge
+                variant="outline"
+                className="border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold flex items-center gap-1 text-xs"
+              >
+                <Database className="h-3 w-3" />
+                Live Agreement ({agreement.id.slice(0, 8)}...)
+              </Badge>
+            )}
+          </div>
+          <p className="text-sm text-slate-500 mt-1">
+            Both negotiating parties must independently review and formally assent to synthesize an enforceable commercial contract under Section 7 of the Indian Contract Act, 1872.
+          </p>
+        </div>
+
+        {/* Negotiation Selection Bar */}
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <label htmlFor="confirmations-chat-select" className="text-xs font-bold text-slate-700 shrink-0">
+              Select Negotiation:
+            </label>
+            <div className="relative flex-1 max-w-md">
+              <select
+                id="confirmations-chat-select"
+                value={selectedChatId || ""}
+                onChange={(e) => handleSelectConversation(e.target.value)}
+                className="w-full h-9 pl-3 pr-8 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 appearance-none truncate"
+              >
+                {conversations.map((conv) => {
+                  const partiesText =
+                    conv.party_names && conv.party_names.length > 0
+                      ? conv.party_names.join(" & ")
+                      : "Unassigned Counterparties";
+                  return (
+                    <option key={conv.id} value={conv.id}>
+                      {partiesText} — {conv.filename} ({conv.message_count} msgs)
+                    </option>
+                  );
+                })}
+              </select>
+              <ChevronDown className="h-4 w-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+            </div>
+
+            <Badge variant="outline" className="text-[11px] font-mono text-slate-500 shrink-0 hidden sm:inline-flex">
+              {conversations.length} {conversations.length === 1 ? "Record" : "Records"}
+            </Badge>
+          </div>
+
+          {/* Action Controls */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <Button
               variant="outline"
-              className="border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold flex items-center gap-1"
+              size="sm"
+              onClick={() => setIsComparisonModalOpen(true)}
+              disabled={isLoadingStatus}
+              className="gap-2 text-xs border-indigo-200 text-indigo-700 bg-indigo-50/50 hover:bg-indigo-100"
+              title="Upload updated chat to check if previous open issues are resolved and update confirmations"
             >
-              <Database className="h-3 w-3" />
-              Live Agreement ({agreement.id.slice(0, 8)}...)
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-800 font-semibold">
-              Sample Demo Mode
-            </Badge>
+              <GitCompare className="h-3.5 w-3.5" />
+              <span>Check Follow-up Chat</span>
+            </Button>
+
+            <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs border-slate-300">
+              <Link href="/upload">
+                <Upload className="h-3.5 w-3.5" />
+                <span>Upload New Chat</span>
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Resolution Diff Banner from Follow-up Chat */}
+      {resolutionBanner && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-4 shadow-xs space-y-2 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <span className="font-bold text-emerald-950 text-sm">
+                Follow-up Chat Verified: Agreement Draft Updated to v{latestVersion?.version_number || agreement?.current_version}.0
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setResolutionBanner(null)}
+              className="text-xs text-emerald-800 hover:text-emerald-950 font-medium"
+            >
+              Dismiss
+            </button>
+          </div>
+
+          {resolutionBanner.resolvedConflicts.length > 0 && (
+            <div className="text-xs text-emerald-900 space-y-1 pl-7">
+              <p className="font-semibold">Resolved in this updated version:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                {resolutionBanner.resolvedConflicts.map((c) => (
+                  <li key={c.conflict_id}>
+                    <strong>[{c.term_category.toUpperCase()}]:</strong> {c.description}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
-        <p className="text-sm text-slate-500 mt-1">
-          Both negotiating parties must independently review and formally assent to synthesize an enforceable contract under Section 7 of the Indian Contract Act.
-        </p>
-      </div>
+      )}
 
       {/* External Counterparty Review Banner if arriving via token */}
       {tokenParam && (
@@ -304,7 +513,7 @@ function ConfirmationsContent() {
                 </div>
               </div>
               <Badge variant="outline" className="border-blue-400 bg-white text-blue-900 text-[11px] font-semibold">
-                Single-Use Token Valid
+                Single-Use Token Active
               </Badge>
             </div>
 
@@ -355,7 +564,7 @@ function ConfirmationsContent() {
             </div>
 
             <Badge
-              variant={isAllConfirmed ? "success" : "outline"}
+              variant={isAllConfirmed ? "default" : "outline"}
               className={isAllConfirmed ? "bg-emerald-600 text-white text-xs" : "border-amber-400 bg-amber-50 text-amber-800 text-xs font-bold"}
             >
               {isAllConfirmed ? "100% Fully Confirmed" : `${confirmedCount}/${totalCount} Parties Assented`}
@@ -364,6 +573,13 @@ function ConfirmationsContent() {
         </CardHeader>
 
         <CardContent className="p-6 space-y-6">
+          {isLoadingStatus && (
+            <div className="flex items-center justify-center py-8 gap-2 text-xs text-slate-500">
+              <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+              Loading party confirmation records...
+            </div>
+          )}
+
           {feedbackMessage && (
             <Alert className="border-emerald-300 bg-emerald-50 text-emerald-900 text-xs">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -371,192 +587,205 @@ function ConfirmationsContent() {
             </Alert>
           )}
 
+          {errorMessage && (
+            <Alert variant="destructive" className="text-xs">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Parties Confirmation Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {partiesList.map((party, idx) => {
-              const isDeclined = Boolean(party.declined);
-              const isConfirmed = Boolean(party.confirmed);
+          {!isLoadingStatus && partiesList.length === 0 ? (
+            <div className="p-8 text-center text-xs text-slate-500 border border-dashed rounded-xl">
+              No parties identified for this agreement yet. Please generate a draft agreement from the Agreements tab.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {partiesList.map((party, idx) => {
+                const isDeclined = Boolean(party.declined);
+                const isConfirmed = Boolean(party.confirmed);
 
-              return (
-                <div
-                  key={`${party.party_name}-${idx}`}
-                  className={`p-4 rounded-xl border transition-all space-y-3 ${
-                    isConfirmed
-                      ? "border-emerald-200 bg-emerald-50/50"
-                      : isDeclined
-                      ? "border-rose-200 bg-rose-50/50"
-                      : "border-slate-200 bg-white hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                return (
+                  <div
+                    key={`${party.party_name}-${idx}`}
+                    className={`p-4 rounded-xl border transition-all space-y-3 ${
+                      isConfirmed
+                        ? "border-emerald-200 bg-emerald-50/50"
+                        : isDeclined
+                        ? "border-rose-200 bg-rose-50/50"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                            isConfirmed
+                              ? "bg-emerald-600 text-white"
+                              : isDeclined
+                              ? "bg-rose-600 text-white"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {party.party_name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </div>
+                        <div>
+                          <p className="font-bold text-xs text-slate-900">{party.party_name}</p>
+                          <p className="text-[10px] text-slate-500">
+                            {isConfirmed
+                              ? "Assent Formally Recorded"
+                              : isDeclined
+                              ? "Terms Declined by Party"
+                              : "Awaiting Acceptance"}
+                          </p>
+                        </div>
+                      </div>
+
+                      <Badge
+                        variant={isConfirmed ? "default" : isDeclined ? "destructive" : "outline"}
+                        className={
                           isConfirmed
-                            ? "bg-emerald-600 text-white"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
                             : isDeclined
-                            ? "bg-rose-600 text-white"
-                            : "bg-slate-200 text-slate-700"
-                        }`}
+                            ? "bg-rose-100 text-rose-800 border-rose-300 text-[10px]"
+                            : "text-slate-500 text-[10px]"
+                        }
                       >
-                        {party.party_name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")}
-                      </div>
-                      <div>
-                        <p className="font-bold text-xs text-slate-900">{party.party_name}</p>
-                        <p className="text-[10px] text-slate-500">
-                          {isConfirmed
-                            ? "Assent Formally Recorded"
-                            : isDeclined
-                            ? "Terms Declined by Party"
-                            : "Awaiting Acceptance"}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Badge
-                      variant={isConfirmed ? "success" : isDeclined ? "destructive" : "outline"}
-                      className={
-                        isConfirmed
-                          ? "bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
-                          : isDeclined
-                          ? "bg-rose-100 text-rose-800 border-rose-300 text-[10px]"
-                          : "text-slate-500 text-[10px]"
-                      }
-                    >
-                      {isConfirmed ? (
-                        <>
-                          <CheckCircle2 className="h-3 w-3" /> Confirmed
-                        </>
-                      ) : isDeclined ? (
-                        <>
-                          <XCircle className="h-3 w-3" /> Declined
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="h-3 w-3" /> Awaiting Assent
-                        </>
-                      )}
-                    </Badge>
-                  </div>
-
-                  <p suppressHydrationWarning className="text-xs text-slate-600">
-                    {isConfirmed
-                      ? `Confirmed terms on ${formatAssentDate(party.confirmed_at)}.`
-                      : isDeclined
-                      ? `Declined terms on ${formatAssentDate(party.declined_at)}.`
-                      : "Review link dispatched. Waiting for formal acceptance."}
-                  </p>
-
-                  {party.decline_reason && (
-                    <div className="bg-rose-100/60 p-2.5 rounded border border-rose-200 text-xs text-rose-900 space-y-0.5">
-                      <span className="font-bold block text-[10px] uppercase text-rose-800">
-                        Reason for Decline:
-                      </span>
-                      <p className="italic">&ldquo;{party.decline_reason}&rdquo;</p>
-                    </div>
-                  )}
-
-                  {party.notes && !party.decline_reason && (
-                    <p className="text-[11px] text-slate-500 italic bg-white/70 p-2 rounded border border-slate-200">
-                      &ldquo;{party.notes}&rdquo;
-                    </p>
-                  )}
-
-                {/* Actions when party has NOT confirmed */}
-                {!party.confirmed ? (
-                  <div className="space-y-2 pt-1">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleConfirmAsParty(party.party_name)}
-                        disabled={actionLoading !== null}
-                        className="w-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                      >
-                        {actionLoading === party.party_name ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Recording...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Direct Confirm
-                          </>
-                        )}
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleGenerateShareableToken(party.party_name)}
-                        disabled={isGeneratingToken !== null}
-                        className="w-full text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 gap-1.5"
-                      >
-                        {isGeneratingToken === party.party_name ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            Generating...
-                          </>
-                        ) : (
-                          <>
-                            <Share2 className="h-3.5 w-3.5" />
-                            Share Token Link
-                          </>
-                        )}
-                      </Button>
-                    </div>
-
-                    {/* Expandable Shareable Token Box */}
-                    {shareableLink?.partyName === party.party_name && (
-                      <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2 animate-in fade-in duration-150 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-[11px] text-blue-950 flex items-center gap-1">
-                            <Link2 className="h-3.5 w-3.5 text-blue-700" />
-                            Shareable Counterparty Link
+                        {isConfirmed ? (
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3" /> Confirmed
                           </span>
+                        ) : isDeclined ? (
+                          <span className="flex items-center gap-1">
+                            <XCircle className="h-3 w-3" /> Declined
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" /> Awaiting Assent
+                          </span>
+                        )}
+                      </Badge>
+                    </div>
+
+                    <p suppressHydrationWarning className="text-xs text-slate-600">
+                      {isConfirmed
+                        ? `Confirmed terms on ${formatAssentDate(party.confirmed_at)}.`
+                        : isDeclined
+                        ? `Declined terms on ${formatAssentDate(party.declined_at)}.`
+                        : "Review link ready. Waiting for formal counterparty acceptance."}
+                    </p>
+
+                    {party.decline_reason && (
+                      <div className="bg-rose-100/60 p-2.5 rounded border border-rose-200 text-xs text-rose-900 space-y-0.5">
+                        <span className="font-bold block text-[10px] uppercase text-rose-800">
+                          Reason for Decline:
+                        </span>
+                        <p className="italic">&ldquo;{party.decline_reason}&rdquo;</p>
+                      </div>
+                    )}
+
+                    {party.notes && !party.decline_reason && (
+                      <p className="text-[11px] text-slate-500 italic bg-white/70 p-2 rounded border border-slate-200">
+                        &ldquo;{party.notes}&rdquo;
+                      </p>
+                    )}
+
+                    {/* Actions when party has NOT confirmed */}
+                    {!party.confirmed ? (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Button
-                            variant="outline"
                             size="sm"
-                            onClick={handleCopyLink}
-                            className="h-6 text-[10px] px-2.5 bg-white gap-1 border-blue-300 text-blue-800 hover:bg-blue-100"
+                            onClick={() => handleConfirmAsParty(party.party_name)}
+                            disabled={actionLoading !== null}
+                            className="w-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
                           >
-                            {copied ? (
+                            {actionLoading === party.party_name ? (
                               <>
-                                <Check className="h-3 w-3 text-emerald-600" />
-                                Copied!
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Recording...
                               </>
                             ) : (
                               <>
-                                <Copy className="h-3 w-3" />
-                                Copy Link
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Direct Confirm
+                              </>
+                            )}
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleGenerateShareableToken(party.party_name)}
+                            disabled={isGeneratingToken !== null}
+                            className="w-full text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 gap-1.5"
+                          >
+                            {isGeneratingToken === party.party_name ? (
+                              <>
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <Share2 className="h-3.5 w-3.5" />
+                                Share Token Link
                               </>
                             )}
                           </Button>
                         </div>
-                        <Input
-                          readOnly
-                          value={shareableLink.url}
-                          className="text-[10px] font-mono h-7 bg-white text-slate-800"
-                        />
-                        <p className="text-[10px] text-blue-800 leading-normal">
-                          Share this link with {party.party_name} via WhatsApp or email. They can review and click &ldquo;Agree&rdquo; in 1 click without creating an account.
-                        </p>
+
+                        {/* Expandable Shareable Token Box */}
+                        {shareableLink?.partyName === party.party_name && (
+                          <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2 animate-in fade-in duration-150 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-[11px] text-blue-950 flex items-center gap-1">
+                                <Link2 className="h-3.5 w-3.5 text-blue-700" />
+                                Shareable Counterparty Link
+                              </span>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleCopyLink}
+                                className="h-6 text-[10px] px-2.5 bg-white gap-1 border-blue-300 text-blue-800 hover:bg-blue-100"
+                              >
+                                {copied ? (
+                                  <>
+                                    <Check className="h-3 w-3 text-emerald-600" />
+                                    Copied!
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="h-3 w-3" />
+                                    Copy Link
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            <Input
+                              readOnly
+                              value={shareableLink.url}
+                              className="text-[10px] font-mono h-7 bg-white text-slate-800"
+                            />
+                            <p className="text-[10px] text-blue-800 leading-normal">
+                              Share this link with {party.party_name} via WhatsApp or email. They can review and click &ldquo;Agree&rdquo; in 1 click without creating an account.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-mono text-emerald-700 flex items-center gap-1 pt-1">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Assent Cryptographically Logged in Audit Trail
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className="text-[10px] font-mono text-emerald-700 flex items-center gap-1 pt-1">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Assent Cryptographically Logged in Audit Trail
-                  </div>
-                )}
-              </div>
-            );
-          })}
-          </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Fully Confirmed Celebration Banner */}
           {isAllConfirmed && (
@@ -569,13 +798,15 @@ function ConfirmationsContent() {
                       Agreement Fully Confirmed by Both Parties!
                     </span>
                   </div>
-                  <Link href={`/evidence?entity_id=${encodeURIComponent(agreement?.id || agreementId)}`}>
-                    <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5">
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                      Inspect Section 65B Evidence Vault
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Button>
-                  </Link>
+                  {agreement && (
+                    <Link href={`/evidence?entity_id=${encodeURIComponent(agreement.id)}`}>
+                      <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Inspect Section 65B Evidence Vault
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    </Link>
+                  )}
                 </div>
                 <p className="text-xs text-emerald-800">
                   Both parties have unconditionally assented under Section 7 of the Indian Contract Act. An immutable SHA-256 digital certificate is preserved in the evidence repository.
@@ -705,6 +936,15 @@ function ConfirmationsContent() {
           )}
         </CardContent>
       </Card>
+
+      {/* Follow-up Chat Comparison Modal */}
+      <UpdatedChatComparisonModal
+        isOpen={isComparisonModalOpen}
+        onClose={() => setIsComparisonModalOpen(false)}
+        currentConversation={currentConversation}
+        currentAnalysis={currentAnalysis}
+        onUpdateCompleted={handleUpdateCompleted}
+      />
     </div>
   );
 }
