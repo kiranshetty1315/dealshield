@@ -42,6 +42,15 @@ def extract_project_id(url: str) -> str:
 
 
 def main():
+    # Auto-switch to virtual environment Python if available and not already running in it
+    venv_win = API_DIR / ".venv" / "Scripts" / "python.exe"
+    venv_posix = API_DIR / ".venv" / "bin" / "python"
+    target_python = venv_win if venv_win.exists() else (venv_posix if venv_posix.exists() else None)
+    if target_python and Path(sys.executable).resolve() != target_python.resolve():
+        import subprocess
+        result = subprocess.run([str(target_python), str(Path(__file__).resolve())] + sys.argv[1:])
+        sys.exit(result.returncode)
+
     load_env()
 
     print("=================================================================")
