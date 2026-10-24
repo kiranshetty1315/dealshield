@@ -214,7 +214,7 @@ export default function DashboardPage() {
             )}
             <p className="text-xs text-slate-500 mt-1">
               {confirmedAgreements > 0
-                ? "Legally enforceable assent"
+                ? "Mutual assent recorded"
                 : "Awaiting counterparty assent"}
             </p>
           </CardContent>

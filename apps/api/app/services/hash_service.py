@@ -11,7 +11,7 @@ LEGAL & ARCHITECTURAL LIMITATIONS NOTICE:
    issued by a licensed Certifying Authority (CCA).
 4. Evidence Vault records must be coupled with authenticated audit trails, timestamps,
    and explicit mutual confirmation logs to be useful as corroborative electronic
-   records under Section 65B of the Indian Evidence Act, 1872 / Bharatiya Sakshya Adhiniyam, 2023.
+   records under Section 63 of the Bharatiya Sakshya Adhiniyam, 2023 / Section 65B of the Indian Evidence Act, 1872.
 =============================================================================
 """
 

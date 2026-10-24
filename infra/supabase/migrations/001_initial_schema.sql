@@ -168,22 +168,29 @@ ALTER TABLE public.audit_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.document_hashes ENABLE ROW LEVEL SECURITY;
 
 -- Users: can read and update own profile
+DROP POLICY IF EXISTS users_select_own ON public.users;
 CREATE POLICY users_select_own ON public.users
     FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS users_update_own ON public.users;
 CREATE POLICY users_update_own ON public.users
     FOR UPDATE USING (auth.uid() = id);
 
 -- Conversations: owner has full access
+DROP POLICY IF EXISTS conversations_select_own ON public.conversations;
 CREATE POLICY conversations_select_own ON public.conversations
     FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS conversations_insert_own ON public.conversations;
 CREATE POLICY conversations_insert_own ON public.conversations
     FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS conversations_update_own ON public.conversations;
 CREATE POLICY conversations_update_own ON public.conversations
     FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS conversations_delete_own ON public.conversations;
 CREATE POLICY conversations_delete_own ON public.conversations
     FOR DELETE USING (auth.uid() = user_id);
 
 -- Messages: accessible if user owns the conversation
+DROP POLICY IF EXISTS messages_select_own ON public.messages;
 CREATE POLICY messages_select_own ON public.messages
     FOR SELECT USING (
         EXISTS (
@@ -194,6 +201,7 @@ CREATE POLICY messages_select_own ON public.messages
     );
 
 -- Analyses: accessible if user owns the source conversation
+DROP POLICY IF EXISTS analyses_select_own ON public.analyses;
 CREATE POLICY analyses_select_own ON public.analyses
     FOR SELECT USING (
         EXISTS (
@@ -204,6 +212,7 @@ CREATE POLICY analyses_select_own ON public.analyses
     );
 
 -- Agreements: accessible via conversation ownership chain
+DROP POLICY IF EXISTS agreements_select_own ON public.agreements;
 CREATE POLICY agreements_select_own ON public.agreements
     FOR SELECT USING (
         EXISTS (
@@ -215,6 +224,7 @@ CREATE POLICY agreements_select_own ON public.agreements
     );
 
 -- Agreement versions: accessible via agreement ownership
+DROP POLICY IF EXISTS agreement_versions_select_own ON public.agreement_versions;
 CREATE POLICY agreement_versions_select_own ON public.agreement_versions
     FOR SELECT USING (
         EXISTS (
@@ -227,6 +237,7 @@ CREATE POLICY agreement_versions_select_own ON public.agreement_versions
     );
 
 -- Confirmations: owner of agreement can view confirmations
+DROP POLICY IF EXISTS confirmations_select_own ON public.confirmations;
 CREATE POLICY confirmations_select_own ON public.confirmations
     FOR SELECT USING (
         EXISTS (
@@ -239,6 +250,7 @@ CREATE POLICY confirmations_select_own ON public.confirmations
     );
 
 -- Audit events: strictly scoped to the entity owner or actor (fixes RLS leak)
+DROP POLICY IF EXISTS audit_events_select_own ON public.audit_events;
 CREATE POLICY audit_events_select_own ON public.audit_events
     FOR SELECT USING (
         actor_id = auth.uid()
@@ -259,6 +271,7 @@ CREATE POLICY audit_events_select_own ON public.audit_events
     );
 
 -- Document hashes: strictly scoped to owner of the hashed document (fixes RLS leak)
+DROP POLICY IF EXISTS document_hashes_select_own ON public.document_hashes;
 CREATE POLICY document_hashes_select_own ON public.document_hashes
     FOR SELECT USING (
         EXISTS (
@@ -312,10 +325,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS set_updated_at_users ON public.users;
 CREATE TRIGGER set_updated_at_users
     BEFORE UPDATE ON public.users
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
 
+DROP TRIGGER IF EXISTS set_updated_at_agreements ON public.agreements;
 CREATE TRIGGER set_updated_at_agreements
     BEFORE UPDATE ON public.agreements
     FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -335,6 +350,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS enforce_audit_append_only ON public.audit_events;
 CREATE TRIGGER enforce_audit_append_only
     BEFORE UPDATE OR DELETE ON public.audit_events
     FOR EACH ROW EXECUTE FUNCTION public.prevent_audit_modification();

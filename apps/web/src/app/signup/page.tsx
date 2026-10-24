@@ -93,7 +93,7 @@ export default function SignupPage() {
               Create DealShield<span className="text-blue-600">AI</span> Account
             </CardTitle>
             <CardDescription className="text-xs text-slate-500 max-w-xs mx-auto">
-              Get started converting informal negotiations into legally binding, tamper-evident contracts.
+              Get started converting informal negotiations into plain-language commercial agreements with tamper-evident audit trails.
             </CardDescription>
           </CardHeader>
 
@@ -219,7 +219,7 @@ export default function SignupPage() {
                 Statutory Privacy Protection
               </div>
               <p>
-                All uploaded WhatsApp transcripts are protected under application-level AES-256 encryption with Section 12 DPDP Act 2023 erasure rights.
+                All uploaded WhatsApp transcripts are protected under application-level Fernet (AES-128-CBC + HMAC) encryption with Section 12 DPDP Act 2023 erasure rights.
               </p>
             </div>
 

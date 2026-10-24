@@ -35,6 +35,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import {
   ConfirmationStatus,
   Agreement,
@@ -73,6 +74,9 @@ function ConfirmationsContent() {
   const agreementIdParam = searchParams.get("agreement_id");
   const chatIdParam = searchParams.get("chat_id");
 
+  const { user, isAuthenticated } = useAuth();
+  const allowDirectConfirm = process.env.NEXT_PUBLIC_ALLOW_DIRECT_CONFIRM === "true";
+
   // Negotiations / Conversations list
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(chatIdParam);
@@ -92,7 +96,7 @@ function ConfirmationsContent() {
   const [counterpartyEmails, setCounterpartyEmails] = useState<Record<string, string>>({});
 
   // Shareable link state
-  const [shareableLink, setShareableLink] = useState<{ partyName: string; url: string } | null>(null);
+  const [shareableLink, setShareableLink] = useState<{ partyName: string; url: string; maskedEmail?: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGeneratingToken, setIsGeneratingToken] = useState<string | null>(null);
 
@@ -301,6 +305,12 @@ function ConfirmationsContent() {
   // Generate single-use signed link for external counterparty
   const handleGenerateShareableToken = async (partyName: string) => {
     if (!agreement) return;
+
+    if (!isAuthenticated) {
+      setErrorMessage("Please sign in to generate secure review links for external counterparties.");
+      return;
+    }
+
     const email = counterpartyEmails[partyName]?.trim();
     if (!email) {
       setErrorMessage(`Please enter a valid counterparty email for ${partyName} before generating a review link.`);
@@ -314,7 +324,7 @@ function ConfirmationsContent() {
       const res = await api.generatePartyToken(agreement.id, partyName, email);
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const fullUrl = `${origin}/review?token=${res.token}`;
-      setShareableLink({ partyName, url: fullUrl });
+      setShareableLink({ partyName, url: fullUrl, maskedEmail: res.masked_email });
     } catch (err: any) {
       setErrorMessage(`Failed to generate review link: ${err.message || err}`);
     } finally {
@@ -585,7 +595,7 @@ function ConfirmationsContent() {
                 Mutual Assent Status (Section 7 ICA, 1872)
               </CardTitle>
               <CardDescription className="text-xs">
-                Under Indian contract law, acceptance must be absolute and unqualified to create a legally binding agreement.
+                Under Indian contract law (Section 7 ICA, 1872), acceptance must be absolute and unqualified to reflect valid consensus ad idem.
               </CardDescription>
             </div>
 
@@ -851,9 +861,28 @@ function ConfirmationsContent() {
                                   value={shareableLink.url}
                                   className="text-[10px] font-mono h-7 bg-white text-slate-800"
                                 />
+                                {shareableLink.maskedEmail && (
+                                  <p className="text-[10px] text-blue-900 font-medium">
+                                    Recipient OTP Destination: <strong>{shareableLink.maskedEmail}</strong>
+                                  </p>
+                                )}
                                 <p className="text-[10px] text-blue-800 leading-normal">
-                                  Send this link to {party.party_name}. They will enter their email ({counterpartyEmails[party.party_name]}) and verify with a one-time passcode to review and sign.
+                                  Send this link to {party.party_name}. They will enter their declared email and verify with a one-time passcode to review and assent.
                                 </p>
+                              </div>
+                            )}
+
+                            {allowDirectConfirm && (
+                              <div className="pt-2 border-t border-slate-100">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleConfirmAsParty(party.party_name)}
+                                  disabled={actionLoading !== null}
+                                  className="w-full text-[11px] text-slate-600 hover:text-slate-900"
+                                >
+                                  Direct Confirm (Dev Bypass)
+                                </Button>
                               </div>
                             )}
                           </div>

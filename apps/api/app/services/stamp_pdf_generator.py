@@ -40,6 +40,7 @@ class NumberedCanvas(canvas.Canvas):
 
     def __init__(self, *args, **kwargs):
         kwargs["pageCompression"] = 0
+        kwargs["invariant"] = 1
         super().__init__(*args, **kwargs)
         self.setTitle("DealShield AI Commercial Agreement Record")
         self.setAuthor("DealShield AI")
@@ -117,6 +118,7 @@ class StampPaperPdfService:
             rightMargin=36,
             topMargin=36,
             bottomMargin=54,
+            invariant=1,
         )
 
         styles = getSampleStyleSheet()
@@ -364,8 +366,8 @@ class StampPaperPdfService:
         )
         elements.append(
             Paragraph(
-                "Electronic assents recorded below were verified via single-use security tokens and Email OTP "
-                "to the counterparty address declared by the initiating party:",
+                "Electronic assents recorded below reflect direct platform confirmation for the initiating party "
+                "and single-use signed token with Email OTP verification for external counterparties:",
                 ParagraphStyle("CertSubtitle", fontName="Helvetica", fontSize=8, leading=11, textColor=colors.HexColor("#475569"), spaceAfter=8),
             )
         )
@@ -408,23 +410,32 @@ class StampPaperPdfService:
                 status_color = "#D97706"
                 confirmed_date = "Awaiting confirmation"
 
-            masked_email = record.masked_email if (record and record.masked_email) else "Not provided"
+            masked_email = record.masked_email if (record and record.masked_email) else "Not recorded"
             method_desc = (
                 "Direct platform confirmation (Initiator)"
                 if is_initiator
                 else "Email OTP to declared counterparty address. Not an Aadhaar eSign."
             )
-            ip_val = f"{record.ip_hash[:12]}..." if (record and record.ip_hash) else "Anonymized DPDP Hash"
+            ip_val = f"{record.ip_hash[:16]}..." if (record and record.ip_hash) else "Not recorded"
             ver_num = record.agreed_version_number if (record and record.agreed_version_number) else agreement.current_version
-            c_hash = f"{record.agreed_content_hash[:16]}..." if (record and record.agreed_content_hash) else "Standard V1 digest"
+            c_hash = record.agreed_content_hash if (record and record.agreed_content_hash) else "Not recorded"
+
+            if is_initiator:
+                email_ver_text = "Not applicable (Direct Platform Assent)"
+            elif record and record.email_verified_at:
+                email_ver_text = record.email_verified_at.strftime("%d-%b-%Y %I:%M %p UTC")
+            else:
+                email_ver_text = "Not recorded"
 
             lines = [
                 f"<font size=8 color='#64748B'><b>{role_label}</b></font><br/>",
                 f"<font size=10 color='#0F172A'><b>{party_name}</b></font><br/>",
                 f"<font size=8 color='{status_color}'><b>&bull; {status_label}</b></font><br/>",
                 f"<font size=7 color='#334155'><b>Masked Email:</b> {masked_email}</font><br/>",
+                f"<font size=7 color='#334155'><b>Email Verified:</b> {email_ver_text}</font><br/>",
                 f"<font size=7 color='#334155'><b>Timestamp:</b> {confirmed_date}</font><br/>",
                 f"<font size=7 color='#334155'><b>Assent Version:</b> v{ver_num}.0 &bull; <b>IP Ref:</b> <code>{ip_val}</code></font><br/>",
+                f"<font size=6.5 color='#334155'><b>Agreed Hash:</b> <code>{c_hash}</code></font><br/>",
                 f"<font size=6.5 color='#64748B'><b>Verification Method:</b> {method_desc}</font>",
             ]
             if record and record.declined and record.decline_reason:

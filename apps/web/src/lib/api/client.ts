@@ -190,7 +190,7 @@ export class ApiClient {
   async getConversation(chatId: string): Promise<ChatUploadResponse> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats/${encodeURIComponent(chatId)}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
     });
 
     if (!res.ok) {
@@ -203,7 +203,7 @@ export class ApiClient {
   async listChats(): Promise<ConversationRecord[]> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
       cache: "no-store",
     });
     if (!res.ok) {
@@ -215,7 +215,7 @@ export class ApiClient {
   async deleteChat(chatId: string): Promise<{ status: string; chat_id: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats/${encodeURIComponent(chatId)}`, {
       method: "DELETE",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to delete chat" }));
@@ -227,7 +227,7 @@ export class ApiClient {
   async deleteAllChats(): Promise<{ status: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats`, {
       method: "DELETE",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to erase message history" }));
@@ -349,7 +349,8 @@ export class ApiClient {
     agreementId: string,
     partyName: string,
     confirmed: boolean,
-    notes?: string
+    notes?: string,
+    versionNumber: number = 1
   ): Promise<ConfirmationStatus> {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations`, {
       method: "POST",
@@ -362,6 +363,7 @@ export class ApiClient {
         party_name: partyName,
         confirmed,
         notes,
+        version_number: versionNumber,
       }),
     });
 
@@ -379,7 +381,7 @@ export class ApiClient {
     notes?: string,
     versionNumber: number = 1
   ): Promise<ConfirmationStatus> {
-    return this.recordConfirmation(agreementId, partyName, confirmed, notes);
+    return this.recordConfirmation(agreementId, partyName, confirmed, notes, versionNumber);
   }
 
   async getConfirmationStatus(agreementId: string): Promise<ConfirmationStatus> {
@@ -590,7 +592,7 @@ export class ApiClient {
 
     const res = await fetch(url.toString(), {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
       cache: "no-store",
     });
 

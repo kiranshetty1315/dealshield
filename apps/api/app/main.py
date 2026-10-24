@@ -33,13 +33,13 @@ async def lifespan(app: FastAPI):
             settings.SECRET_KEY == SHIPPED_DEFAULT_SECRET_KEY
             or settings.IP_HASH_SALT == SHIPPED_DEFAULT_IP_HASH_SALT
             or settings.ENCRYPTION_KEY == SHIPPED_DEFAULT_ENCRYPTION_KEY
+            or "placeholder" in settings.SUPABASE_URL
+            or "placeholder" in settings.SUPABASE_ANON_KEY
         ):
-            logger.warning(
-                "********************************************************************************\n"
-                "CRITICAL SECURITY WARNING: Default shipped credentials/salts detected in a non-development environment (%s)!\n"
-                "Please override SECRET_KEY, IP_HASH_SALT, and ENCRYPTION_KEY immediately via environment variables or .env.\n"
-                "********************************************************************************",
-                settings.ENVIRONMENT,
+            raise RuntimeError(
+                f"Production startup blocked: Default shipped credentials/salts or placeholder Supabase credentials "
+                f"detected in non-development environment '{settings.ENVIRONMENT}'. "
+                "You must configure production SECRET_KEY, IP_HASH_SALT, ENCRYPTION_KEY, and SUPABASE credentials."
             )
     yield
 

@@ -182,9 +182,10 @@ class AgreementGeneratorService:
         )
 
         # 4. Generate Single-Use Confirmation Tokens for Counterparties
+        v1_id = agreement.versions[0].id if (agreement.versions and agreement.versions[0].id) else agreement.id
         self.confirmation_repo.create_confirmation_tokens(
             agreement_id=agreement.id,
-            version_id=agreement.id,
+            version_id=v1_id,
             party_names=contracting_parties,
             hours_valid=72,
         )

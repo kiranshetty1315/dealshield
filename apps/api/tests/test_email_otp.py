@@ -131,7 +131,7 @@ def test_inspect_token_hides_draft_without_session():
     data = inspect_res.json()
     assert data["requires_email_verification"] is True
     assert data["agreement"] is None
-    assert data["masked_email"] == "p*****@example.com"
+    assert data["masked_email"] == "p***a@e***e.com"
 
 
 def test_email_check_normalization_and_zero_knowledge_match():
@@ -453,3 +453,107 @@ def test_audit_logs_contain_no_plaintext_secrets():
         assert raw_token not in meta_str
         assert session_token not in meta_str
         assert otp not in meta_str
+
+
+def test_confirmation_link_created_audit_logged():
+    agreement_id = create_test_agreement("analysis_audit_link_01")
+    link_res = client.post(
+        "/api/v1/confirmations/tokens",
+        json={
+            "agreement_id": agreement_id,
+            "party_name": "Priya Sharma",
+            "party_email": "priya@example.com",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert link_res.status_code == 200
+    res_data = link_res.json()
+    assert "token_hash" not in res_data
+    assert res_data.get("masked_email") == "p***a@e***e.com"
+
+    audit_repo = AuditRepository()
+    events = audit_repo.get_audit_trail(agreement_id)
+    actions = [ev.get("action") for ev in events]
+    assert "confirmation_link_created" in actions
+
+
+def test_version_assent_reset_on_create_new_version():
+    from app.schemas.agreement import Clause
+    agreement_id = create_test_agreement("analysis_version_reset_01")
+    agree_repo = AgreementRepository()
+    conf_repo = ConfirmationRepository()
+
+    # Initiator confirms v1
+    conf_repo.submit_confirmation_by_party(
+        agreement_id=agreement_id,
+        party_name="Raj Mehta",
+        confirmed=True,
+    )
+    status_v1 = conf_repo.get_confirmation_status(agreement_id, version_number=1)
+    raj_v1 = next((p for p in status_v1.parties if p.party_name == "Raj Mehta"), None)
+    assert raj_v1 is not None
+    assert raj_v1.confirmed is True
+
+    # Now initiator creates v2
+    v2 = agree_repo.create_new_version(
+        agreement_id=agreement_id,
+        clauses=[Clause(clause_id="clause_01", title="Updated Clause", body="New scope")],
+    )
+    assert v2 is not None
+    assert v2.version_number == 2
+
+    # Verify confirmations for agreement are reset
+    agreement = agree_repo.get_agreement(agreement_id)
+    assert agreement.status == "draft"
+
+    status_v2 = conf_repo.get_confirmation_status(agreement_id, version_number=2)
+    for p in status_v2.parties:
+        assert p.confirmed is False
+
+
+def test_direct_confirmation_rejects_unauthorized_user():
+    from app.db.repository import UserRepository
+    user_repo = UserRepository()
+    attacker = user_repo.create_user(
+        email="attacker@example.com",
+        password_hash="mock_hash",
+        full_name="Attacker User",
+    )
+    agreement_id = create_test_agreement("analysis_ownership_01")
+
+    attacker_token = create_access_token(attacker["id"], attacker["email"])
+    attacker_headers = {"Authorization": f"Bearer {attacker_token}"}
+
+    res = client.post(
+        "/api/v1/confirmations",
+        json={
+            "agreement_id": agreement_id,
+            "party_name": "Raj Mehta",
+            "version_number": 1,
+            "confirmed": True,
+            "signature_type": "standard",
+        },
+        headers=attacker_headers,
+    )
+    assert res.status_code == 403
+    assert "You do not have permission" in res.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_production_lifespan_hard_stop():
+    from app.main import lifespan
+
+    settings.ENVIRONMENT = "production"
+    settings.SECRET_KEY = "dealshield-insecure-default-dev-secret-key-change-in-production"
+    try:
+        with pytest.raises(RuntimeError) as exc_info:
+            async with lifespan(app):
+                pass
+        assert "Production startup blocked" in str(exc_info.value)
+    finally:
+        # Reset to development settings
+        settings.ENVIRONMENT = "development"
+        settings.SECRET_KEY = "dealshield-insecure-default-dev-secret-key-change-in-production"
+
+
+

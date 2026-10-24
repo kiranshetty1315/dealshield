@@ -10,6 +10,7 @@ from app.schemas.auth import (
     UserResponse,
     AuthResponse,
 )
+from app.core.config import settings
 from app.db.repository import UserRepository, AuditRepository
 from app.core.security import (
     hash_password,
@@ -95,8 +96,13 @@ async def login(req: UserLoginRequest):
     stored_hash = user.get("password_hash", "")
     is_valid = verify_password(stored_hash, req.password)
 
-    # Demo fallback convenience for demo@dealshield.local
-    if not is_valid and clean_email == "demo@dealshield.local" and req.password == "password123":
+    # Demo fallback convenience for demo@dealshield.local (development only)
+    if (
+        not is_valid
+        and settings.ENVIRONMENT == "development"
+        and clean_email == "demo@dealshield.local"
+        and req.password == "password123"
+    ):
         is_valid = True
 
     if not is_valid:
@@ -262,7 +268,12 @@ async def change_password(req: PasswordChangeRequest, authorization: Optional[st
     # Validate current password
     stored_hash = user.get("password_hash", "")
     is_valid = verify_password(stored_hash, req.current_password)
-    if not is_valid and user.get("email") == "demo@dealshield.local" and req.current_password == "password123":
+    if (
+        not is_valid
+        and settings.ENVIRONMENT == "development"
+        and user.get("email") == "demo@dealshield.local"
+        and req.current_password == "password123"
+    ):
         is_valid = True
 
     if not is_valid:

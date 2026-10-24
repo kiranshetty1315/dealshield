@@ -482,7 +482,7 @@ export default function ProfilePage() {
                 <Lock className="h-4 w-4" />
               </div>
               <div className="space-y-0.5">
-                <span className="font-bold text-slate-900 block">AES-256 Message Encryption</span>
+                <span className="font-bold text-slate-900 block">Fernet (AES-128) Message Encryption</span>
                 <p className="text-[11px] text-slate-500">
                   Transcripts and raw WhatsApp messages are encrypted at rest with Fernet symmetric cryptography in Supabase.
                 </p>

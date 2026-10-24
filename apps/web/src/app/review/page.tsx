@@ -244,6 +244,23 @@ function ReviewContent() {
       );
       setDecisionStatus("confirmed");
       setConfirmedAt(new Date().toISOString());
+
+      // Broadcast assent to other tabs (confirmations dashboard)
+      const broadcastPayload = {
+        type: "CONFIRMATION_UPDATED",
+        agreementId: res.agreement_id || agreement?.id,
+        partyName: res.party_name || partyName,
+        status: "confirmed",
+        timestamp: new Date().toISOString(),
+      };
+      try {
+        const bc = new BroadcastChannel("dealshield_confirmations");
+        bc.postMessage(broadcastPayload);
+        bc.close();
+      } catch {}
+      try {
+        localStorage.setItem("dealshield_confirmation_broadcast", JSON.stringify(broadcastPayload));
+      } catch {}
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to record confirmation assent.");
     } finally {
@@ -274,6 +291,23 @@ function ReviewContent() {
       setDeclinedAt(new Date().toISOString());
       setDeclineReason(declineInput.trim());
       setActionView("idle");
+
+      // Broadcast decline to other tabs (confirmations dashboard)
+      const broadcastPayload = {
+        type: "CONFIRMATION_UPDATED",
+        agreementId: res.agreement_id || agreement?.id,
+        partyName: res.party_name || partyName,
+        status: "declined",
+        timestamp: new Date().toISOString(),
+      };
+      try {
+        const bc = new BroadcastChannel("dealshield_confirmations");
+        bc.postMessage(broadcastPayload);
+        bc.close();
+      } catch {}
+      try {
+        localStorage.setItem("dealshield_confirmation_broadcast", JSON.stringify(broadcastPayload));
+      } catch {}
     } catch (err: any) {
       setErrorMessage(err.message || "Failed to submit decline response.");
     } finally {
@@ -397,24 +431,41 @@ function ReviewContent() {
                 </p>
               )}
 
-              <div className="pt-2 flex justify-center">
-                <Button
-                  onClick={handleDownloadPdf}
-                  disabled={isDownloadingPdf}
-                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold gap-2 shadow-xs"
-                >
-                  {isDownloadingPdf ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Generating PDF...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4" />
-                      Download Agreement PDF Record
-                    </>
-                  )}
-                </Button>
+              <div className="pt-2 flex flex-col items-center gap-2">
+                {sessionToken ? (
+                  <Button
+                    onClick={handleDownloadPdf}
+                    disabled={isDownloadingPdf}
+                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold gap-2 shadow-xs"
+                  >
+                    {isDownloadingPdf ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Generating PDF...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4" />
+                        Download Agreement PDF Record
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <div className="space-y-2 text-center">
+                    <p className="text-[11px] text-emerald-800">
+                      Active review session expired on reload. Please re-verify your email to download the PDF record.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setStep(1)}
+                      className="text-xs border-emerald-400 text-emerald-900 hover:bg-emerald-100 gap-1.5"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Verify Email to Re-download
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

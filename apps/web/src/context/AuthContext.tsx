@@ -121,19 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(authRes.user));
       return authRes.user;
     } catch (err) {
-      // Offline fallback: create local user session if backend is offline
-      const fallbackUser: User = {
-        id: "00000000-0000-0000-0000-000000000001",
-        email: email.trim().toLowerCase(),
-        full_name: fullName || "DealShield User",
-        role: "Contract Sponsor",
-        organization: organization || "",
-      };
-      setUser(fallbackUser);
-      setToken("local-session-token");
-      localStorage.setItem(STORAGE_KEY_TOKEN, "local-session-token");
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(fallbackUser));
-      return fallbackUser;
+      throw err;
     } finally {
       setIsLoading(false);
     }

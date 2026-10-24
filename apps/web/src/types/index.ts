@@ -239,7 +239,8 @@ export interface TokenGenerateResponse {
   party_name: string;
   raw_token: string;
   token: string;
-  token_hash: string;
+  masked_email?: string;
+  token_hash?: string;
   expires_at: string;
   confirmation_url: string;
 }

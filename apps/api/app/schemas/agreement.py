@@ -22,6 +22,8 @@ class Clause(BaseModel):
 
 
 class AgreementVersion(BaseModel):
+    id: Optional[str] = Field(None, description="Agreement version UUID")
+    version_id: Optional[str] = Field(None, description="Agreement version UUID alias")
     version_number: int = Field(..., ge=1)
     clauses: List[Clause] = Field(default_factory=list)
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

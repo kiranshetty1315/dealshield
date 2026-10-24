@@ -1,15 +1,60 @@
+from datetime import datetime, timezone
+import hashlib
 from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, status, Response
 from app.schemas.agreement import Agreement, AgreementCreateRequest
 from app.services.agreement_generator import AgreementGeneratorService
 from app.services.hash_service import HashService
-from app.db.repository import AgreementRepository, AnalysisRepository
+from app.core.config import settings
+from app.api.deps import get_optional_current_user
+from app.db.repository import (
+    AgreementRepository,
+    AnalysisRepository,
+    ConfirmationRepository,
+    user_owns_agreement,
+)
 
 router = APIRouter(prefix="/agreements", tags=["Agreements"])
 
 agreement_repo = AgreementRepository()
 generator_service = AgreementGeneratorService()
 analysis_repo = AnalysisRepository()
+
+
+def check_agreement_access(
+    agreement_id: str,
+    current_user: Optional[dict] = None,
+    x_review_session: Optional[str] = None,
+) -> bool:
+    """Verifies that caller has authorization to view or download agreement record."""
+    if agreement_id == "sample-agreement-uuid" and settings.ENVIRONMENT == "development":
+        return True
+
+    if current_user and user_owns_agreement(agreement_repo.client, current_user["id"], agreement_id):
+        return True
+
+    if x_review_session:
+        session_hash = ConfirmationRepository.hash_sha256(x_review_session)
+        res = (
+            agreement_repo.client.table("confirmations")
+            .select("id, session_expires_at")
+            .eq("agreement_id", agreement_id)
+            .eq("session_token_hash", session_hash)
+            .execute()
+        )
+        data = res.data if isinstance(res.data, list) else ([res.data] if res.data else [])
+        if data and data[0]:
+            exp_iso = data[0].get("session_expires_at")
+            if exp_iso:
+                exp_dt = datetime.fromisoformat(exp_iso.replace("Z", "+00:00"))
+                if exp_dt > datetime.now(timezone.utc):
+                    return True
+
+    if settings.ENVIRONMENT == "development" and not current_user and not x_review_session:
+        return True
+
+    return False
+
 
 
 @router.post(
@@ -93,8 +138,18 @@ async def create_new_agreement_version(agreement_id: str, request: AgreementCrea
     summary="Get Agreement Details",
     description="Retrieve agreement version history and status from Supabase.",
 )
-async def get_agreement(agreement_id: str) -> Agreement:
+async def get_agreement(
+    agreement_id: str,
+    current_user: Optional[dict] = Depends(get_optional_current_user),
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
+) -> Agreement:
     """Retrieve agreement by ID."""
+    if not check_agreement_access(agreement_id, current_user, x_review_session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this agreement record.",
+        )
+
     agreement = agreement_repo.get_agreement(agreement_id)
     if not agreement:
         if agreement_id == "sample-agreement-uuid":
@@ -121,8 +176,16 @@ async def get_agreement(agreement_id: str) -> Agreement:
 async def export_agreement_pdf(
     agreement_id: str,
     format: Optional[str] = None,
+    current_user: Optional[dict] = Depends(get_optional_current_user),
+    x_review_session: Optional[str] = Header(None, alias="X-Review-Session"),
 ):
     """Export formatted agreement document with cryptographic header."""
+    if not check_agreement_access(agreement_id, current_user, x_review_session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this agreement record.",
+        )
+
     agreement = agreement_repo.get_agreement(agreement_id)
     if not agreement:
         if agreement_id == "sample-agreement-uuid":
@@ -148,7 +211,7 @@ async def export_agreement_pdf(
 
     # Default: Generate Plain-Language Commercial Agreement PDF
     from app.services.stamp_pdf_generator import StampPaperPdfService
-    from app.db.repository import ConfirmationRepository
+    from app.db.repository import ConfirmationRepository, AuditRepository
 
     conf_repo = ConfirmationRepository(client=agreement_repo.client)
     try:
@@ -157,10 +220,28 @@ async def export_agreement_pdf(
         conf_status = None
 
     pdf_bytes = StampPaperPdfService.generate_pdf(agreement=agreement, confirmation_status=conf_status)
+    pdf_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
+
+    # Log immutable audit event with computed PDF SHA-256 fingerprint
+    try:
+        audit_repo = AuditRepository(client=agreement_repo.client)
+        audit_repo.log_event(
+            entity_type="agreement",
+            entity_id=agreement.id,
+            action="agreement_pdf_exported",
+            actor_id=current_user["id"] if current_user else None,
+            metadata={
+                "format": "pdf",
+                "pdf_sha256": pdf_sha256,
+                "method": "dashboard_export" if current_user else "session_export",
+            },
+        )
+    except Exception:
+        pass
 
     headers = {
         "Content-Disposition": f'attachment; filename="DealShield-Agreement-{agreement_id[:8]}.pdf"',
         "Content-Type": "application/pdf",
-        "X-DealShield-Hash": agreement.versions[-1].content_hash or "",
+        "X-DealShield-Hash": pdf_sha256,
     }
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

@@ -490,10 +490,10 @@ export default function SettingsPage() {
               <div className="border border-amber-200 bg-amber-50/80 rounded-xl p-4 text-amber-950 space-y-1.5">
                 <div className="flex items-center gap-2 font-bold text-xs">
                   <Shield className="h-4 w-4 text-amber-700 shrink-0" />
-                  <span>Section 12 DPDP Act 2023 — Right to Erasure & AES-256 Storage</span>
+                  <span>Section 12 DPDP Act 2023 — Right to Erasure & Fernet Encrypted Storage</span>
                 </div>
                 <p className="text-xs text-amber-900 leading-relaxed">
-                  All WhatsApp messages are stored with application-level AES-256 encryption. Once you have synthesized and finalized your agreement draft, you have the statutory right under India&apos;s Digital Personal Data Protection Act to permanently erase the underlying WhatsApp chat history.
+                  All WhatsApp messages are stored with application-level Fernet (AES-128-CBC + HMAC) encryption. Once you have synthesized and finalized your agreement draft, you have the statutory right under India&apos;s Digital Personal Data Protection Act to permanently erase the underlying WhatsApp chat history.
                 </p>
                 <div className="text-[11px] text-amber-800 font-medium pt-0.5">
                   • Deletion permanently removes all encrypted message records from the database.
@@ -524,7 +524,7 @@ export default function SettingsPage() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between text-xs text-slate-600 font-semibold">
                   <span>Active Stored Conversations ({conversations.length})</span>
-                  <span className="text-[11px] font-normal text-slate-400">Stored at Rest with AES-256</span>
+                  <span className="text-[11px] font-normal text-slate-400">Stored at Rest with Fernet</span>
                 </div>
 
                 <div className="border border-slate-200 rounded-xl divide-y divide-slate-100 bg-white overflow-hidden shadow-xs">
@@ -564,7 +564,7 @@ export default function SettingsPage() {
                               {chat.message_count} messages
                             </Badge>
                             <Badge variant="outline" className="text-[10px] border-emerald-300 bg-emerald-50 text-emerald-800 font-medium">
-                              AES-256 Encrypted
+                              Fernet Encrypted
                             </Badge>
                           </div>
 
@@ -747,7 +747,7 @@ export default function SettingsPage() {
                 <div className="space-y-1.5 text-[11px] text-slate-600 leading-relaxed">
                   <div className="flex items-start gap-1.5">
                     <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
-                    <span><strong>AES-256 Fernet:</strong> Messages are encrypted with a 256-bit symmetric key prior to database persistence.</span>
+                    <span><strong>Fernet Encryption:</strong> Messages are encrypted with AES-128 in CBC mode with HMAC-SHA256 authentication prior to database persistence.</span>
                   </div>
                   <div className="flex items-start gap-1.5">
                     <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />

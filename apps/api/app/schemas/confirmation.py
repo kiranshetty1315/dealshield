@@ -31,7 +31,7 @@ class ConfirmationStatus(BaseModel):
 
 class ConfirmationRequest(BaseModel):
     agreement_id: str
-    version_number: int
+    version_number: int = Field(1, description="Target agreement version number")
     party_name: str
     confirmed: bool
     action: Optional[str] = "agree"

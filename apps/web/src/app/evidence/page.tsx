@@ -269,7 +269,7 @@ function EvidenceContent() {
         <CardContent className="text-xs text-amber-800 space-y-2 leading-relaxed">
           <p>
             A SHA-256 mathematical hash confirms that a document or file has not been altered since the fingerprint was generated.
-            It provides corroborative evidentiary support under Section 65B of the Indian Evidence Act, 1872 / Bharatiya Sakshya Adhiniyam, 2023.
+            It provides corroborative evidentiary support under Section 63 of the Bharatiya Sakshya Adhiniyam, 2023 (formerly Section 65B of the Indian Evidence Act, 1872).
           </p>
           <p>
             However, a hash alone does <strong>not</strong> prove party identity, statutory intention, or satisfy the criteria of an electronic signature under Section 3/3A of the Information Technology Act, 2000.

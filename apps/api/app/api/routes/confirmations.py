@@ -12,7 +12,7 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_client_ip
 from app.core.config import settings
 from app.core.security import decrypt_message_content
 from app.db.repository import (
@@ -95,10 +95,21 @@ async def generate_counterparty_token(
                 detail=f"Party '{payload.party_name}' has already confirmed this agreement. Regeneration is not permitted.",
             )
 
+    # Fetch agreement and latest version UUID to avoid FK violations
+    ag_repo = AgreementRepository(client=conf_repo.client)
+    agreement = ag_repo.get_agreement(payload.agreement_id)
+    if not agreement or not agreement.versions:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agreement {payload.agreement_id} not found.",
+        )
+    latest_ver = agreement.versions[-1]
+    version_id = getattr(latest_ver, "version_id", None) or getattr(latest_ver, "id", None) or payload.agreement_id
+
     try:
         tokens = conf_repo.create_confirmation_tokens(
             agreement_id=payload.agreement_id,
-            version_id=str(uuid.uuid4()),
+            version_id=str(version_id),
             party_names=[payload.party_name],
             party_email=clean_email,
             initiator_user_id=current_user["id"],
@@ -108,8 +119,22 @@ async def generate_counterparty_token(
             raise HTTPException(status_code=400, detail="Failed to generate confirmation token.")
 
         tok = tokens[0]
+        masked = conf_repo.mask_email(clean_email)
         # Return URL without agreement_id query param to prevent URL leak
         confirmation_url = f"/review?token={tok['raw_token']}"
+
+        # Append-only audit record
+        audit_repo.log_event(
+            entity_type="confirmation",
+            entity_id=payload.agreement_id,
+            action="confirmation_link_created",
+            actor_id=current_user["id"],
+            metadata={
+                "party_name": payload.party_name,
+                "masked_email": masked,
+                "expires_at": tok["expires_at"],
+            },
+        )
 
         return {
             "status": "success",
@@ -117,7 +142,7 @@ async def generate_counterparty_token(
             "party_name": payload.party_name,
             "raw_token": tok["raw_token"],
             "token": tok["raw_token"],
-            "token_hash": tok["token_hash"],
+            "masked_email": masked,
             "expires_at": tok["expires_at"],
             "confirmation_url": confirmation_url,
         }
@@ -309,7 +334,7 @@ async def confirm_by_token(
             decline_reason=decline_reason,
             session_token=x_review_session,
         )
-        audit_action = "counterparty_token_declined" if action == "decline" else "counterparty_token_confirmed"
+        audit_action = "counterparty_declined" if action == "decline" else "counterparty_agreed"
         audit_repo.log_event(
             entity_type="confirmation",
             entity_id=result["agreement_id"],
@@ -346,7 +371,7 @@ async def execute_token_confirm_json(
     user_agent: Optional[str] = Header(None, alias="User-Agent"),
 ):
     """JSON payload execution for single-use counterparty tokens."""
-    client_ip = request.client.host if request.client else None
+    client_ip = get_client_ip(request)
     try:
         result = conf_repo.submit_confirmation_by_token(
             raw_token=payload.token,
@@ -357,7 +382,7 @@ async def execute_token_confirm_json(
             decline_reason=payload.decline_reason,
             session_token=x_review_session,
         )
-        audit_action = "counterparty_token_declined" if payload.action == "decline" else "counterparty_token_confirmed"
+        audit_action = "counterparty_declined" if payload.action == "decline" else "counterparty_agreed"
         audit_repo.log_event(
             entity_type="confirmation",
             entity_id=result["agreement_id"],
@@ -408,6 +433,7 @@ async def download_counterparty_pdf(
     ag_id = conf_row.get("agreement_id")
     from app.services.agreement_generator import AgreementGeneratorService
     from app.services.stamp_pdf_generator import StampPaperPdfService
+    import hashlib
 
     ag_repo = AgreementRepository(client=conf_repo.client)
     agreement = ag_repo.get_agreement(ag_id)
@@ -423,8 +449,9 @@ async def download_counterparty_pdf(
         raise HTTPException(status_code=404, detail="Agreement record not found.")
 
     pdf_bytes = StampPaperPdfService.generate_pdf(agreement)
+    pdf_sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
-    # Log audit event
+    # Log audit event with computed PDF SHA-256 fingerprint
     audit_repo.log_event(
         entity_type="agreement",
         entity_id=agreement.id,
@@ -433,6 +460,7 @@ async def download_counterparty_pdf(
             "format": "pdf",
             "exporter": conf_row.get("party_name"),
             "method": "counterparty_session",
+            "pdf_sha256": pdf_sha256,
         },
     )
 
@@ -442,6 +470,7 @@ async def download_counterparty_pdf(
         media_type="application/pdf",
         headers={
             "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-DealShield-Hash": pdf_sha256,
         },
     )
 
@@ -458,7 +487,14 @@ async def submit_confirmation(
     current_user: dict = Depends(get_current_user),
 ) -> ConfirmationStatus:
     """Record two-party agreement confirmation with Bearer token authentication."""
-    client_ip = request.client.host if request.client else None
+    # Ownership verification: ensure authenticated user owns the agreement
+    if not user_owns_agreement(conf_repo.client, current_user["id"], payload.agreement_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to confirm this agreement directly.",
+        )
+
+    client_ip = get_client_ip(request)
 
     try:
         conf_repo.submit_confirmation_by_party(

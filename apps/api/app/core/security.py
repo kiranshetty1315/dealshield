@@ -7,7 +7,7 @@ IMPORTANT ARCHITECTURAL & LEGAL NOTE:
 - Real two-party identity verification, legal digital signature compliance (e.g. IT Act Sec 3/3A / Aadhaar eSign),
   and tamper-evident hardware timestamps require external licensed Certifying Authorities (CA).
 - Service role keys and secrets MUST NEVER be shared with browser clients.
-- Application-level encryption (Fernet / AES-256) protects chat messages at rest in the database.
+- Application-level encryption (Fernet AES-128-CBC + HMAC) protects chat messages at rest in the database.
 """
 
 import base64
@@ -46,7 +46,7 @@ def get_fernet():
 
 
 def encrypt_message_content(text: str) -> str:
-    """Encrypts sensitive chat message content at rest using AES-128/256-CBC with HMAC-SHA256 (Fernet).
+    """Encrypts sensitive chat message content at rest using AES-128-CBC with HMAC-SHA256 (Fernet).
     
     If cryptography library is not yet installed in the local environment, uses a
     standard-library fallback so the application never crashes on startup.
@@ -68,7 +68,7 @@ def encrypt_message_content(text: str) -> str:
 def decrypt_message_content(ciphertext: str) -> str:
     """Decrypts message content transparently.
     
-    Gracefully handles unencrypted legacy text, Fernet AES-256 tokens, and fallback encoding.
+    Gracefully handles unencrypted legacy text, Fernet AES-128-CBC tokens, and fallback encoding.
     """
     if not ciphertext:
         return ciphertext

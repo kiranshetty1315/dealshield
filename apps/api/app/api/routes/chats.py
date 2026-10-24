@@ -1,10 +1,12 @@
 import uuid
 from typing import Optional
-from fastapi import APIRouter, File, UploadFile, HTTPException, status, Request
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status, Request
 from app.schemas.chat import ChatUploadResponse, Message
 from app.services.chat_parser import parse_whatsapp_chat
 from app.services.hash_service import HashService
-from app.core.security import sanitize_filename, verify_access_token
+from app.core.config import settings
+from app.core.security import sanitize_filename
+from app.api.deps import get_current_user, get_optional_current_user, get_client_ip
 from app.db.repository import ConversationRepository, EvidenceRepository, AuditRepository
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
@@ -124,12 +126,9 @@ async def upload_chat(
 
     # Extract authenticated user_id if Bearer token present
     user_id = None
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        token = auth_header.split(" ", 1)[1]
-        payload = verify_access_token(token)
-        if payload:
-            user_id = payload.get("sub")
+    curr_user = get_optional_current_user(request.headers.get("authorization"))
+    if curr_user:
+        user_id = curr_user.get("id")
 
     # 1. Persist Conversation in Supabase
     conv_repo.create_conversation(
@@ -183,7 +182,10 @@ async def upload_chat(
     summary="Get Conversation Messages",
     description="Retrieve stored conversation messages by ID from Supabase.",
 )
-async def get_chat(chat_id: str) -> ChatUploadResponse:
+async def get_chat(
+    chat_id: str,
+    current_user: Optional[dict] = Depends(get_optional_current_user),
+) -> ChatUploadResponse:
     """Retrieve chat by ID from database."""
     conv = conv_repo.get_conversation(chat_id)
     if not conv:
@@ -191,6 +193,14 @@ async def get_chat(chat_id: str) -> ChatUploadResponse:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Conversation {chat_id} not found."
         )
+
+    # In production, check user ownership
+    if settings.ENVIRONMENT != "development":
+        if not current_user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+        owner_id = str(conv.get("user_id", ""))
+        if owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied to this conversation.")
 
     raw_msgs = conv_repo.get_messages(chat_id)
     messages = [
@@ -222,9 +232,15 @@ async def get_chat(chat_id: str) -> ChatUploadResponse:
     summary="List Ingested Conversations",
     description="Retrieve all stored conversations for the current workspace/user.",
 )
-async def list_chats():
+async def list_chats(
+    current_user: Optional[dict] = Depends(get_optional_current_user),
+):
     """Returns list of conversations."""
-    return conv_repo.list_conversations()
+    if not current_user:
+        if settings.ENVIRONMENT != "development":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
+        return conv_repo.list_conversations(user_id="00000000-0000-0000-0000-000000000001")
+    return conv_repo.list_conversations(user_id=current_user["id"])
 
 
 @router.delete(
@@ -232,7 +248,10 @@ async def list_chats():
     summary="Delete Conversation and Messages",
     description="Permanently erases conversation and all associated message transcripts from the database (DPDP Act 2023 Right to Erasure).",
 )
-async def delete_chat(chat_id: str):
+async def delete_chat(
+    chat_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """Deletes conversation and its messages."""
     conv = conv_repo.get_conversation(chat_id)
     if not conv:
@@ -241,6 +260,15 @@ async def delete_chat(chat_id: str):
             detail=f"Conversation {chat_id} not found."
         )
 
+    owner_id = str(conv.get("user_id", ""))
+    DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
+    if owner_id != str(current_user["id"]):
+        if not (settings.ENVIRONMENT == "development" and owner_id == DEMO_USER_ID):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to delete this conversation.",
+            )
+
     conv_repo.delete_conversation(chat_id)
 
     # Log immutable audit event for DPDP erasure verification
@@ -248,6 +276,7 @@ async def delete_chat(chat_id: str):
         entity_type="conversation",
         entity_id=chat_id,
         action="conversation_erased_by_user",
+        actor_id=current_user["id"],
         metadata={
             "reason": "user_requested_erasure_dpdp",
             "filename": conv.get("filename"),
@@ -266,14 +295,17 @@ async def delete_chat(chat_id: str):
     summary="Delete All Conversation History",
     description="Permanently erases all stored conversation transcripts and messages for privacy compliance.",
 )
-async def delete_all_chats():
-    """Deletes all conversations and messages."""
-    count = conv_repo.delete_all_conversations()
+async def delete_all_chats(
+    current_user: dict = Depends(get_current_user),
+):
+    """Deletes all conversations and messages belonging to the current user."""
+    count = conv_repo.delete_all_conversations(user_id=current_user["id"])
 
     audit_repo.log_event(
         entity_type="workspace",
-        entity_id="00000000-0000-0000-0000-000000000001",
+        entity_id=current_user["id"],
         action="all_conversations_erased_by_user",
+        actor_id=current_user["id"],
         metadata={"erased_count": count},
     )
 
