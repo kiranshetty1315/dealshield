@@ -43,3 +43,4 @@ class Agreement(BaseModel):
 class AgreementCreateRequest(BaseModel):
     analysis_id: str = Field(..., description="Analysis ID to generate agreement from")
     template_type: str = Field(default="service_agreement", description="Template to base agreement on")
+    parties: Optional[List[str]] = Field(default=None, description="Optional contracting party names override")

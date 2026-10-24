@@ -130,6 +130,19 @@ def test_analysis_endpoint_success_and_persistence():
     agreement = ag_res.json()
     assert agreement["analysis_id"] == analysis_id
     assert len(agreement["versions"]) >= 1
+    agreement_id = agreement["id"]
+
+    # 4b. Get agreement by chat ID directly
+    ag_by_chat = client.get(f"/api/v1/agreements/chat/{chat_id}")
+    assert ag_by_chat.status_code == 200
+    assert ag_by_chat.json()["id"] == agreement_id
+
+    # 4c. Create updated agreement version
+    v2_res = client.post(f"/api/v1/agreements/{agreement_id}/versions", json={"analysis_id": analysis_id})
+    assert v2_res.status_code == 200
+    v2_data = v2_res.json()
+    assert v2_data["current_version"] == 2
+    assert len(v2_data["versions"]) == 2
 
 
 def test_analysis_nonexistent_chat_fails():

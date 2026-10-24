@@ -15,6 +15,7 @@ from app.db.repository import (
     ConfirmationRepository,
     AuditRepository,
     EvidenceRepository,
+    AnalysisRepository,
 )
 
 
@@ -27,11 +28,13 @@ class AgreementGeneratorService:
         confirmation_repo: Optional[ConfirmationRepository] = None,
         audit_repo: Optional[AuditRepository] = None,
         evidence_repo: Optional[EvidenceRepository] = None,
+        analysis_repo: Optional[AnalysisRepository] = None,
     ):
         self.agreement_repo = agreement_repo or AgreementRepository()
         self.confirmation_repo = confirmation_repo or ConfirmationRepository()
         self.audit_repo = audit_repo or AuditRepository()
         self.evidence_repo = evidence_repo or EvidenceRepository()
+        self.analysis_repo = analysis_repo or AnalysisRepository()
 
     def generate_draft(
         self,
@@ -41,58 +44,109 @@ class AgreementGeneratorService:
         agreement_id: Optional[str] = None,
     ) -> Agreement:
         """Generate Version 1 draft agreement from structured analysis."""
-        contracting_parties = parties or ["Raj Mehta", "Priya Sharma"]
+        analysis = self.analysis_repo.get_analysis(analysis_id)
+        if analysis and not parties and analysis.parties:
+            contracting_parties = [p.name for p in analysis.parties]
+        else:
+            contracting_parties = parties or ["Raj Mehta", "Priya Sharma"]
+
         p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
         p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
 
-        # Synthesize plain-language clauses
-        clauses = [
-            Clause(
-                clause_id="clause_scope_01",
-                title="1. Scope of Work & Deliverables",
+        # Dynamically synthesize clauses from analysis.extracted_terms if available
+        clauses = []
+        if analysis and analysis.extracted_terms:
+            # 1. Scope
+            scope_term = next((t for t in analysis.extracted_terms if t.category == "scope"), None)
+            if scope_term:
+                clauses.append(Clause(
+                    clause_id="clause_scope_01",
+                    title="1. Scope of Work & Deliverables",
+                    body=f"{p2} agrees to perform contractual services for {p1}: {scope_term.description}. Delivery specification: {scope_term.accepted_value or scope_term.proposed_value or 'As mutually confirmed'}.",
+                    source_term_ids=scope_term.source_message_ids or ["term_scope_01"],
+                    statutory_reference="Indian Contract Act, 1872 Section 10 (Lawful Consideration & Object)",
+                ))
+
+            # 2. Consideration
+            pricing_term = next((t for t in analysis.extracted_terms if t.category == "pricing"), None)
+            payment_term = next((t for t in analysis.extracted_terms if t.category == "payment_terms"), None)
+            if pricing_term or payment_term:
+                price_val = pricing_term.accepted_value or pricing_term.proposed_value if pricing_term else "As agreed"
+                pay_desc = payment_term.description if payment_term else "Payable per agreed milestone schedule"
+                src_ids = (pricing_term.source_message_ids if pricing_term else []) + (payment_term.source_message_ids if payment_term else [])
+                clauses.append(Clause(
+                    clause_id="clause_pricing_02",
+                    title="2. Consideration & Commercial Terms",
+                    body=f"The agreed commercial consideration payable by {p1} to {p2} is {price_val}. Payment execution terms: {pay_desc}.",
+                    source_term_ids=src_ids or ["term_price_01"],
+                    statutory_reference="Indian Contract Act, 1872 Section 7 (Absolute Acceptance)",
+                ))
+
+            # 3. Timeline
+            timeline_term = next((t for t in analysis.extracted_terms if t.category == "timeline"), None)
+            if timeline_term:
+                clauses.append(Clause(
+                    clause_id="clause_timeline_03",
+                    title="3. Project Timeline & Delivery Milestones",
+                    body=f"All deliverable commitments shall be completed and submitted by {p2}: {timeline_term.accepted_value or timeline_term.description}.",
+                    source_term_ids=timeline_term.source_message_ids or ["term_timeline_01"],
+                ))
+
+            # 4. Other extracted terms
+            other_terms = [t for t in analysis.extracted_terms if t.category not in ("scope", "pricing", "payment_terms", "timeline")]
+            for idx, ot in enumerate(other_terms, start=4):
+                clauses.append(Clause(
+                    clause_id=f"clause_{ot.category}_{idx:02d}",
+                    title=f"{idx}. {ot.category.replace('_', ' ').title()}",
+                    body=f"{ot.description}. Agreed specification: {ot.accepted_value or ot.proposed_value or 'Confirmed'}.",
+                    source_term_ids=ot.source_message_ids,
+                ))
+
+            # 5. IP & Statutory Safeguards
+            ip_missing = next((m for m in analysis.missing_terms if "ip" in m.category.lower() or "intellectual" in m.category.lower()), None)
+            idx_next = len(clauses) + 1
+            clauses.append(Clause(
+                clause_id="clause_ip_safeguards",
+                title=f"{idx_next}. Intellectual Property & Statutory Safeguards",
                 body=(
-                    f"{p2} agrees to perform full website redesign services for {p1}, "
-                    "including preliminary UI mockups, responsive frontend layout implementation, "
-                    "and final deliverable asset handover."
+                    f"All intellectual property rights and copyrights in final deliverable assets shall vest in {p1} upon full consideration receipt. "
+                    f"Governed by the laws of India. {ip_missing.recommendation if ip_missing else 'Subject to Indian Contract Act, 1872 and Copyright Act, 1957.'}"
                 ),
-                source_term_ids=["term_scope_01"],
-                statutory_reference="Indian Contract Act, 1872 Section 10 (Lawful Consideration & Object)",
-            ),
-            Clause(
-                clause_id="clause_pricing_02",
-                title="2. Consideration & Payment Milestones",
-                body=(
-                    f"The agreed total fixed consideration for the scope is ₹1,00,000 (INR One Lakh only). "
-                    f"Payment shall be disbursed by {p1} in two equal installments: "
-                    "50% (₹50,000) advance payment upon agreement execution, and "
-                    "50% (₹50,000) balance payable upon final deliverable acceptance."
+                source_term_ids=[ip_missing.term_id] if ip_missing else ["missing_ip_01"],
+                statutory_reference="Copyright Act, 1957 (Sections 17 & 19) & Indian Contract Act, 1872",
+            ))
+
+        if not clauses:
+            # Fallback standard clauses
+            clauses = [
+                Clause(
+                    clause_id="clause_scope_01",
+                    title="1. Scope of Work & Deliverables",
+                    body=f"{p2} agrees to perform contractual services for {p1} as negotiated.",
+                    source_term_ids=["term_scope_01"],
+                    statutory_reference="Indian Contract Act, 1872 Section 10",
                 ),
-                source_term_ids=["term_price_01", "term_payment_01"],
-                statutory_reference="Indian Contract Act, 1872 Section 7 (Absolute Acceptance)",
-            ),
-            Clause(
-                clause_id="clause_timeline_03",
-                title="3. Project Timeline & Delivery Milestones",
-                body=(
-                    "All final redesign deliverables shall be completed and submitted for review "
-                    "no later than April 30, 2024. Initial mockups shall be provided within "
-                    "seven (7) business days following upfront consideration receipt."
+                Clause(
+                    clause_id="clause_pricing_02",
+                    title="2. Consideration & Commercial Terms",
+                    body=f"Commercial consideration payable by {p1} to {p2} as agreed in source transcript.",
+                    source_term_ids=["term_price_01"],
+                    statutory_reference="Indian Contract Act, 1872 Section 7",
                 ),
-                source_term_ids=["term_timeline_01"],
-            ),
-            Clause(
-                clause_id="clause_ip_04",
-                title="4. Intellectual Property & Governing Law",
-                body=(
-                    f"All intellectual property rights and copyrights in deliverable designs and source assets "
-                    f"shall irrevocably transfer to {p1} upon full payment of the total agreed consideration. "
-                    "This agreement shall be interpreted in accordance with the laws of India, "
-                    "and subject to conciliation principles under the Indian Contract Act, 1872."
+                Clause(
+                    clause_id="clause_timeline_03",
+                    title="3. Project Timeline & Delivery Milestones",
+                    body="Deliverables shall be completed and submitted according to agreed project milestones.",
+                    source_term_ids=["term_timeline_01"],
                 ),
-                source_term_ids=["missing_ip_01"],
-                statutory_reference="Copyright Act, 1957 & Indian Contract Act, 1872",
-            ),
-        ]
+                Clause(
+                    clause_id="clause_ip_04",
+                    title="4. Intellectual Property & Governing Law",
+                    body=f"All intellectual property rights shall vest in {p1} upon full payment. Governed by the laws of India.",
+                    source_term_ids=["missing_ip_01"],
+                    statutory_reference="Copyright Act, 1957 & Indian Contract Act, 1872",
+                ),
+            ]
 
         # Plain text compilation for hashing
         plain_text = self._compile_plain_text(contracting_parties, clauses)

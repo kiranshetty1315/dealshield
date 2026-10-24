@@ -258,12 +258,39 @@ export class ApiClient {
   async getAgreement(agreementId: string): Promise<Agreement> {
     const res = await fetch(`${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Agreement not found" }));
       throw new Error(err.detail || `Failed to fetch agreement (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getAgreementForChat(chatId: string): Promise<Agreement> {
+    const res = await fetch(`${this.baseUrl}/api/v1/agreements/chat/${encodeURIComponent(chatId)}`, {
+      method: "GET",
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to load agreement for conversation" }));
+      throw new Error(err.detail || `Agreement fetch failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async createAgreementVersion(agreementId: string, analysisId: string): Promise<Agreement> {
+    const res = await fetch(`${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}/versions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...this.getAuthHeaders() },
+      body: JSON.stringify({ analysis_id: analysisId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to create updated agreement version" }));
+      throw new Error(err.detail || `Version creation failed (${res.status})`);
     }
     return res.json();
   }

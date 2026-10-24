@@ -4,7 +4,7 @@ import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CitationChip } from "@/components/analysis/CitationChip";
-import { FileCheck } from "lucide-react";
+import { FileCheck, FileText } from "lucide-react";
 import { Agreement, Clause } from "@/types";
 
 interface AgreementPreviewProps {
@@ -25,7 +25,7 @@ export function AgreementPreview({
 
   const partiesLabel = agreement?.parties?.length
     ? agreement.parties.join(" & ")
-    : "Raj Mehta & Priya Sharma";
+    : "Contracting Counterparties";
 
   const versionLabel = agreement
     ? `Draft v${currentVersion?.version_number || agreement.current_version}.0`
@@ -76,74 +76,15 @@ export function AgreementPreview({
             </div>
           ))
         ) : (
-          <>
-            {/* Clause 1 */}
-            <div className="space-y-1.5 border-b border-slate-100 pb-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-900 text-xs">
-                  1. Scope of Work & Deliverables
-                </h4>
-                <div className="flex items-center gap-1">
-                  <CitationChip citationId="msg_raj_001" isActive={activeCitationId === "msg_raj_001"} onClick={onCitationClick} />
-                  <CitationChip citationId="msg_priya_002" isActive={activeCitationId === "msg_priya_002"} onClick={onCitationClick} />
-                </div>
-              </div>
-              <p className="text-slate-700 text-[11px]">
-                The Service Provider agrees to perform a full website redesign for the Client,
-                including preliminary UI mockups, responsive frontend layout, and final asset handover.
-              </p>
-            </div>
-
-            {/* Clause 2 */}
-            <div className="space-y-1.5 border-b border-slate-100 pb-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-900 text-xs">
-                  2. Consideration & Payment Milestones
-                </h4>
-                <div className="flex items-center gap-1">
-                  <CitationChip citationId="msg_priya_008" isActive={activeCitationId === "msg_priya_008"} onClick={onCitationClick} />
-                  <CitationChip citationId="msg_raj_009" isActive={activeCitationId === "msg_raj_009"} onClick={onCitationClick} />
-                </div>
-              </div>
-              <p className="text-slate-700 text-[11px]">
-                {priceResolutionText ||
-                  "The agreed fixed fee for the complete scope is ₹1,00,000 (Indian Rupees One Lakh only). Payment shall be executed in two equal tranches: 50% (₹50,000) payable upfront prior to commencement of design activities, and 50% (₹50,000) payable upon final delivery and acceptance."}
-              </p>
-            </div>
-
-            {/* Clause 3 */}
-            <div className="space-y-1.5 border-b border-slate-100 pb-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-900 text-xs">
-                  3. Project Timeline & Milestones
-                </h4>
-                <div className="flex items-center gap-1">
-                  <CitationChip citationId="msg_raj_007" isActive={activeCitationId === "msg_raj_007"} onClick={onCitationClick} />
-                  <CitationChip citationId="msg_priya_010" isActive={activeCitationId === "msg_priya_010"} onClick={onCitationClick} />
-                </div>
-              </div>
-              <p className="text-slate-700 text-[11px]">
-                All agreed deliverables must be completed and submitted for client review by April 30, 2024.
-                Initial mockups shall be provided within seven (7) business days of upfront consideration receipt.
-              </p>
-            </div>
-
-            {/* Clause 4 */}
-            <div className="space-y-1.5 pb-1">
-              <div className="flex items-center justify-between">
-                <h4 className="font-bold text-slate-900 text-xs">
-                  4. Intellectual Property & Governing Law
-                </h4>
-                <Badge variant="outline" className="text-[10px] bg-slate-50">
-                  Indian Contract Act 1872
-                </Badge>
-              </div>
-              <p className="text-slate-700 text-[11px]">
-                All intellectual property rights in final deliverable assets shall vest in the Client upon 100% full payment receipt.
-                Governed by the laws of India; disputes subject to amicable resolution under Section 7 and Indian conciliation principles.
-              </p>
-            </div>
-          </>
+          <div className="py-12 text-center text-slate-500 space-y-2">
+            <FileText className="h-8 w-8 text-slate-400 mx-auto" />
+            <p className="font-semibold text-slate-700 text-sm">
+              No Contract Clauses Synthesized Yet
+            </p>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Synthesize an agreement draft from an analyzed WhatsApp negotiation to populate plain-language clauses.
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>
