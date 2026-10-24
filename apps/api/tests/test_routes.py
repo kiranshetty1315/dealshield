@@ -77,8 +77,57 @@ def test_evidence_verify_route():
     assert "limitations_notice" in data
 
 
-def test_team_c_analysis_endpoint_remains_pending():
-    # Analysis trigger is owned by Team C
-    res_analysis = client.post("/api/v1/analysis", json={"chat_id": "test_chat_1"})
-    assert res_analysis.status_code == 501
-    assert "Team C" in str(res_analysis.json())
+def test_analysis_endpoint_success_and_persistence():
+    # 1. Upload sample chat
+    sample_chat = (
+        "12/03/24, 10:15 - Raj Mehta: Hi Priya, regarding the website project we discussed\n"
+        "12/03/24, 10:16 - Priya Sharma: Yes, I've been thinking about it. I can handle the full redesign\n"
+        "12/03/24, 10:18 - Raj Mehta: Great. My budget is around ₹75,000 for everything\n"
+        "12/03/24, 10:20 - Priya Sharma: That's quite low for a full redesign. I'd normally charge ₹1,50,000\n"
+        "12/03/24, 10:22 - Raj Mehta: Can we meet somewhere in the middle? Maybe ₹1,00,000?\n"
+        "12/03/24, 10:25 - Priya Sharma: I could consider that, but it depends on the timeline\n"
+        "12/03/24, 10:27 - Raj Mehta: I need it done by end of April\n"
+        "12/03/24, 10:30 - Priya Sharma: That's tight. For ₹1,00,000 I might be able to do it, but I'd need 50% upfront\n"
+        "12/03/24, 10:32 - Raj Mehta: Sure, that works I think. Let's go ahead\n"
+        "12/03/24, 10:35 - Priya Sharma: Ok sounds good. I'll send over some initial mockups next week\n"
+    )
+    upload_res = client.post(
+        "/api/v1/chats/upload",
+        content=sample_chat,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert upload_res.status_code == 201
+    chat_id = upload_res.json()["chat_id"]
+
+    # 2. Trigger analysis (Team C)
+    res_analysis = client.post("/api/v1/analysis", json={"chat_id": chat_id})
+    assert res_analysis.status_code == 200
+    analysis = res_analysis.json()
+    assert analysis["chat_id"] == chat_id
+    assert len(analysis["parties"]) == 2
+    assert len(analysis["extracted_terms"]) == 4
+    assert len(analysis["conflicts"]) >= 1
+    assert analysis["conflicts"][0]["conflict_id"] == "conflict_price_01"
+    assert "Section 7" in analysis["conflicts"][0]["statutory_context"]
+    assert len(analysis["missing_terms"]) >= 2
+    analysis_id = analysis["analysis_id"]
+
+    # 3. Retrieve analysis by ID
+    get_res = client.get(f"/api/v1/analysis/{analysis_id}")
+    assert get_res.status_code == 200
+    retrieved = get_res.json()
+    assert retrieved["analysis_id"] == analysis_id
+    assert retrieved["chat_id"] == chat_id
+
+    # 4. Generate draft agreement using this analysis (End-to-End pipeline)
+    ag_res = client.post("/api/v1/agreements", json={"analysis_id": analysis_id})
+    assert ag_res.status_code == 201
+    agreement = ag_res.json()
+    assert agreement["analysis_id"] == analysis_id
+    assert len(agreement["versions"]) >= 1
+
+
+def test_analysis_nonexistent_chat_fails():
+    res = client.post("/api/v1/analysis", json={"chat_id": "nonexistent-chat-uuid"})
+    assert res.status_code == 404
+    assert "not found" in res.json()["detail"].lower()
