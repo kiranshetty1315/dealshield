@@ -24,7 +24,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { SettingsModal } from "@/components/layout/SettingsModal";
 import { ConfirmationStatus, Agreement, PartyConfirmationRecord } from "@/types";
 
 function ConfirmationsContent() {
@@ -41,7 +40,6 @@ function ConfirmationsContent() {
   const [tokenResult, setTokenResult] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
-  const [isErasureModalOpen, setIsErasureModalOpen] = useState(false);
 
   // Default demo fallback if no live agreement
   const defaultParties: PartyConfirmationRecord[] = [
@@ -316,15 +314,16 @@ function ConfirmationsContent() {
                     Now that all obligations are formalized into the executed agreement, you can permanently erase underlying WhatsApp chat messages from the database.
                   </p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsErasureModalOpen(true)}
-                  className="shrink-0 text-xs border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5"
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                  Manage & Erase Messages
-                </Button>
+                <Link href="/settings">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 text-xs border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                    Manage & Erase Messages
+                  </Button>
+                </Link>
               </div>
             </div>
           )}
@@ -334,13 +333,6 @@ function ConfirmationsContent() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Settings & Message Erasure Modal */}
-      <SettingsModal
-        isOpen={isErasureModalOpen}
-        onClose={() => setIsErasureModalOpen(false)}
-        initialTab="history"
-      />
 
       {/* Testable Single-Use Token Confirmation Box */}
       <Card className="border-slate-200 shadow-sm">

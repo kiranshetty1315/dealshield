@@ -1,21 +1,21 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import {
   User,
   Settings,
-  Trash2,
   LogOut,
   ChevronDown,
   Shield,
   KeyRound,
+  CheckCircle2,
 } from "lucide-react";
-import { SettingsModal } from "@/components/layout/SettingsModal";
+import { Button } from "@/components/ui/button";
 
 export function ProfileDropdown() {
   const [isOpen, setIsOpen] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [modalTab, setModalTab] = useState<"history" | "security" | "profile">("history");
+  const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -29,15 +29,14 @@ export function ProfileDropdown() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const openSettings = (tab: "history" | "security" | "profile") => {
-    setModalTab(tab);
-    setIsSettingsOpen(true);
+  const handleOpenLogoutDialog = () => {
     setIsOpen(false);
+    setIsLogoutDialogOpen(true);
   };
 
-  const handleLogout = () => {
-    setIsOpen(false);
-    alert("Logged out of local demo session. (Ready for Supabase Auth in production)");
+  const handleConfirmLogout = () => {
+    setIsLogoutDialogOpen(false);
+    // In production, Supabase Auth signOut() is invoked here
   };
 
   return (
@@ -46,7 +45,7 @@ export function ProfileDropdown() {
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
-          className="flex items-center gap-2 p-1.5 pl-2 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-all text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+          className="flex items-center gap-2 p-1.5 pl-2 pr-2.5 rounded-full border border-slate-200 bg-white hover:bg-slate-50 transition-all text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-xs"
           aria-haspopup="true"
           aria-expanded={isOpen}
         >
@@ -76,40 +75,31 @@ export function ProfileDropdown() {
 
             {/* Menu Items */}
             <div className="py-1">
-              <button
-                type="button"
-                onClick={() => openSettings("profile")}
-                className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+              <Link
+                href="/profile"
+                onClick={() => setIsOpen(false)}
+                className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
               >
-                <User className="h-3.5 w-3.5 text-slate-500" />
+                <User className="h-3.5 w-3.5 text-blue-600" />
                 Profile Details
-              </button>
+              </Link>
 
-              <button
-                type="button"
-                onClick={() => openSettings("history")}
-                className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+              <Link
+                href="/settings"
+                onClick={() => setIsOpen(false)}
+                className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
               >
-                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                Delete Message History (DPDP)
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openSettings("security")}
-                className="w-full px-4 py-2 text-left text-slate-700 hover:bg-slate-50 flex items-center gap-2 transition-colors"
-              >
-                <KeyRound className="h-3.5 w-3.5 text-slate-500" />
-                Change Password & Security
-              </button>
+                <Settings className="h-3.5 w-3.5 text-slate-600" />
+                Settings & Privacy
+              </Link>
             </div>
 
             {/* Logout Footer */}
             <div className="border-t border-slate-100 pt-1">
               <button
                 type="button"
-                onClick={handleLogout}
-                className="w-full px-4 py-2 text-left text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition-colors"
+                onClick={handleOpenLogoutDialog}
+                className="w-full px-4 py-2 text-left text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
               >
                 <LogOut className="h-3.5 w-3.5 text-slate-400" />
                 Log out
@@ -119,12 +109,49 @@ export function ProfileDropdown() {
         )}
       </div>
 
-      {/* Settings & Privacy Modal */}
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        initialTab={modalTab}
-      />
+      {/* CONFIRMATION DIALOG BOX FOR LOGOUT */}
+      {isLogoutDialogOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl p-6 shadow-2xl border border-slate-200 max-w-md w-full space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="p-3 rounded-xl bg-slate-100 text-slate-700 shrink-0">
+                <LogOut className="h-6 w-6 text-slate-700" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="font-bold text-base text-slate-900">Confirm Log Out</h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Are you sure you want to log out of DealShield AI? Any unsaved edits will be discarded.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
+              In production, logging out terminates your active Supabase Auth JWT session.
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsLogoutDialogOpen(false)}
+                className="text-xs"
+              >
+                Cancel
+              </Button>
+
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleConfirmLogout}
+                className="text-xs gap-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Yes, Log Out
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
