@@ -323,12 +323,14 @@ export default function ProfilePage() {
                     onChange={(e) => setEditRole(e.target.value)}
                     className="w-full h-9 px-3 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
                   >
+                    <option value="Freelancer / Contractor">Freelancer / Contractor</option>
+                    <option value="Client / Project Owner">Client / Project Owner</option>
+                    <option value="Service Provider / Agency">Service Provider / Agency</option>
+                    <option value="Consultant / Advisor">Consultant / Advisor</option>
+                    <option value="Founder / Business Owner">Founder / Business Owner</option>
                     <option value="Contract Sponsor">Contract Sponsor</option>
                     <option value="Legal Counsel / Advocate">Legal Counsel / Advocate</option>
                     <option value="Commercial Manager">Commercial Manager</option>
-                    <option value="Procurement Lead">Procurement Lead</option>
-                    <option value="Founder / Director">Founder / Director</option>
-                    <option value="Compliance Officer">Compliance Officer</option>
                   </select>
                 </div>
               </div>
