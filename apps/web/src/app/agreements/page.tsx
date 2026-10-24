@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,15 +17,58 @@ import {
   ArrowRight,
   ShieldCheck,
   Hash,
+  Database,
+  Loader2,
 } from "lucide-react";
 import { AgreementPreview } from "@/components/agreements/AgreementPreview";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
 import { SAMPLE_MESSAGES } from "@/lib/sample-data";
-import { Message } from "@/types";
+import { Agreement, Message } from "@/types";
+import { api } from "@/lib/api/client";
 
-export default function AgreementsPage() {
-  const [messages] = useState<Message[]>(SAMPLE_MESSAGES);
+function AgreementsContent() {
+  const searchParams = useSearchParams();
+  const agreementIdParam = searchParams.get("id");
+  const analysisIdParam = searchParams.get("analysis_id");
+
+  const [isLoading, setIsLoading] = useState(Boolean(agreementIdParam));
+  const [agreement, setAgreement] = useState<Agreement | null>(null);
+  const [messages, setMessages] = useState<Message[]>(SAMPLE_MESSAGES);
   const [activeCitationId, setActiveCitationId] = useState<string | null>("msg_priya_008");
+
+  useEffect(() => {
+    async function loadAgreement() {
+      if (!agreementIdParam) return;
+
+      setIsLoading(true);
+      try {
+        const fetchedAgreement = await api.getAgreement(agreementIdParam);
+        setAgreement(fetchedAgreement);
+
+        // If analysis_id is present or associated, attempt to load chat messages
+        const targetAnalysisId = analysisIdParam || fetchedAgreement.analysis_id;
+        if (targetAnalysisId) {
+          try {
+            const analysisData = await api.getAnalysis(targetAnalysisId);
+            if (analysisData.chat_id) {
+              const chatData = await api.getConversation(analysisData.chat_id);
+              if (chatData.messages?.length) {
+                setMessages(chatData.messages);
+              }
+            }
+          } catch {
+            // Keep sample messages
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch agreement from backend, falling back to sample preview:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadAgreement();
+  }, [agreementIdParam, analysisIdParam]);
 
   const handleCitationClick = (citationId: string) => {
     setActiveCitationId(citationId);
@@ -33,6 +77,21 @@ export default function AgreementsPage() {
   const handleMessageSelect = (msg: Message) => {
     setActiveCitationId(msg.message_id);
   };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-sm font-medium text-slate-700">Loading agreement version from database...</p>
+      </div>
+    );
+  }
+
+  const isLive = Boolean(agreement);
+  const currentVersion = agreement?.versions?.[agreement.versions.length - 1];
+  const contentHash = currentVersion?.content_hash || "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e";
+  const partiesLabel = agreement?.parties?.length ? agreement.parties.join(" and ") : "Raj Mehta and Priya Sharma";
+  const confirmationHref = agreement ? `/confirmations?agreement_id=${encodeURIComponent(agreement.id)}` : "/confirmations";
 
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-7xl">
@@ -43,29 +102,47 @@ export default function AgreementsPage() {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Generated Agreement Draft
             </h1>
-            <Badge
-              variant="outline"
-              className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs"
-            >
-              Sample Demo Data
-            </Badge>
+            {isLive ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold text-xs flex items-center gap-1"
+              >
+                <Database className="h-3 w-3" />
+                Live Version v{currentVersion?.version_number || agreement?.current_version}.0
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs"
+              >
+                Sample Demo Data
+              </Badge>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Synthesized plain-language term sheet derived from verified WhatsApp negotiation between{" "}
-            <strong className="text-slate-800">Raj Mehta</strong> and{" "}
-            <strong className="text-slate-800">Priya Sharma</strong>.
+            <strong className="text-slate-800">{partiesLabel}</strong>.
           </p>
         </div>
 
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
-          <Badge variant="outline" className="border-slate-300 text-xs">
-            Draft v1.0 (Hash: 7f8a92...)
+          <Badge variant="outline" className="border-slate-300 text-xs font-mono">
+            Hash: {contentHash.slice(0, 10)}...
           </Badge>
-          <Button variant="outline" size="sm" className="gap-2 text-xs">
-            <Download className="h-4 w-4" /> Download PDF
-          </Button>
-          <Link href="/confirmations">
-            <Button size="sm" className="gap-2 text-xs font-semibold shadow-sm">
+          {agreement ? (
+            <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" size="sm" className="gap-2 text-xs">
+                <Download className="h-4 w-4" /> Download Plain-Text / PDF
+              </Button>
+            </a>
+          ) : (
+            <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={() => alert("Sample draft preview downloaded")}>
+              <Download className="h-4 w-4" /> Download PDF
+            </Button>
+          )}
+
+          <Link href={confirmationHref}>
+            <Button size="sm" className="gap-2 text-xs font-semibold shadow-sm bg-blue-600 hover:bg-blue-700 text-white">
               <Send className="h-4 w-4" />
               Proceed to Two-Party Confirmation
               <ArrowRight className="h-3.5 w-3.5" />
@@ -94,6 +171,7 @@ export default function AgreementsPage() {
           <AgreementPreview
             activeCitationId={activeCitationId}
             onCitationClick={handleCitationClick}
+            agreement={agreement}
           />
 
           {/* Tamper Evident Audit Record */}
@@ -115,7 +193,7 @@ export default function AgreementsPage() {
                 <div className="p-2 bg-white rounded border border-slate-200">
                   <span className="text-slate-400 block">Agreement Draft Hash:</span>
                   <span className="text-slate-800 break-all">
-                    a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e
+                    {contentHash}
                   </span>
                 </div>
               </div>
@@ -147,5 +225,20 @@ export default function AgreementsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AgreementsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-700">Loading Agreement Draft...</p>
+        </div>
+      }
+    >
+      <AgreementsContent />
+    </Suspense>
   );
 }

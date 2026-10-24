@@ -146,3 +146,42 @@ export interface DocumentHashVerification {
   explanation: string;
   limitations_notice: string;
 }
+
+export interface AnalysisRequest {
+  chat_id: string;
+  focus_areas?: string[];
+}
+
+export interface AgreementCreateRequest {
+  analysis_id: string;
+  parties?: string[];
+  terms?: Record<string, any>[];
+}
+
+export interface ConfirmationRequest {
+  agreement_id: string;
+  party_name: string;
+  confirmed: boolean;
+  notes?: string;
+  version_number?: number;
+}
+
+export interface AuditEvent {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  action: string;
+  actor_id?: string | null;
+  created_at: string;
+  metadata?: Record<string, any>;
+}
+
+export interface TokenConfirmationResponse {
+  status: string;
+  message: string;
+  agreement_id: string;
+  party_name: string;
+  confirmed: boolean;
+  confirmed_at?: string;
+}
+

@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -22,6 +23,8 @@ import {
   Sparkles,
   FileText,
   ExternalLink,
+  Loader2,
+  Database,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
 import {
@@ -31,15 +34,64 @@ import {
 import { TermCard } from "@/components/analysis/TermCard";
 import { CitationChip } from "@/components/analysis/CitationChip";
 import { SAMPLE_MESSAGES, SAMPLE_ANALYSIS } from "@/lib/sample-data";
-import { ExtractedTerm, Message } from "@/types";
+import { AgreementAnalysis, ExtractedTerm, Message } from "@/types";
+import { api } from "@/lib/api/client";
 
-export default function AnalysisPage() {
-  const [messages] = useState<Message[]>(SAMPLE_MESSAGES);
+function AnalysisContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const analysisIdParam = searchParams.get("analysis_id");
+  const chatIdParam = searchParams.get("chat_id");
+
+  const [isLoading, setIsLoading] = useState(Boolean(analysisIdParam));
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [analysis, setAnalysis] = useState<AgreementAnalysis>(SAMPLE_ANALYSIS);
+  const [messages, setMessages] = useState<Message[]>(SAMPLE_MESSAGES);
+  const [isLive, setIsLive] = useState(false);
   const [activeCitationId, setActiveCitationId] = useState<string | null>("msg_raj_009");
   const [resolvedConflicts, setResolvedConflicts] = useState<Record<string, ResolvedConflictState>>({});
 
-  // When conflict is resolved, dynamically update the ambiguous price term to agreed
-  const terms: ExtractedTerm[] = SAMPLE_ANALYSIS.extracted_terms.map((term) => {
+  useEffect(() => {
+    async function loadLiveData() {
+      if (!analysisIdParam) return;
+
+      setIsLoading(true);
+      try {
+        const fetchedAnalysis = await api.getAnalysis(analysisIdParam);
+        setAnalysis(fetchedAnalysis);
+        setIsLive(true);
+
+        const targetChatId = chatIdParam || fetchedAnalysis.chat_id;
+        if (targetChatId) {
+          try {
+            const chatData = await api.getConversation(targetChatId);
+            if (chatData.messages && chatData.messages.length > 0) {
+              setMessages(chatData.messages);
+            }
+          } catch {
+            // Keep default sample messages if chat endpoint is not queried
+          }
+        }
+
+        // Set default active citation if conflicts exist
+        if (fetchedAnalysis.conflicts && fetchedAnalysis.conflicts.length > 0) {
+          const firstCitations = fetchedAnalysis.conflicts[0].source_message_ids;
+          if (firstCitations && firstCitations.length > 0) {
+            setActiveCitationId(firstCitations[firstCitations.length - 1]);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not fetch live analysis, falling back to sample fixture:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadLiveData();
+  }, [analysisIdParam, chatIdParam]);
+
+  // When conflict is resolved, dynamically update the ambiguous term to agreed
+  const terms: ExtractedTerm[] = analysis.extracted_terms.map((term) => {
     if (term.term_id === "term_price_01" && resolvedConflicts["conflict_price_01"]) {
       return {
         ...term,
@@ -52,8 +104,8 @@ export default function AnalysisPage() {
   });
 
   const isAllResolved =
-    SAMPLE_ANALYSIS.conflicts.length > 0 &&
-    SAMPLE_ANALYSIS.conflicts.every((c) => Boolean(resolvedConflicts[c.conflict_id]));
+    analysis.conflicts.length === 0 ||
+    analysis.conflicts.every((c) => Boolean(resolvedConflicts[c.conflict_id]));
 
   const handleConflictResolved = (resolution: ResolvedConflictState) => {
     setResolvedConflicts((prev) => ({
@@ -78,6 +130,36 @@ export default function AnalysisPage() {
     setActiveCitationId(msg.message_id);
   };
 
+  const handleGenerateAgreement = async () => {
+    setIsGenerating(true);
+    try {
+      if (isLive && analysis.analysis_id) {
+        const partyNames = analysis.parties.map((p) => p.name);
+        const agreement = await api.createAgreement(analysis.analysis_id, partyNames);
+        router.push(
+          `/agreements?id=${encodeURIComponent(agreement.id)}&analysis_id=${encodeURIComponent(analysis.analysis_id)}`
+        );
+      } else {
+        router.push("/agreements");
+      }
+    } catch (err: any) {
+      alert(`Agreement generation failed: ${err.message || err}`);
+      setIsGenerating(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <p className="text-sm font-medium text-slate-700">Loading analysis findings from Supabase...</p>
+      </div>
+    );
+  }
+
+  const p1 = analysis.parties[0]?.name || "Party 1";
+  const p2 = analysis.parties[1]?.name || "Party 2";
+
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-7xl">
       {/* Page Header */}
@@ -85,19 +167,29 @@ export default function AnalysisPage() {
         <div>
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Agreement Analysis & Verification
+              Agreement Analysis & Legal Intelligence
             </h1>
-            <Badge
-              variant="outline"
-              className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs"
-            >
-              Sample Demo Data
-            </Badge>
+            {isLive ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold text-xs flex items-center gap-1"
+              >
+                <Database className="h-3 w-3" />
+                Live Supabase Verified ({analysis.analysis_id.slice(0, 8)}...)
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs"
+              >
+                Sample Demo Data
+              </Badge>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Verified WhatsApp negotiation between{" "}
-            <strong className="text-slate-800">Raj Mehta</strong> (Client) and{" "}
-            <strong className="text-slate-800">Priya Sharma</strong> (Service Provider)
+            <strong className="text-slate-800">{p1}</strong> ({analysis.parties[0]?.detected_role || "Client"}) and{" "}
+            <strong className="text-slate-800">{p2}</strong> ({analysis.parties[1]?.detected_role || "Service Provider"})
           </p>
         </div>
 
@@ -110,20 +202,29 @@ export default function AnalysisPage() {
           ) : (
             <Badge variant="warning" className="gap-1.5 py-1 px-3 text-xs font-medium">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Requires Human Review (1 Conflict)
+              Requires Human Review ({analysis.conflicts.length} Conflict{analysis.conflicts.length > 1 ? "s" : ""})
             </Badge>
           )}
 
-          <Link href="/agreements">
-            <Button
-              className="gap-2 text-xs font-semibold shadow-sm"
-              variant={isAllResolved ? "default" : "secondary"}
-            >
-              <FileText className="h-4 w-4" />
-              Review Synthesized Agreement
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          </Link>
+          <Button
+            onClick={handleGenerateAgreement}
+            disabled={isGenerating}
+            className="gap-2 text-xs font-semibold shadow-sm"
+            variant={isAllResolved ? "default" : "secondary"}
+          >
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Synthesizing Agreement Draft...
+              </>
+            ) : (
+              <>
+                <FileText className="h-4 w-4" />
+                Synthesize Agreement Draft
+                <ArrowRight className="h-3.5 w-3.5" />
+              </>
+            )}
+          </Button>
         </div>
       </div>
 
@@ -140,7 +241,7 @@ export default function AnalysisPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {SAMPLE_ANALYSIS.parties.map((party, idx) => (
+              {analysis.parties.map((party) => (
                 <div
                   key={party.party_id}
                   className="p-3 border border-slate-200 rounded-lg bg-white space-y-1 text-xs"
@@ -148,7 +249,7 @@ export default function AnalysisPage() {
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-slate-900">{party.name}</span>
                     <Badge variant="outline" className="text-[10px]">
-                      {party.detected_role}
+                      {party.detected_role || "Participant"}
                     </Badge>
                   </div>
                   <p className="text-[11px] text-slate-500 font-mono">
@@ -160,14 +261,16 @@ export default function AnalysisPage() {
           </Card>
 
           {/* Section 7 Conflict Resolution Drawer */}
-          <ConflictResolutionDrawer
-            conflicts={SAMPLE_ANALYSIS.conflicts}
-            activeCitationId={activeCitationId}
-            onCitationClick={handleCitationClick}
-            onConflictResolved={handleConflictResolved}
-            onConflictReopened={handleConflictReopened}
-            resolvedConflicts={resolvedConflicts}
-          />
+          {analysis.conflicts && analysis.conflicts.length > 0 && (
+            <ConflictResolutionDrawer
+              conflicts={analysis.conflicts}
+              activeCitationId={activeCitationId}
+              onCitationClick={handleCitationClick}
+              onConflictResolved={handleConflictResolved}
+              onConflictReopened={handleConflictReopened}
+              resolvedConflicts={resolvedConflicts}
+            />
+          )}
 
           {/* Extracted Terms with Citations */}
           <Card className="border-slate-200 shadow-sm">
@@ -209,7 +312,7 @@ export default function AnalysisPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-4 space-y-3">
-              {SAMPLE_ANALYSIS.missing_terms.map((missing) => (
+              {analysis.missing_terms.map((missing) => (
                 <div
                   key={missing.term_id}
                   className="p-3.5 border border-slate-200 rounded-lg bg-slate-50/60 space-y-1.5 text-xs"
@@ -251,7 +354,7 @@ export default function AnalysisPage() {
               Tamper-Evident Citation Linking
             </div>
             <p className="leading-relaxed text-[11px] text-blue-800">
-              Every extracted term and conflict is tied to an immutable 1-based citation ID (e.g.,{" "}
+              Every extracted term and conflict is tied to an immutable citation ID (e.g.,{" "}
               <code className="font-mono bg-blue-100 text-blue-900 px-1 py-0.5 rounded">msg_raj_003</code>).
               Section 65B Indian Evidence Act compliant hashing ensures the original chat export is cryptographically matched with each generated agreement clause.
             </p>
@@ -259,5 +362,20 @@ export default function AnalysisPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AnalysisPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <p className="text-sm font-medium text-slate-700">Initializing Analysis View...</p>
+        </div>
+      }
+    >
+      <AnalysisContent />
+    </Suspense>
   );
 }
