@@ -103,7 +103,8 @@ export type AgreementStatus =
   | "pending_confirmation"
   | "partially_confirmed"
   | "fully_confirmed"
-  | "superseded";
+  | "superseded"
+  | "declined";
 
 export interface Clause {
   clause_id: string;
@@ -136,6 +137,9 @@ export interface PartyConfirmationRecord {
   party_name: string;
   confirmed: boolean;
   confirmed_at?: string;
+  declined?: boolean;
+  declined_at?: string;
+  decline_reason?: string;
   notes?: string;
   ip_hash?: string;
 }
@@ -145,6 +149,7 @@ export interface ConfirmationStatus {
   version_number: number;
   parties: PartyConfirmationRecord[];
   all_confirmed: boolean;
+  any_declined?: boolean;
   last_updated: string;
 }
 
@@ -171,6 +176,8 @@ export interface ConfirmationRequest {
   agreement_id: string;
   party_name: string;
   confirmed: boolean;
+  action?: "agree" | "decline";
+  decline_reason?: string;
   notes?: string;
   version_number?: number;
 }
@@ -192,6 +199,10 @@ export interface TokenConfirmationResponse {
   party_name: string;
   confirmed: boolean;
   confirmed_at?: string;
+  declined?: boolean;
+  declined_at?: string;
+  decline_reason?: string;
+  action?: "agree" | "decline";
 }
 
 

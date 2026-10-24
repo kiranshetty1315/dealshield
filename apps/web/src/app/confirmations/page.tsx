@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   CheckCircle2,
+  XCircle,
   Clock,
   Users,
   ArrowRight,
@@ -159,14 +160,14 @@ function ConfirmationsContent() {
       const targetId = agreement?.id || agreementId;
       const res = await api.generatePartyToken(targetId, partyName);
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const fullUrl = `${origin}/confirmations?token=${res.token}&agreement_id=${encodeURIComponent(targetId)}`;
+      const fullUrl = `${origin}/review?token=${res.token}&agreement_id=${encodeURIComponent(targetId)}`;
       setShareableLink({ partyName, url: fullUrl });
       setTokenInput(res.token);
     } catch {
       // Local fallback token generation if backend is in local demo
       const randomTok = `tok_${Math.random().toString(36).substring(2, 12)}_${Date.now()}`;
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const fullUrl = `${origin}/confirmations?token=${randomTok}&agreement_id=${encodeURIComponent(agreement?.id || agreementId)}`;
+      const fullUrl = `${origin}/review?token=${randomTok}&agreement_id=${encodeURIComponent(agreement?.id || agreementId)}`;
       setShareableLink({ partyName, url: fullUrl });
       setTokenInput(randomTok);
     } finally {
@@ -372,68 +373,97 @@ function ConfirmationsContent() {
 
           {/* Parties Confirmation Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {partiesList.map((party, idx) => (
-              <div
-                key={`${party.party_name}-${idx}`}
-                className={`p-4 rounded-xl border transition-all space-y-3 ${
-                  party.confirmed
-                    ? "border-emerald-200 bg-emerald-50/50"
-                    : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
-                        party.confirmed
-                          ? "bg-emerald-600 text-white"
-                          : "bg-slate-200 text-slate-700"
-                      }`}
+            {partiesList.map((party, idx) => {
+              const isDeclined = Boolean(party.declined);
+              const isConfirmed = Boolean(party.confirmed);
+
+              return (
+                <div
+                  key={`${party.party_name}-${idx}`}
+                  className={`p-4 rounded-xl border transition-all space-y-3 ${
+                    isConfirmed
+                      ? "border-emerald-200 bg-emerald-50/50"
+                      : isDeclined
+                      ? "border-rose-200 bg-rose-50/50"
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                          isConfirmed
+                            ? "bg-emerald-600 text-white"
+                            : isDeclined
+                            ? "bg-rose-600 text-white"
+                            : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        {party.party_name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")}
+                      </div>
+                      <div>
+                        <p className="font-bold text-xs text-slate-900">{party.party_name}</p>
+                        <p className="text-[10px] text-slate-500">
+                          {isConfirmed
+                            ? "Assent Formally Recorded"
+                            : isDeclined
+                            ? "Terms Declined by Party"
+                            : "Awaiting Acceptance"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Badge
+                      variant={isConfirmed ? "success" : isDeclined ? "destructive" : "outline"}
+                      className={
+                        isConfirmed
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
+                          : isDeclined
+                          ? "bg-rose-100 text-rose-800 border-rose-300 text-[10px]"
+                          : "text-slate-500 text-[10px]"
+                      }
                     >
-                      {party.party_name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </div>
-                    <div>
-                      <p className="font-bold text-xs text-slate-900">{party.party_name}</p>
-                      <p className="text-[10px] text-slate-500">
-                        {party.confirmed ? "Assent Formally Recorded" : "Awaiting Acceptance"}
-                      </p>
-                    </div>
+                      {isConfirmed ? (
+                        <>
+                          <CheckCircle2 className="h-3 w-3" /> Confirmed
+                        </>
+                      ) : isDeclined ? (
+                        <>
+                          <XCircle className="h-3 w-3" /> Declined
+                        </>
+                      ) : (
+                        <>
+                          <Clock className="h-3 w-3" /> Awaiting Assent
+                        </>
+                      )}
+                    </Badge>
                   </div>
 
-                  <Badge
-                    variant={party.confirmed ? "success" : "outline"}
-                    className={
-                      party.confirmed
-                        ? "bg-emerald-100 text-emerald-800 border-emerald-300 text-[10px]"
-                        : "text-slate-500 text-[10px]"
-                    }
-                  >
-                    {party.confirmed ? (
-                      <>
-                        <CheckCircle2 className="h-3 w-3" /> Confirmed
-                      </>
-                    ) : (
-                      <>
-                        <Clock className="h-3 w-3" /> Awaiting Assent
-                      </>
-                    )}
-                  </Badge>
-                </div>
-
-                <p suppressHydrationWarning className="text-xs text-slate-600">
-                  {party.confirmed
-                    ? `Confirmed terms on ${formatAssentDate(party.confirmed_at)}.`
-                    : "Review link dispatched. Waiting for formal acceptance."}
-                </p>
-
-                {party.notes && (
-                  <p className="text-[11px] text-slate-500 italic bg-white/70 p-2 rounded border border-slate-200">
-                    &ldquo;{party.notes}&rdquo;
+                  <p suppressHydrationWarning className="text-xs text-slate-600">
+                    {isConfirmed
+                      ? `Confirmed terms on ${formatAssentDate(party.confirmed_at)}.`
+                      : isDeclined
+                      ? `Declined terms on ${formatAssentDate(party.declined_at)}.`
+                      : "Review link dispatched. Waiting for formal acceptance."}
                   </p>
-                )}
+
+                  {party.decline_reason && (
+                    <div className="bg-rose-100/60 p-2.5 rounded border border-rose-200 text-xs text-rose-900 space-y-0.5">
+                      <span className="font-bold block text-[10px] uppercase text-rose-800">
+                        Reason for Decline:
+                      </span>
+                      <p className="italic">&ldquo;{party.decline_reason}&rdquo;</p>
+                    </div>
+                  )}
+
+                  {party.notes && !party.decline_reason && (
+                    <p className="text-[11px] text-slate-500 italic bg-white/70 p-2 rounded border border-slate-200">
+                      &ldquo;{party.notes}&rdquo;
+                    </p>
+                  )}
 
                 {/* Actions when party has NOT confirmed */}
                 {!party.confirmed ? (
@@ -524,7 +554,8 @@ function ConfirmationsContent() {
                   </div>
                 )}
               </div>
-            ))}
+            );
+          })}
           </div>
 
           {/* Fully Confirmed Celebration Banner */}

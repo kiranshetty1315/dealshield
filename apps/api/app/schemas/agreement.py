@@ -10,6 +10,7 @@ class AgreementStatus(str, Enum):
     PARTIALLY_CONFIRMED = "partially_confirmed"
     FULLY_CONFIRMED = "fully_confirmed"
     SUPERSEDED = "superseded"
+    DECLINED = "declined"
 
 
 class Clause(BaseModel):

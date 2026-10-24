@@ -299,11 +299,46 @@ export class ApiClient {
     return res.json();
   }
 
-  async confirmByToken(token: string, notes?: string): Promise<TokenConfirmationResponse> {
+  async inspectToken(token: string): Promise<{
+    token: string;
+    agreement_id: string;
+    party_name: string;
+    confirmed: boolean;
+    confirmed_at?: string;
+    declined: boolean;
+    declined_at?: string;
+    decline_reason?: string;
+    expires_at?: string;
+    agreement?: Agreement | null;
+  }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Invalid or expired review link" }));
+      throw new Error(err.detail || `Token inspection failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async confirmByToken(
+    token: string,
+    notes?: string,
+    action: "agree" | "decline" = "agree",
+    declineReason?: string
+  ): Promise<TokenConfirmationResponse> {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, notes }),
+      body: JSON.stringify({
+        token,
+        notes,
+        action,
+        decline_reason: declineReason,
+      }),
     });
 
     if (!res.ok) {

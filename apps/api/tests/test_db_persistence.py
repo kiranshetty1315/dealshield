@@ -181,6 +181,56 @@ def test_single_use_token_confirmation():
     assert "Invalid or expired" in bad_res.json()["detail"]
 
 
+def test_single_use_token_decline_workflow():
+    conf_repo = ConfirmationRepository()
+    agreement_id = "test_ag_tokens_decline_01"
+    version_id = "test_ver_decline_01"
+
+    tokens = conf_repo.create_confirmation_tokens(
+        agreement_id=agreement_id,
+        version_id=version_id,
+        party_names=["Declining Counterparty"],
+    )
+    raw_token = tokens[0]["raw_token"]
+
+    # 1. Inspect token prior to action
+    inspect_res = client.get(f"/api/v1/confirmations/token/{raw_token}")
+    assert inspect_res.status_code == 200
+    ins_data = inspect_res.json()
+    assert ins_data["party_name"] == "Declining Counterparty"
+    assert ins_data["confirmed"] is False
+    assert ins_data["declined"] is False
+
+    # 2. Execute decline with reason
+    dec_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}",
+        json={
+            "action": "decline",
+            "decline_reason": "Payment milestone 50% advance is unacceptable; requesting 25%.",
+        },
+    )
+    assert dec_res.status_code == 200
+    res_json = dec_res.json()
+    assert res_json["status"] == "declined"
+    assert res_json["declined"] is True
+    assert "25%" in res_json["decline_reason"]
+
+    # 3. Re-inspect token: reflects declined state
+    inspect_res2 = client.get(f"/api/v1/confirmations/token/{raw_token}")
+    assert inspect_res2.status_code == 200
+    ins_data2 = inspect_res2.json()
+    assert ins_data2["declined"] is True
+    assert "25%" in ins_data2["decline_reason"]
+
+    # 4. Replay attempt rejected
+    replay_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}",
+        json={"action": "agree"},
+    )
+    assert replay_res.status_code == 400
+    assert "already been executed" in replay_res.json()["detail"]
+
+
 def test_audit_events_and_evidence_trail():
     audit_repo = AuditRepository()
     entity_id = "test_audit_entity_123"

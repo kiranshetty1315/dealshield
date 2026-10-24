@@ -382,24 +382,39 @@ class ConfirmationRepository:
                 if isinstance(conf_at, str)
                 else None
             )
+            dec_at = row.get("declined_at")
+            dt_dec = (
+                datetime.fromisoformat(dec_at.replace("Z", "+00:00"))
+                if isinstance(dec_at, str)
+                else None
+            )
             rec = PartyConfirmationRecord(
                 party_name=p_name,
                 confirmed=bool(row.get("confirmed", False)),
                 confirmed_at=dt,
+                declined=bool(row.get("declined", False)),
+                declined_at=dt_dec,
+                decline_reason=row.get("decline_reason"),
                 notes=row.get("notes"),
                 ip_hash=row.get("ip_hash"),
             )
-            # Deduplicate by party_name: preserve confirmed=True if any row is confirmed
-            if p_name not in party_map or (rec.confirmed and not party_map[p_name].confirmed):
+            # Deduplicate by party_name: preserve confirmed=True if any row is confirmed, or declined=True
+            if p_name not in party_map:
+                party_map[p_name] = rec
+            elif rec.confirmed and not party_map[p_name].confirmed:
+                party_map[p_name] = rec
+            elif rec.declined and not party_map[p_name].declined and not party_map[p_name].confirmed:
                 party_map[p_name] = rec
 
         records = list(party_map.values())
         all_conf = len(records) > 0 and all(r.confirmed for r in records)
+        any_dec = any(r.declined for r in records)
         return ConfirmationStatus(
             agreement_id=agreement_id,
             version_number=version_number,
             parties=records,
             all_confirmed=all_conf,
+            any_declined=any_dec,
             last_updated=datetime.now(timezone.utc),
         )
 
@@ -410,17 +425,31 @@ class ConfirmationRepository:
         confirmed: bool,
         notes: Optional[str] = None,
         client_ip: Optional[str] = None,
+        action: str = "agree",
+        decline_reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Confirms agreement directly for party."""
+        """Confirms or declines agreement directly for party."""
         now_dt = datetime.now(timezone.utc)
         ip_hash = HashService.hash_ip(client_ip) if client_ip else None
 
-        update_payload = {
-            "confirmed": confirmed,
-            "confirmed_at": now_dt.isoformat() if confirmed else None,
-            "notes": notes,
-            "ip_hash": ip_hash,
-        }
+        is_decline = (action == "decline") or (not confirmed)
+        if is_decline:
+            update_payload = {
+                "confirmed": False,
+                "declined": True,
+                "declined_at": now_dt.isoformat(),
+                "decline_reason": decline_reason or notes,
+                "notes": notes,
+                "ip_hash": ip_hash,
+            }
+        else:
+            update_payload = {
+                "confirmed": True,
+                "declined": False,
+                "confirmed_at": now_dt.isoformat(),
+                "notes": notes,
+                "ip_hash": ip_hash,
+            }
 
         # Check if row exists for party
         res = (
@@ -447,9 +476,13 @@ class ConfirmationRepository:
             }
             self.client.table("confirmations").insert(new_row).execute()
 
-        # Check if all parties confirmed to update agreement status
+        # Check if all parties confirmed or any declined to update agreement status
         status = self.get_confirmation_status(agreement_id)
-        if status.all_confirmed:
+        if is_decline:
+            self.client.table("agreements").update({
+                "status": AgreementStatus.DECLINED.value
+            }).eq("id", agreement_id).execute()
+        elif status.all_confirmed:
             self.client.table("agreements").update({
                 "status": AgreementStatus.FULLY_CONFIRMED.value
             }).eq("id", agreement_id).execute()
@@ -465,8 +498,10 @@ class ConfirmationRepository:
         raw_token: str,
         notes: Optional[str] = None,
         client_ip: Optional[str] = None,
+        action: str = "agree",
+        decline_reason: Optional[str] = None,
     ) -> Dict[str, Any]:
-        """Verifies single-use signed token and executes confirmation."""
+        """Verifies single-use signed token and executes confirmation or decline."""
         token_hash = self.hash_token(raw_token)
         res = (
             self.client.table("confirmations")
@@ -478,7 +513,7 @@ class ConfirmationRepository:
         if not row:
             raise ValueError("Invalid or expired confirmation token.")
 
-        if row.get("confirmed"):
+        if row.get("confirmed") or row.get("declined"):
             raise ValueError("This single-use confirmation token has already been executed.")
 
         exp = row.get("token_expires_at")
@@ -489,25 +524,58 @@ class ConfirmationRepository:
 
         now_dt = datetime.now(timezone.utc)
         ip_hash = HashService.hash_ip(client_ip) if client_ip else None
+        ag_id = row["agreement_id"]
+
+        is_decline = (action == "decline")
+        if is_decline:
+            self.client.table("confirmations").update({
+                "confirmed": False,
+                "declined": True,
+                "declined_at": now_dt.isoformat(),
+                "decline_reason": decline_reason or notes,
+                "notes": notes,
+                "ip_hash": ip_hash,
+            }).eq("id", row["id"]).execute()
+
+            self.client.table("agreements").update({
+                "status": AgreementStatus.DECLINED.value
+            }).eq("id", ag_id).execute()
+
+            return {
+                "agreement_id": ag_id,
+                "party_name": row["party_name"],
+                "action": "decline",
+                "status": "declined",
+                "confirmed": False,
+                "declined": True,
+                "declined_at": now_dt.isoformat(),
+                "decline_reason": decline_reason or notes,
+            }
 
         self.client.table("confirmations").update({
             "confirmed": True,
+            "declined": False,
             "confirmed_at": now_dt.isoformat(),
             "notes": notes,
             "ip_hash": ip_hash,
         }).eq("id", row["id"]).execute()
 
         # Update agreement status if complete
-        ag_id = row["agreement_id"]
         status = self.get_confirmation_status(ag_id)
         if status.all_confirmed:
             self.client.table("agreements").update({
                 "status": AgreementStatus.FULLY_CONFIRMED.value
             }).eq("id", ag_id).execute()
+        elif any(r.confirmed for r in status.parties):
+            self.client.table("agreements").update({
+                "status": AgreementStatus.PARTIALLY_CONFIRMED.value
+            }).eq("id", ag_id).execute()
 
         return {
             "agreement_id": ag_id,
             "party_name": row["party_name"],
+            "action": "agree",
+            "status": "confirmed",
             "confirmed": True,
             "confirmed_at": now_dt.isoformat(),
         }
