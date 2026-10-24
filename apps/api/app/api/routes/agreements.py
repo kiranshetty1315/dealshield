@@ -1,7 +1,12 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Response
 from app.schemas.agreement import Agreement, AgreementCreateRequest
+from app.services.agreement_generator import AgreementGeneratorService
+from app.db.repository import AgreementRepository
 
 router = APIRouter(prefix="/agreements", tags=["Agreements"])
+
+agreement_repo = AgreementRepository()
+generator_service = AgreementGeneratorService()
 
 
 @router.post(
@@ -9,48 +14,50 @@ router = APIRouter(prefix="/agreements", tags=["Agreements"])
     response_model=Agreement,
     status_code=status.HTTP_201_CREATED,
     summary="Generate Agreement Draft",
-    description="Transforms extracted analysis terms into plain-language legal clauses."
+    description="Transforms extracted analysis terms into plain-language legal clauses and persists to Supabase.",
 )
-async def create_agreement(request: AgreementCreateRequest):
-    """Generate initial draft agreement.
-    
-    Assigned to Team D (Agreements, Database, and Security).
-    Returns 501 Not Implemented during initial scaffold phase.
-    """
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": "NotImplemented",
-            "message": "Agreement draft generation is pending Team D implementation.",
-            "team_owner": "Team D",
-            "assigned_branch": "feature/agreement-lifecycle",
-            "reference_template": "legal-knowledge/templates/service-agreement-template.md"
-        }
+async def create_agreement(request: AgreementCreateRequest) -> Agreement:
+    """Generate initial draft agreement and persist to database."""
+    agreement = generator_service.generate_draft(
+        analysis_id=request.analysis_id,
     )
+    return agreement
 
 
 @router.get(
     "/{agreement_id}",
     response_model=Agreement,
     summary="Get Agreement Details",
-    description="Retrieve agreement version history and status."
+    description="Retrieve agreement version history and status from Supabase.",
 )
-async def get_agreement(agreement_id: str):
+async def get_agreement(agreement_id: str) -> Agreement:
     """Retrieve agreement by ID."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Agreement retrieval pending Team D Supabase integration."
-    )
+    agreement = agreement_repo.get_agreement(agreement_id)
+    if not agreement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agreement {agreement_id} not found."
+        )
+    return agreement
 
 
 @router.get(
     "/{agreement_id}/pdf",
-    summary="Export Agreement as PDF",
-    description="Generates tamper-evident PDF agreement with WeasyPrint and computed SHA-256 fingerprint."
+    summary="Export Agreement as Document",
+    description="Generates document export with SHA-256 fingerprint audit stamp.",
 )
 async def export_agreement_pdf(agreement_id: str):
-    """Export PDF with WeasyPrint."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="WeasyPrint PDF generation is pending Team D implementation."
-    )
+    """Export formatted agreement document with cryptographic header."""
+    agreement = agreement_repo.get_agreement(agreement_id)
+    if not agreement:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agreement {agreement_id} not found."
+        )
+
+    text_content = generator_service.render_plain_text(agreement)
+    headers = {
+        "Content-Disposition": f'attachment; filename="agreement-{agreement_id[:8]}.txt"',
+        "X-DealShield-Hash": agreement.versions[-1].content_hash or "",
+    }
+    return Response(content=text_content, media_type="text/plain; charset=utf-8", headers=headers)

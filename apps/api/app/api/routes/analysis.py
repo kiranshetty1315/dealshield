@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException, status
 from app.schemas.analysis import AnalysisRequest, AgreementAnalysis
+from app.db.repository import AnalysisRepository
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
+analysis_repo = AnalysisRepository()
 
 
 @router.post(
@@ -33,16 +35,14 @@ async def analyze_chat(request: AnalysisRequest):
     "/{analysis_id}",
     response_model=AgreementAnalysis,
     summary="Get Analysis Result",
-    description="Retrieve stored analysis findings."
+    description="Retrieve stored analysis findings from Supabase."
 )
-async def get_analysis(analysis_id: str):
-    """Retrieve existing analysis record."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": "NotImplemented",
-            "message": "Analysis retrieval pending Team D Supabase integration.",
-            "team_owner": "Team D",
-            "assigned_branch": "feature/db-integration"
-        }
-    )
+async def get_analysis(analysis_id: str) -> AgreementAnalysis:
+    """Retrieve existing analysis record from database."""
+    result = analysis_repo.get_analysis(analysis_id)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Analysis {analysis_id} not found."
+        )
+    return result

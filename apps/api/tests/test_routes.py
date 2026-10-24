@@ -4,7 +4,7 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_chat_upload_text():
+def test_chat_upload_and_persistence():
     sample_chat = (
         "12/03/24, 10:15 - Raj Mehta: Hi Priya, let's discuss the project\n"
         "12/03/24, 10:16 - Priya Sharma: Sounds good Raj\n"
@@ -16,6 +16,7 @@ def test_chat_upload_text():
     )
     assert response.status_code == 201
     data = response.json()
+    chat_id = data["chat_id"]
     assert data["message_count"] == 2
     assert "Raj Mehta" in data["party_names"]
     assert "Priya Sharma" in data["party_names"]
@@ -23,6 +24,15 @@ def test_chat_upload_text():
     assert data["messages"][0]["message_id"] == "msg_raj_001"
     assert data["messages"][1]["message_id"] == "msg_priya_002"
     assert "date_format_inferred" in data
+
+    # Verify retrieval from database (Team D)
+    get_res = client.get(f"/api/v1/chats/{chat_id}")
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert get_data["chat_id"] == chat_id
+    assert get_data["message_count"] == 2
+    assert len(get_data["messages"]) == 2
+    assert get_data["messages"][0]["content"] == "Hi Priya, let's discuss the project"
 
 
 def test_chat_upload_file_size_limit():
@@ -67,26 +77,8 @@ def test_evidence_verify_route():
     assert "limitations_notice" in data
 
 
-def test_unimplemented_routes_return_501():
-    # Analysis
+def test_team_c_analysis_endpoint_remains_pending():
+    # Analysis trigger is owned by Team C
     res_analysis = client.post("/api/v1/analysis", json={"chat_id": "test_chat_1"})
     assert res_analysis.status_code == 501
     assert "Team C" in str(res_analysis.json())
-
-    # Agreements
-    res_agreements = client.post("/api/v1/agreements", json={"analysis_id": "test_analysis_1"})
-    assert res_agreements.status_code == 501
-    assert "Team D" in str(res_agreements.json())
-
-    # Confirmations
-    res_conf = client.post(
-        "/api/v1/confirmations",
-        json={
-            "agreement_id": "agr_1",
-            "version_number": 1,
-            "party_name": "Raj Mehta",
-            "confirmed": True
-        }
-    )
-    assert res_conf.status_code == 501
-    assert "Team D" in str(res_conf.json())

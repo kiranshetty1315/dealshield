@@ -1,0 +1,570 @@
+"""Supabase Repository Layer for DealShield AI.
+
+Implements database persistence operations for conversations, messages,
+agreements, confirmations, audit logs, and document hashes according to the
+PostgreSQL schema in infra/supabase/migrations/001_initial_schema.sql.
+"""
+
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, List, Optional, Tuple
+
+from app.db.client import get_supabase_client
+from app.schemas.chat import Message
+from app.schemas.analysis import AgreementAnalysis
+from app.schemas.agreement import Agreement, AgreementVersion, Clause, AgreementStatus
+from app.schemas.confirmation import ConfirmationStatus, PartyConfirmationRecord
+from app.schemas.evidence import DocumentHashRecord, AuditEventRecord
+from app.services.hash_service import HashService
+
+
+class ConversationRepository:
+    """Manages conversations and message citations persistence."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def create_conversation(
+        self,
+        conversation_id: str,
+        filename: str,
+        party_names: List[str],
+        message_count: int,
+        user_id: Optional[str] = None,
+        raw_content_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        user_uuid = user_id or "00000000-0000-0000-0000-000000000001"
+        row = {
+            "id": conversation_id,
+            "user_id": user_uuid,
+            "filename": filename,
+            "party_names": party_names,
+            "message_count": message_count,
+            "raw_content_path": raw_content_path,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        res = self.client.table("conversations").insert(row).execute()
+        return res.data[0] if isinstance(res.data, list) else res.data
+
+    def save_messages(self, conversation_id: str, messages: List[Message]) -> List[Dict[str, Any]]:
+        rows = []
+        for msg in messages:
+            ts_iso = (
+                msg.timestamp.isoformat()
+                if isinstance(msg.timestamp, datetime)
+                else str(msg.timestamp)
+            )
+            rows.append({
+                "conversation_id": conversation_id,
+                "message_id": msg.message_id,
+                "sender": msg.sender,
+                "content": msg.content,
+                "timestamp": ts_iso,
+                "raw_line": msg.raw_line,
+                "sequence_number": msg.sequence_number,
+            })
+        if not rows:
+            return []
+        res = self.client.table("messages").insert(rows).execute()
+        return res.data if isinstance(res.data, list) else [res.data]
+
+    def get_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
+        res = self.client.table("conversations").select("*").eq("id", conversation_id).execute()
+        data = res.data
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
+
+    def get_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
+        res = (
+            self.client.table("messages")
+            .select("*")
+            .eq("conversation_id", conversation_id)
+            .order("sequence_number", desc=False)
+            .execute()
+        )
+        data = res.data
+        return data if isinstance(data, list) else ([data] if data else [])
+
+
+class AgreementRepository:
+    """Manages agreements and version lifecycle persistence."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def create_agreement(
+        self,
+        analysis_id: str,
+        parties: List[str],
+        clauses: List[Clause],
+        content_hash: Optional[str] = None,
+        agreement_id: Optional[str] = None,
+    ) -> Agreement:
+        ag_id = agreement_id or str(uuid.uuid4())
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+
+        # Insert Agreement header
+        ag_row = {
+            "id": ag_id,
+            "analysis_id": analysis_id,
+            "parties": parties,
+            "current_version": 1,
+            "status": AgreementStatus.DRAFT.value,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        self.client.table("agreements").insert(ag_row).execute()
+
+        # Insert Agreement Version 1
+        ver_id = str(uuid.uuid4())
+        ver_row = {
+            "id": ver_id,
+            "agreement_id": ag_id,
+            "version_number": 1,
+            "clauses": [c.model_dump() for c in clauses],
+            "content_hash": content_hash,
+            "status": "draft",
+            "generated_at": now_iso,
+        }
+        self.client.table("agreement_versions").insert(ver_row).execute()
+
+        v1 = AgreementVersion(
+            version_number=1,
+            clauses=clauses,
+            generated_at=now_dt,
+            status=AgreementStatus.DRAFT,
+            content_hash=content_hash,
+        )
+
+        return Agreement(
+            id=ag_id,
+            analysis_id=analysis_id,
+            parties=parties,
+            current_version=1,
+            status=AgreementStatus.DRAFT,
+            versions=[v1],
+            created_at=now_dt,
+            updated_at=now_dt,
+        )
+
+    def get_agreement(self, agreement_id: str) -> Optional[Agreement]:
+        res = self.client.table("agreements").select("*").eq("id", agreement_id).execute()
+        ag_data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not ag_data:
+            return None
+
+        # Fetch versions
+        v_res = (
+            self.client.table("agreement_versions")
+            .select("*")
+            .eq("agreement_id", agreement_id)
+            .order("version_number", desc=False)
+            .execute()
+        )
+        raw_versions = v_res.data if isinstance(v_res.data, list) else [v_res.data]
+
+        versions = []
+        for rv in raw_versions:
+            raw_clauses = rv.get("clauses", [])
+            clauses = [Clause(**c) if isinstance(c, dict) else c for c in raw_clauses]
+            gen_at = rv.get("generated_at")
+            if isinstance(gen_at, str):
+                gen_at = datetime.fromisoformat(gen_at.replace("Z", "+00:00"))
+            elif not isinstance(gen_at, datetime):
+                gen_at = datetime.now(timezone.utc)
+
+            versions.append(
+                AgreementVersion(
+                    version_number=rv.get("version_number", 1),
+                    clauses=clauses,
+                    generated_at=gen_at,
+                    status=AgreementStatus(rv.get("status", "draft")),
+                    content_hash=rv.get("content_hash"),
+                )
+            )
+
+        c_at = ag_data.get("created_at")
+        u_at = ag_data.get("updated_at")
+        created_dt = (
+            datetime.fromisoformat(c_at.replace("Z", "+00:00"))
+            if isinstance(c_at, str)
+            else datetime.now(timezone.utc)
+        )
+        updated_dt = (
+            datetime.fromisoformat(u_at.replace("Z", "+00:00"))
+            if isinstance(u_at, str)
+            else datetime.now(timezone.utc)
+        )
+
+        return Agreement(
+            id=ag_data["id"],
+            analysis_id=ag_data["analysis_id"],
+            parties=ag_data.get("parties", []),
+            current_version=ag_data.get("current_version", 1),
+            status=AgreementStatus(ag_data.get("status", "draft")),
+            versions=versions,
+            created_at=created_dt,
+            updated_at=updated_dt,
+        )
+
+    def create_new_version(
+        self,
+        agreement_id: str,
+        clauses: List[Clause],
+        content_hash: Optional[str] = None,
+    ) -> AgreementVersion:
+        agreement = self.get_agreement(agreement_id)
+        if not agreement:
+            raise ValueError(f"Agreement {agreement_id} not found.")
+
+        new_version_num = agreement.current_version + 1
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+
+        # Mark previous versions as superseded
+        self.client.table("agreement_versions").update({"status": "superseded"}).eq(
+            "agreement_id", agreement_id
+        ).execute()
+
+        # Insert new version
+        ver_row = {
+            "agreement_id": agreement_id,
+            "version_number": new_version_num,
+            "clauses": [c.model_dump() for c in clauses],
+            "content_hash": content_hash,
+            "status": "draft",
+            "generated_at": now_iso,
+        }
+        self.client.table("agreement_versions").insert(ver_row).execute()
+
+        # Update agreement current_version
+        self.client.table("agreements").update({
+            "current_version": new_version_num,
+            "updated_at": now_iso,
+        }).eq("id", agreement_id).execute()
+
+        return AgreementVersion(
+            version_number=new_version_num,
+            clauses=clauses,
+            generated_at=now_dt,
+            status=AgreementStatus.DRAFT,
+            content_hash=content_hash,
+        )
+
+
+class ConfirmationRepository:
+    """Manages token-based confirmation links and status."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    @staticmethod
+    def hash_token(raw_token: str) -> str:
+        """Computes SHA-256 digest of secret token for database lookup."""
+        return hashlib.sha256(raw_token.strip().encode("utf-8")).hexdigest()
+
+    def create_confirmation_tokens(
+        self,
+        agreement_id: str,
+        version_id: str,
+        party_names: List[str],
+        hours_valid: int = 72,
+    ) -> List[Dict[str, Any]]:
+        """Generates single-use confirmation tokens for external counterparties."""
+        results = []
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=hours_valid)).isoformat()
+
+        for party in party_names:
+            raw_token = secrets.token_urlsafe(32)
+            token_hash = self.hash_token(raw_token)
+
+            row = {
+                "id": str(uuid.uuid4()),
+                "agreement_id": agreement_id,
+                "version_id": version_id,
+                "party_name": party,
+                "confirmed": False,
+                "confirmation_token_hash": token_hash,
+                "token_expires_at": expires_at,
+            }
+            self.client.table("confirmations").insert(row).execute()
+            results.append({
+                "party_name": party,
+                "raw_token": raw_token,
+                "token_hash": token_hash,
+                "expires_at": expires_at,
+            })
+        return results
+
+    def get_confirmation_status(self, agreement_id: str, version_number: int = 1) -> ConfirmationStatus:
+        res = (
+            self.client.table("confirmations")
+            .select("*")
+            .eq("agreement_id", agreement_id)
+            .execute()
+        )
+        data = res.data if isinstance(res.data, list) else [res.data]
+        records: List[PartyConfirmationRecord] = []
+
+        for row in data:
+            if not row:
+                continue
+            conf_at = row.get("confirmed_at")
+            dt = (
+                datetime.fromisoformat(conf_at.replace("Z", "+00:00"))
+                if isinstance(conf_at, str)
+                else None
+            )
+            records.append(
+                PartyConfirmationRecord(
+                    party_name=row["party_name"],
+                    confirmed=bool(row.get("confirmed", False)),
+                    confirmed_at=dt,
+                    notes=row.get("notes"),
+                    ip_hash=row.get("ip_hash"),
+                )
+            )
+
+        all_conf = len(records) > 0 and all(r.confirmed for r in records)
+        return ConfirmationStatus(
+            agreement_id=agreement_id,
+            version_number=version_number,
+            parties=records,
+            all_confirmed=all_conf,
+            last_updated=datetime.now(timezone.utc),
+        )
+
+    def submit_confirmation_by_party(
+        self,
+        agreement_id: str,
+        party_name: str,
+        confirmed: bool,
+        notes: Optional[str] = None,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Confirms agreement directly for party."""
+        now_dt = datetime.now(timezone.utc)
+        ip_hash = HashService.hash_ip(client_ip) if client_ip else None
+
+        update_payload = {
+            "confirmed": confirmed,
+            "confirmed_at": now_dt.isoformat() if confirmed else None,
+            "notes": notes,
+            "ip_hash": ip_hash,
+        }
+
+        # Check if row exists for party
+        res = (
+            self.client.table("confirmations")
+            .select("*")
+            .eq("agreement_id", agreement_id)
+            .eq("party_name", party_name)
+            .execute()
+        )
+        existing = res.data[0] if isinstance(res.data, list) and res.data else res.data
+
+        if existing:
+            self.client.table("confirmations").update(update_payload).eq(
+                "agreement_id", agreement_id
+            ).eq("party_name", party_name).execute()
+        else:
+            # Create confirmation record
+            new_row = {
+                "id": str(uuid.uuid4()),
+                "agreement_id": agreement_id,
+                "version_id": str(uuid.uuid4()),
+                "party_name": party_name,
+                **update_payload,
+            }
+            self.client.table("confirmations").insert(new_row).execute()
+
+        # Check if all parties confirmed to update agreement status
+        status = self.get_confirmation_status(agreement_id)
+        if status.all_confirmed:
+            self.client.table("agreements").update({
+                "status": AgreementStatus.FULLY_CONFIRMED.value
+            }).eq("id", agreement_id).execute()
+        elif any(r.confirmed for r in status.parties):
+            self.client.table("agreements").update({
+                "status": AgreementStatus.PARTIALLY_CONFIRMED.value
+            }).eq("id", agreement_id).execute()
+
+        return update_payload
+
+    def submit_confirmation_by_token(
+        self,
+        raw_token: str,
+        notes: Optional[str] = None,
+        client_ip: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Verifies single-use signed token and executes confirmation."""
+        token_hash = self.hash_token(raw_token)
+        res = (
+            self.client.table("confirmations")
+            .select("*")
+            .eq("confirmation_token_hash", token_hash)
+            .execute()
+        )
+        row = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not row:
+            raise ValueError("Invalid or expired confirmation token.")
+
+        if row.get("confirmed"):
+            raise ValueError("This single-use confirmation token has already been executed.")
+
+        exp = row.get("token_expires_at")
+        if exp:
+            exp_dt = datetime.fromisoformat(exp.replace("Z", "+00:00"))
+            if exp_dt < datetime.now(timezone.utc):
+                raise ValueError("Confirmation token has expired.")
+
+        now_dt = datetime.now(timezone.utc)
+        ip_hash = HashService.hash_ip(client_ip) if client_ip else None
+
+        self.client.table("confirmations").update({
+            "confirmed": True,
+            "confirmed_at": now_dt.isoformat(),
+            "notes": notes,
+            "ip_hash": ip_hash,
+        }).eq("id", row["id"]).execute()
+
+        # Update agreement status if complete
+        ag_id = row["agreement_id"]
+        status = self.get_confirmation_status(ag_id)
+        if status.all_confirmed:
+            self.client.table("agreements").update({
+                "status": AgreementStatus.FULLY_CONFIRMED.value
+            }).eq("id", ag_id).execute()
+
+        return {
+            "agreement_id": ag_id,
+            "party_name": row["party_name"],
+            "confirmed": True,
+            "confirmed_at": now_dt.isoformat(),
+        }
+
+
+class AuditRepository:
+    """Manages append-only immutable audit events."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def log_event(
+        self,
+        entity_type: str,
+        entity_id: str,
+        action: str,
+        actor_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        row = {
+            "id": str(uuid.uuid4()),
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "action": action,
+            "actor_id": actor_id,
+            "metadata": metadata or {},
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        res = self.client.table("audit_events").insert(row).execute()
+        return res.data[0] if isinstance(res.data, list) and res.data else res.data
+
+    def get_audit_trail(self, entity_id: str) -> List[Dict[str, Any]]:
+        res = (
+            self.client.table("audit_events")
+            .select("*")
+            .eq("entity_id", entity_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+        data = res.data
+        return data if isinstance(data, list) else ([data] if data else [])
+
+
+class EvidenceRepository:
+    """Manages SHA-256 document fingerprint hashes."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def record_document_hash(
+        self,
+        document_id: str,
+        document_type: str,
+        hash_value: str,
+    ) -> Dict[str, Any]:
+        row = {
+            "id": str(uuid.uuid4()),
+            "document_id": document_id,
+            "document_type": document_type,
+            "hash_algorithm": "sha256",
+            "hash_value": hash_value,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        res = self.client.table("document_hashes").insert(row).execute()
+        return res.data[0] if isinstance(res.data, list) and res.data else res.data
+
+    def get_document_hash(self, document_id: str, document_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        qb = self.client.table("document_hashes").select("*").eq("document_id", document_id)
+        if document_type:
+            qb = qb.eq("document_type", document_type)
+        res = qb.execute()
+        data = res.data
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
+
+
+class AnalysisRepository:
+    """Manages legal analysis results persistence."""
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+
+    def save_analysis(self, analysis: AgreementAnalysis) -> Dict[str, Any]:
+        row = {
+            "id": analysis.analysis_id,
+            "conversation_id": analysis.chat_id,
+            "extracted_terms": [t.model_dump() for t in analysis.extracted_terms],
+            "conflicts": [c.model_dump() for c in analysis.conflicts],
+            "missing_terms": [m.model_dump() for m in analysis.missing_terms],
+            "parties": [p.model_dump() for p in analysis.parties],
+            "confidence_score": analysis.confidence_score,
+            "requires_human_review": analysis.requires_human_review,
+            "analyzed_at": (
+                analysis.analyzed_at.isoformat()
+                if isinstance(analysis.analyzed_at, datetime)
+                else str(analysis.analyzed_at)
+            ),
+        }
+        res = self.client.table("analyses").insert(row).execute()
+        return res.data[0] if isinstance(res.data, list) and res.data else res.data
+
+    def get_analysis(self, analysis_id: str) -> Optional[AgreementAnalysis]:
+        res = self.client.table("analyses").select("*").eq("id", analysis_id).execute()
+        data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not data:
+            return None
+        an_at = data.get("analyzed_at")
+        an_dt = (
+            datetime.fromisoformat(an_at.replace("Z", "+00:00"))
+            if isinstance(an_at, str)
+            else datetime.now(timezone.utc)
+        )
+        return AgreementAnalysis(
+            analysis_id=data["id"],
+            chat_id=data.get("conversation_id", ""),
+            parties=data.get("parties", []),
+            extracted_terms=data.get("extracted_terms", []),
+            conflicts=data.get("conflicts", []),
+            missing_terms=data.get("missing_terms", []),
+            confidence_score=data.get("confidence_score", 0.0),
+            requires_human_review=data.get("requires_human_review", True),
+            analyzed_at=an_dt,
+        )
+

@@ -17,7 +17,7 @@ LEGAL & ARCHITECTURAL LIMITATIONS NOTICE:
 
 import hashlib
 import json
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 from app.schemas.evidence import DocumentHashRecord
 
 
@@ -39,6 +39,12 @@ class HashService:
         """Compute deterministic SHA-256 digest for JSON-serializable dictionaries."""
         serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def hash_ip(ip_address: str, salt: Optional[str] = None) -> str:
+        """Anonymize and hash IP address for DPDP Act 2023 compliance."""
+        from app.core.security import hash_ip
+        return hash_ip(ip_address, salt)
 
     @classmethod
     def create_document_hash_record(

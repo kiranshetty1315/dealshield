@@ -1,0 +1,181 @@
+"""Supabase Client and Database Session Factory.
+
+Provides a unified interface for database operations. If configured with live
+Supabase credentials, connects via supabase-py. If placeholder credentials are
+present (default in local dev and CI test environments), automatically utilizes
+an in-memory database engine supporting PostgREST query operations.
+"""
+
+from typing import Any, Dict, List, Optional
+import copy
+import uuid
+from datetime import datetime, timezone
+from app.core.config import settings
+
+try:
+    from supabase import create_client, Client
+except ImportError:
+    create_client = None
+    Client = Any
+
+
+class MockResponse:
+    """Simulates PostgREST API response."""
+    def __init__(self, data: Any, count: Optional[int] = None):
+        self.data = data
+        self.count = count if count is not None else (len(data) if isinstance(data, list) else 1)
+
+
+class MockTableQueryBuilder:
+    """Simulates PostgREST query chain (insert, select, eq, order, execute)."""
+
+    def __init__(self, storage: Dict[str, List[Dict[str, Any]]], table_name: str):
+        self._storage = storage
+        self._table = table_name
+        self._action = "select"
+        self._insert_data: Any = None
+        self._update_data: Any = None
+        self._filters: List[tuple] = []
+        self._order_col: Optional[str] = None
+        self._order_desc: bool = False
+        self._limit_count: Optional[int] = None
+        self._single: bool = False
+
+        if table_name not in self._storage:
+            self._storage[table_name] = []
+
+    def insert(self, data: Any):
+        self._action = "insert"
+        self._insert_data = data
+        return self
+
+    def update(self, data: Any):
+        self._action = "update"
+        self._update_data = data
+        return self
+
+    def select(self, columns: str = "*"):
+        self._action = "select"
+        return self
+
+    def eq(self, column: str, value: Any):
+        self._filters.append((column, value))
+        return self
+
+    def order(self, column: str, desc: bool = False):
+        self._order_col = column
+        self._order_desc = desc
+        return self
+
+    def limit(self, count: int):
+        self._limit_count = count
+        return self
+
+    def single(self):
+        self._single = True
+        return self
+
+    def execute(self) -> MockResponse:
+        rows = self._storage[self._table]
+
+        if self._action == "insert":
+            inserted = []
+            items = self._insert_data if isinstance(self._insert_data, list) else [self._insert_data]
+            for item in items:
+                row = copy.deepcopy(item)
+                if "id" not in row or not row["id"]:
+                    row["id"] = str(uuid.uuid4())
+                if "created_at" not in row:
+                    row["created_at"] = datetime.now(timezone.utc).isoformat()
+                rows.append(row)
+                inserted.append(row)
+            return MockResponse(inserted if isinstance(self._insert_data, list) else inserted[0])
+
+        elif self._action == "update":
+            updated = []
+            for row in rows:
+                match = True
+                for col, val in self._filters:
+                    if str(row.get(col)) != str(val):
+                        match = False
+                        break
+                if match:
+                    for k, v in self._update_data.items():
+                        row[k] = v
+                    updated.append(copy.deepcopy(row))
+            return MockResponse(updated if not self._single else (updated[0] if updated else None))
+
+        else:  # select
+            matched = []
+            for row in rows:
+                match = True
+                for col, val in self._filters:
+                    if str(row.get(col)) != str(val):
+                        match = False
+                        break
+                if match:
+                    matched.append(copy.deepcopy(row))
+
+            if self._order_col:
+                matched.sort(
+                    key=lambda r: r.get(self._order_col, ""),
+                    reverse=self._order_desc
+                )
+
+            if self._limit_count is not None:
+                matched = matched[:self._limit_count]
+
+            if self._single:
+                res_data = matched[0] if matched else None
+            else:
+                res_data = matched
+
+            return MockResponse(res_data)
+
+
+class LocalMemoryDatabase:
+    """In-memory PostgREST compatible database for tests and offline development."""
+
+    def __init__(self):
+        self._storage: Dict[str, List[Dict[str, Any]]] = {
+            "users": [],
+            "conversations": [],
+            "messages": [],
+            "analyses": [],
+            "agreements": [],
+            "agreement_versions": [],
+            "confirmations": [],
+            "audit_events": [],
+            "document_hashes": [],
+        }
+
+    def table(self, table_name: str) -> MockTableQueryBuilder:
+        return MockTableQueryBuilder(self._storage, table_name)
+
+    def reset(self):
+        """Reset all tables (useful for unit test isolation)."""
+        for k in self._storage:
+            self._storage[k].clear()
+
+
+# Singleton in-memory DB instance
+_local_db_instance = LocalMemoryDatabase()
+
+
+def is_live_supabase_configured() -> bool:
+    """Checks whether non-placeholder Supabase credentials are configured."""
+    url = settings.SUPABASE_URL.lower()
+    key = settings.SUPABASE_SERVICE_ROLE_KEY.lower()
+    if not url or "placeholder" in url or "your-project" in url:
+        return False
+    if not key or "placeholder" in key or "your-supabase" in key:
+        return False
+    return True
+
+
+def get_supabase_client(use_service_role: bool = True):
+    """Returns official Supabase client if configured, otherwise returns local database."""
+    if is_live_supabase_configured() and create_client is not None:
+        key = settings.SUPABASE_SERVICE_ROLE_KEY if use_service_role else settings.SUPABASE_ANON_KEY
+        return create_client(settings.SUPABASE_URL, key)
+    return _local_db_instance

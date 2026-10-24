@@ -1,10 +1,14 @@
-from typing import Optional
-from fastapi import APIRouter, HTTPException, status, Body
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 from app.schemas.evidence import DocumentHashRecord, AuditEventRecord
 from app.services.hash_service import HashService
+from app.db.repository import AuditRepository, EvidenceRepository
 
 router = APIRouter(prefix="/evidence", tags=["Evidence Vault"])
+
+audit_repo = AuditRepository()
+evidence_repo = EvidenceRepository()
 
 
 class HashVerificationRequest(BaseModel):
@@ -27,7 +31,7 @@ class HashVerificationResponse(BaseModel):
     "/verify",
     response_model=HashVerificationResponse,
     summary="Verify Document Integrity Hash",
-    description="Validates that a given text or exported document matches its expected SHA-256 cryptographic digest."
+    description="Validates that a given text or exported document matches its expected SHA-256 cryptographic digest.",
 )
 async def verify_document_hash(payload: HashVerificationRequest) -> HashVerificationResponse:
     """Verifies content consistency against an expected SHA-256 hash."""
@@ -44,17 +48,22 @@ async def verify_document_hash(payload: HashVerificationRequest) -> HashVerifica
 
 @router.get(
     "/audit-log/{entity_id}",
+    response_model=List[AuditEventRecord],
     summary="Get Tamper-Evident Audit Records",
-    description="Retrieve append-only audit trail for an entity."
+    description="Retrieve append-only audit trail for an entity from Supabase.",
 )
-async def get_audit_trail(entity_id: str):
+async def get_audit_trail(entity_id: str) -> List[AuditEventRecord]:
     """Retrieve audit events from database."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail={
-            "error": "NotImplemented",
-            "message": "Audit event retrieval is pending Team D Supabase integration.",
-            "team_owner": "Team D",
-            "assigned_branch": "feature/evidence-vault"
-        }
-    )
+    events = audit_repo.get_audit_trail(entity_id)
+    return [
+        AuditEventRecord(
+            id=e["id"],
+            entity_type=e["entity_type"],
+            entity_id=e["entity_id"],
+            action=e["action"],
+            actor_id=e.get("actor_id"),
+            created_at=e["created_at"],
+            metadata=e.get("metadata"),
+        )
+        for e in events
+    ]
