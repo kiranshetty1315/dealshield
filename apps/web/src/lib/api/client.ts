@@ -87,18 +87,37 @@ export class ApiClient {
     return res.json();
   }
 
-  async getMe(token: string): Promise<User> {
+  async getMe(token?: string): Promise<User> {
+    const activeToken = token || (typeof window !== "undefined" ? localStorage.getItem("dealshield_auth_token") : null);
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (activeToken) {
+      headers["Authorization"] = `Bearer ${activeToken}`;
+    }
     const res = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        Authorization: `Bearer ${token}`,
-      },
+      headers,
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to fetch user profile" }));
       throw new Error(err.detail || `Failed to fetch profile (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async updateProfile(data: { full_name?: string; organization?: string; role?: string }): Promise<User> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to update profile" }));
+      throw new Error(err.detail || `Failed to update profile (${res.status})`);
     }
     return res.json();
   }

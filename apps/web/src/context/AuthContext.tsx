@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { User } from "@/types";
 import { api } from "@/lib/api/client";
 
@@ -12,6 +12,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<User>;
   signup: (email: string, password: string, fullName?: string, organization?: string) => Promise<User>;
   logout: () => Promise<void>;
+  updateUser: (data: { full_name?: string; organization?: string; role?: string }) => Promise<User>;
+  refreshUser: () => Promise<User | null>;
   setDemoUser: () => void;
 }
 
@@ -33,21 +35,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Restore authenticated session from localStorage on mount
+  // Restore authenticated session from localStorage on mount and refresh from Supabase
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
-      const storedUser = localStorage.getItem(STORAGE_KEY_USER);
+    async function restoreSession() {
+      try {
+        const storedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+        const storedUser = localStorage.getItem(STORAGE_KEY_USER);
 
-      if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        if (storedToken && storedUser) {
+          setToken(storedToken);
+          setUser(JSON.parse(storedUser));
+
+          // Background revalidation against Supabase database
+          api.getMe(storedToken).then((freshUser) => {
+            if (freshUser) {
+              setUser(freshUser);
+              localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(freshUser));
+            }
+          }).catch(() => null);
+        }
+      } catch (e) {
+        console.warn("Failed to restore auth session:", e);
+      } finally {
+        setIsLoading(false);
       }
-    } catch (e) {
-      console.warn("Failed to restore auth session:", e);
-    } finally {
-      setIsLoading(false);
     }
+    restoreSession();
   }, []);
 
   const login = async (email: string, password: string): Promise<User> => {
@@ -125,6 +138,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUser = useCallback(
+    async (data: { full_name?: string; organization?: string; role?: string }): Promise<User> => {
+      setIsLoading(true);
+      try {
+        const updatedUser = await api.updateProfile(data);
+        setUser(updatedUser);
+        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(updatedUser));
+        return updatedUser;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
+
+  const refreshUser = useCallback(async (): Promise<User | null> => {
+    const activeToken = token || (typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY_TOKEN) : null);
+    if (!activeToken) return null;
+    try {
+      const freshUser = await api.getMe(activeToken);
+      setUser(freshUser);
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(freshUser));
+      return freshUser;
+    } catch {
+      return null;
+    }
+  }, [token]);
+
   const setDemoUser = () => {
     setUser(DEFAULT_DEMO_USER);
     setToken("demo-offline-session-token");
@@ -142,6 +183,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         signup,
         logout,
+        updateUser,
+        refreshUser,
         setDemoUser,
       }}
     >

@@ -17,6 +17,12 @@ class UserLoginRequest(BaseModel):
     password: str = Field(..., description="User password")
 
 
+class UserUpdateRequest(BaseModel):
+    full_name: Optional[str] = Field(None, description="User full display name")
+    organization: Optional[str] = Field(None, description="User organization")
+    role: Optional[str] = Field(None, description="User role in the system")
+
+
 class UserResponse(BaseModel):
     id: str = Field(..., description="User unique UUID")
     email: str = Field(..., description="User email address")

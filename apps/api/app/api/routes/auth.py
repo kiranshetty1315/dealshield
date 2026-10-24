@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Header, status
 from app.schemas.auth import (
     UserSignupRequest,
     UserLoginRequest,
+    UserUpdateRequest,
     UserResponse,
     AuthResponse,
 )
@@ -164,6 +165,68 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
         role=user.get("role", "Contract Sponsor"),
         organization=user.get("organization", "DealShield LegalTech Hackathon"),
         created_at=user.get("created_at"),
+    )
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user(req: UserUpdateRequest, authorization: Optional[str] = Header(None)):
+    """Update profile attributes for currently authenticated user in Supabase."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or malformed Authorization header.",
+        )
+
+    token = authorization[7:].strip()
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token.",
+        )
+
+    user_repo = UserRepository()
+    user = user_repo.get_by_id(payload.get("sub", ""))
+    if not user:
+        user = user_repo.get_by_email(payload.get("email", ""))
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found.",
+        )
+
+    updated = user_repo.update_user(
+        user_id=user["id"],
+        full_name=req.full_name,
+        organization=req.organization,
+        role=req.role,
+    )
+    if not updated:
+        updated = user_repo.get_by_id(user["id"])
+
+    # Log audit event
+    try:
+        audit_repo = AuditRepository()
+        audit_repo.record_event(
+            entity_type="user",
+            entity_id=user["id"],
+            action="user_profile_updated",
+            actor_id=user["id"],
+            metadata={
+                "updated_fields": [k for k, v in req.model_dump(exclude_unset=True).items() if v is not None]
+            },
+        )
+    except Exception:
+        pass
+
+    return UserResponse(
+        id=updated["id"],
+        email=updated["email"],
+        full_name=updated.get("full_name", "DealShield User"),
+        role=updated.get("role", "Contract Sponsor"),
+        organization=updated.get("organization", "DealShield LegalTech Hackathon"),
+        created_at=updated.get("created_at"),
     )
 
 

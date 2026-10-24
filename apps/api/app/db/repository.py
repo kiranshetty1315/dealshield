@@ -626,6 +626,8 @@ class AuditRepository:
         res = self.client.table("audit_events").insert(row).execute()
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
 
+    record_event = log_event
+
     def get_audit_trail(self, entity_id: str) -> List[Dict[str, Any]]:
         res = (
             self.client.table("audit_events")
@@ -819,6 +821,31 @@ class UserRepository:
         }
         res = self.client.table("users").insert(row).execute()
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
+
+    def update_user(
+        self,
+        user_id: str,
+        full_name: Optional[str] = None,
+        organization: Optional[str] = None,
+        role: Optional[str] = None,
+        password_hash: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Updates user profile attributes in Supabase users table."""
+        updates: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc).isoformat()}
+        if full_name is not None:
+            updates["full_name"] = full_name
+        if organization is not None:
+            updates["organization"] = organization
+        if role is not None:
+            updates["role"] = role
+        if password_hash is not None:
+            updates["password_hash"] = password_hash
+
+        res = self.client.table("users").update(updates).eq("id", user_id).execute()
+        data = res.data
+        if isinstance(data, list) and data:
+            return data[0]
+        return data or self.get_by_id(user_id)
 
 
 class DashboardRepository:

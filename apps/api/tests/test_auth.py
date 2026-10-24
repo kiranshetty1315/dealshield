@@ -76,6 +76,22 @@ def test_signup_and_login_flow():
     assert me_data["email"] == signup_email
     assert me_data["full_name"] == "Advocate Priya Sharma"
 
+    # Test updating user profile via PUT /api/v1/auth/me
+    update_resp = client.put(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "full_name": "Senior Advocate Priya Sharma",
+            "organization": "Supreme Court Legal Chambers",
+            "role": "General Counsel",
+        },
+    )
+    assert update_resp.status_code == 200
+    updated_data = update_resp.json()
+    assert updated_data["full_name"] == "Senior Advocate Priya Sharma"
+    assert updated_data["organization"] == "Supreme Court Legal Chambers"
+    assert updated_data["role"] == "General Counsel"
+
 
 def test_signup_duplicate_email_fails():
     """Verify signing up with an already registered email returns 400."""
