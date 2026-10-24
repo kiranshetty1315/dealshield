@@ -115,8 +115,8 @@ async def get_agreement(agreement_id: str) -> Agreement:
 
 @router.get(
     "/{agreement_id}/pdf",
-    summary="Export Agreement as Indian Stamp Paper PDF or Document",
-    description="Generates Indian Non-Judicial Stamp Paper PDF with SHA-256 fingerprint audit stamp.",
+    summary="Export Agreement as Plain-Language Commercial Agreement PDF or Document",
+    description="Generates Plain-Language Commercial Agreement Record PDF with SHA-256 fingerprint audit stamp.",
 )
 async def export_agreement_pdf(
     agreement_id: str,
@@ -146,7 +146,7 @@ async def export_agreement_pdf(
         }
         return Response(content=text_content, media_type="text/plain; charset=utf-8", headers=headers)
 
-    # Default: Generate authentic Indian Non-Judicial e-Stamp Paper PDF
+    # Default: Generate Plain-Language Commercial Agreement PDF
     from app.services.stamp_pdf_generator import StampPaperPdfService
     from app.db.repository import ConfirmationRepository
 
@@ -159,9 +159,8 @@ async def export_agreement_pdf(
     pdf_bytes = StampPaperPdfService.generate_pdf(agreement=agreement, confirmation_status=conf_status)
 
     headers = {
-        "Content-Disposition": f'attachment; filename="DealShield-Stamp-Agreement-{agreement_id[:8]}.pdf"',
+        "Content-Disposition": f'attachment; filename="DealShield-Agreement-{agreement_id[:8]}.pdf"',
         "Content-Type": "application/pdf",
         "X-DealShield-Hash": agreement.versions[-1].content_hash or "",
-        "X-Stamp-Paper": "Indian-Non-Judicial-Article-5C",
     }
     return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)

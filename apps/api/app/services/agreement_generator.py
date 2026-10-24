@@ -210,4 +210,34 @@ class AgreementGeneratorService:
     def render_plain_text(self, agreement: Agreement) -> str:
         ver = agreement.versions[-1] if agreement.versions else None
         clauses = ver.clauses if ver else []
-        return self._compile_plain_text(agreement.parties, clauses)
+        base_text = self._compile_plain_text(agreement.parties, clauses)
+
+        # Append plain text Certificate of Assent if confirmation records exist
+        try:
+            conf_status = self.confirmation_repo.get_confirmation_status(agreement.id)
+            if conf_status and conf_status.parties:
+                lines = [
+                    base_text,
+                    "\n==================================================",
+                    "CERTIFICATE OF ASSENT",
+                    "==================================================",
+                ]
+                for p in conf_status.parties:
+                    status_str = "CONFIRMED" if p.confirmed else ("DECLINED" if p.declined else "PENDING")
+                    lines.append(f"Party: {p.party_name}")
+                    if p.masked_email:
+                        lines.append(f"Email: {p.masked_email}")
+                    lines.append(f"Status: {status_str}")
+                    if p.confirmed and p.confirmed_at:
+                        lines.append(f"Confirmed At: {p.confirmed_at.isoformat()} UTC")
+                        lines.append(f"Verification Method: {p.verification_method or 'email_otp'}")
+                    if p.declined and p.decline_reason:
+                        lines.append(f"Decline Reason: {p.decline_reason}")
+                    if p.ip_hash:
+                        lines.append(f"Audit IP Prefix: {p.ip_hash[:12]}...")
+                    lines.append("--------------------------------------------------")
+                return "\n".join(lines)
+        except Exception:
+            pass
+
+        return base_text
