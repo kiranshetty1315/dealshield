@@ -115,3 +115,76 @@ def sanitize_filename(filename: str) -> str:
     """Basic path traversal prevention for uploaded files."""
     cleaned = filename.replace("\\", "/").split("/")[-1]
     return "".join(c for c in cleaned if c.isalnum() or c in "._- ")
+
+
+def hash_password(password: str) -> str:
+    """Hash password securely using standard library PBKDF2-HMAC-SHA256 (100,000 rounds)."""
+    import os
+    salt = os.urandom(16)
+    key = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
+    return f"{salt.hex()}:{key.hex()}"
+
+
+def verify_password(stored_hash: str, provided_password: str) -> bool:
+    """Verify provided password against stored PBKDF2 salt:key hash."""
+    try:
+        if not stored_hash or ":" not in stored_hash:
+            return False
+        salt_hex, key_hex = stored_hash.split(":", 1)
+        salt = bytes.fromhex(salt_hex)
+        key = hashlib.pbkdf2_hmac("sha256", provided_password.encode("utf-8"), salt, 100000)
+        return hmac.compare_digest(key.hex(), key_hex)
+    except Exception:
+        return False
+
+
+def create_access_token(user_id: str, email: str) -> str:
+    """Create signed, tamper-evident bearer token using HMAC-SHA256 and app secret."""
+    import json
+    import time
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "iat": int(time.time()),
+        "exp": int(time.time()) + 86400 * 7,  # 7-day session
+    }
+    raw_payload = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    b64_payload = base64.urlsafe_b64encode(raw_payload).decode("utf-8").rstrip("=")
+    secret = getattr(settings, "SECRET_KEY", settings.IP_HASH_SALT)
+    signature = hmac.new(
+        secret.encode("utf-8"),
+        b64_payload.encode("utf-8"),
+        hashlib.sha256
+    ).hexdigest()
+    return f"{b64_payload}.{signature}"
+
+
+def verify_access_token(token: str) -> Optional[dict]:
+    """Verify and parse signed bearer token. Returns payload dict or None if invalid/expired."""
+    import json
+    import time
+    try:
+        parts = token.strip().split(".")
+        if len(parts) != 2:
+            return None
+        b64_payload, signature = parts
+        secret = getattr(settings, "SECRET_KEY", settings.IP_HASH_SALT)
+        expected_sig = hmac.new(
+            secret.encode("utf-8"),
+            b64_payload.encode("utf-8"),
+            hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(signature, expected_sig):
+            return None
+
+        # Add base64 padding
+        padding = "=" * ((4 - len(b64_payload) % 4) % 4)
+        raw_payload = base64.urlsafe_b64decode(b64_payload + padding).decode("utf-8")
+        payload = json.loads(raw_payload)
+
+        # Check expiration
+        if payload.get("exp", 0) < int(time.time()):
+            return None
+        return payload
+    except Exception:
+        return None

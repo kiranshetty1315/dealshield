@@ -28,9 +28,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 import { ConversationRecord } from "@/types";
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   // --- Message History & DPDP Erasure State ---
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -443,7 +445,7 @@ export default function SettingsPage() {
                     Password Reset Procedure
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    DealShield uses cryptographic Supabase Auth. To reset your credentials, a one-time magic link is dispatched to your registered address (<code>demo@dealshield.local</code>).
+                    DealShield uses cryptographic Supabase Auth. To reset your credentials, a one-time magic link is dispatched to your registered address (<code>{user?.email || "demo@dealshield.local"}</code>).
                   </p>
                 </div>
               )}

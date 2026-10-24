@@ -13,6 +13,7 @@ from app.api.routes import (
     agreements_router,
     confirmations_router,
     evidence_router,
+    auth_router,
 )
 
 app = FastAPI(
@@ -47,6 +48,7 @@ app.include_router(analysis_router, prefix=settings.API_V1_PREFIX)
 app.include_router(agreements_router, prefix=settings.API_V1_PREFIX)
 app.include_router(confirmations_router, prefix=settings.API_V1_PREFIX)
 app.include_router(evidence_router, prefix=settings.API_V1_PREFIX)
+app.include_router(auth_router, prefix=settings.API_V1_PREFIX)
 
 
 @app.get("/", tags=["Root"])

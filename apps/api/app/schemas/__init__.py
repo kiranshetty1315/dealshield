@@ -25,6 +25,12 @@ from app.schemas.confirmation import (
     PartyConfirmationRecord,
 )
 from app.schemas.evidence import DocumentHashRecord, AuditEventRecord
+from app.schemas.auth import (
+    UserSignupRequest,
+    UserLoginRequest,
+    UserResponse,
+    AuthResponse,
+)
 
 __all__ = [
     "HealthResponse",
@@ -51,4 +57,8 @@ __all__ = [
     "PartyConfirmationRecord",
     "DocumentHashRecord",
     "AuditEventRecord",
+    "UserSignupRequest",
+    "UserLoginRequest",
+    "UserResponse",
+    "AuthResponse",
 ]

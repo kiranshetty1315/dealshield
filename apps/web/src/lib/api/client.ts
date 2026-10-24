@@ -8,6 +8,8 @@ import {
   DocumentHashVerification,
   AuditEvent,
   TokenConfirmationResponse,
+  User,
+  AuthResponse,
 } from "@/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -33,6 +35,63 @@ export class ApiClient {
       throw new Error(`Health check failed with status: ${res.status}`);
     }
     return res.json();
+  }
+
+  // --- Authentication ---
+
+  async login(credentials: { email: string; password: string }): Promise<AuthResponse> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(credentials),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Login failed" }));
+      throw new Error(err.detail || `Login failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async signup(data: {
+    email: string;
+    password: string;
+    full_name?: string;
+    organization?: string;
+  }): Promise<AuthResponse> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/signup`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Signup failed" }));
+      throw new Error(err.detail || `Signup failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getMe(token: string): Promise<User> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
+      method: "GET",
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to fetch user profile" }));
+      throw new Error(err.detail || `Failed to fetch profile (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async logout(): Promise<void> {
+    await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
+      method: "POST",
+    }).catch(() => {});
   }
 
   // --- Team B: Chat Ingestion ---
@@ -98,27 +157,27 @@ export class ApiClient {
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Failed to delete conversation" }));
-      throw new Error(err.detail || `Delete failed (${res.status})`);
+      const err = await res.json().catch(() => ({ detail: "Failed to delete chat" }));
+      throw new Error(err.detail || `Failed to delete conversation (${res.status})`);
     }
     return res.json();
   }
 
-  async deleteAllChats(): Promise<{ status: string; erased_count: number; message: string }> {
+  async deleteAllChats(): Promise<{ status: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats`, {
       method: "DELETE",
       headers: { Accept: "application/json" },
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Failed to delete all conversations" }));
-      throw new Error(err.detail || `Delete failed (${res.status})`);
+      const err = await res.json().catch(() => ({ detail: "Failed to erase message history" }));
+      throw new Error(err.detail || `Failed to erase message history (${res.status})`);
     }
     return res.json();
   }
 
-  // --- Team C: AI Extraction & Section 7 Intelligence ---
+  // --- Team C: Analysis ---
 
-  async analyzeChat(chatId: string, focusAreas?: string[]): Promise<AgreementAnalysis> {
+  async runAnalysis(chatId: string, focusAreas?: string[]): Promise<AgreementAnalysis> {
     const res = await fetch(`${this.baseUrl}/api/v1/analysis`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -127,9 +186,13 @@ export class ApiClient {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Analysis failed" }));
-      throw new Error(err.detail || `Analysis request failed with status: ${res.status}`);
+      throw new Error(err.detail || `Analysis failed with status: ${res.status}`);
     }
     return res.json();
+  }
+
+  async analyzeChat(chatId: string, focusAreas?: string[]): Promise<AgreementAnalysis> {
+    return this.runAnalysis(chatId, focusAreas);
   }
 
   async getAnalysis(analysisId: string): Promise<AgreementAnalysis> {
@@ -139,24 +202,24 @@ export class ApiClient {
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Analysis not found" }));
+      const err = await res.json().catch(() => ({ detail: "Analysis record not found" }));
       throw new Error(err.detail || `Failed to fetch analysis (${res.status})`);
     }
     return res.json();
   }
 
-  // --- Team D: Agreement Generation & Versions ---
+  // --- Team A / Team D: Agreements ---
 
-  async createAgreement(analysisId: string, parties?: string[]): Promise<Agreement> {
+  async createAgreement(analysisId: string, parties?: string[], terms?: Record<string, any>[]): Promise<Agreement> {
     const res = await fetch(`${this.baseUrl}/api/v1/agreements`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ analysis_id: analysisId, parties: parties }),
+      body: JSON.stringify({ analysis_id: analysisId, parties, terms }),
     });
 
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Agreement generation failed" }));
-      throw new Error(err.detail || `Failed to generate agreement (${res.status})`);
+      const err = await res.json().catch(() => ({ detail: "Agreement creation failed" }));
+      throw new Error(err.detail || `Failed to create agreement (${res.status})`);
     }
     return res.json();
   }
@@ -178,7 +241,26 @@ export class ApiClient {
     return `${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}/pdf`;
   }
 
-  // --- Team D: Two-Party Confirmations ---
+  // --- Team D: Confirmations & Single-Use Tokens ---
+
+  async recordConfirmation(agreementId: string, partyName: string, confirmed: boolean, notes?: string): Promise<ConfirmationStatus> {
+    const res = await fetch(`${this.baseUrl}/api/v1/confirmations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agreement_id: agreementId,
+        party_name: partyName,
+        confirmed,
+        notes,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to record confirmation" }));
+      throw new Error(err.detail || `Confirmation failed (${res.status})`);
+    }
+    return res.json();
+  }
 
   async submitConfirmation(
     agreementId: string,
@@ -187,23 +269,7 @@ export class ApiClient {
     notes?: string,
     versionNumber: number = 1
   ): Promise<ConfirmationStatus> {
-    const res = await fetch(`${this.baseUrl}/api/v1/confirmations`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        agreement_id: agreementId,
-        party_name: partyName,
-        confirmed: confirmed,
-        notes: notes,
-        version_number: versionNumber,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Confirmation failed" }));
-      throw new Error(err.detail || `Failed to record confirmation (${res.status})`);
-    }
-    return res.json();
+    return this.recordConfirmation(agreementId, partyName, confirmed, notes);
   }
 
   async getConfirmationStatus(agreementId: string): Promise<ConfirmationStatus> {
@@ -214,28 +280,42 @@ export class ApiClient {
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Confirmation status not found" }));
-      throw new Error(err.detail || `Failed to fetch confirmation status (${res.status})`);
+      throw new Error(err.detail || `Failed to fetch confirmations (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async generatePartyToken(agreementId: string, partyName: string): Promise<{ token: string; raw_token: string; confirmation_url: string }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ agreement_id: agreementId, party_name: partyName }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to generate token" }));
+      throw new Error(err.detail || `Token creation failed (${res.status})`);
     }
     return res.json();
   }
 
   async confirmByToken(token: string, notes?: string): Promise<TokenConfirmationResponse> {
-    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}`, {
+    const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens/confirm`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes }),
+      body: JSON.stringify({ token, notes }),
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Token confirmation failed" }));
-      throw new Error(err.detail || `Single-use token confirmation failed (${res.status})`);
+      throw new Error(err.detail || `Token execution failed (${res.status})`);
     }
     return res.json();
   }
 
-  // --- Evidence & Audit Trail ---
+  // --- Team D: Evidence Vault ---
 
-  async verifyHash(content: string, expectedHash: string): Promise<DocumentHashVerification> {
+  async verifyDocumentHash(content: string, expectedHash: string): Promise<DocumentHashVerification> {
     const res = await fetch(`${this.baseUrl}/api/v1/evidence/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -246,6 +326,10 @@ export class ApiClient {
       throw new Error(`Verification failed with status: ${res.status}`);
     }
     return res.json();
+  }
+
+  async verifyHash(content: string, expectedHash: string): Promise<DocumentHashVerification> {
+    return this.verifyDocumentHash(content, expectedHash);
   }
 
   async getAuditTrail(entityId: string): Promise<AuditEvent[]> {

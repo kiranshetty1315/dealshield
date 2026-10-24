@@ -18,7 +18,12 @@ from app.schemas.agreement import Agreement, AgreementVersion, Clause, Agreement
 from app.schemas.confirmation import ConfirmationStatus, PartyConfirmationRecord
 from app.schemas.evidence import DocumentHashRecord, AuditEventRecord
 from app.services.hash_service import HashService
-from app.core.security import encrypt_message_content, decrypt_message_content
+from app.core.security import (
+    encrypt_message_content,
+    decrypt_message_content,
+    hash_password,
+    verify_password,
+)
 
 
 class ConversationRepository:
@@ -603,4 +608,74 @@ class AnalysisRepository:
             requires_human_review=data.get("requires_human_review", True),
             analyzed_at=an_dt,
         )
+
+
+class UserRepository:
+    """Manages user persistence, authentication records, and demo user seeding."""
+
+    DEFAULT_DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
+    DEFAULT_DEMO_EMAIL = "demo@dealshield.local"
+    DEFAULT_DEMO_PASS = "password123"
+
+    def __init__(self, client=None):
+        self.client = client or get_supabase_client()
+        self._seed_default_demo_user()
+
+    def _seed_default_demo_user(self):
+        """Seeds standard demo user if not present."""
+        try:
+            existing = self.get_by_email(self.DEFAULT_DEMO_EMAIL)
+            if not existing:
+                demo_hash = hash_password(self.DEFAULT_DEMO_PASS)
+                self.create_user(
+                    email=self.DEFAULT_DEMO_EMAIL,
+                    password_hash=demo_hash,
+                    full_name="Demo User",
+                    organization="DealShield LegalTech Hackathon",
+                    role="Contract Sponsor",
+                    user_id=self.DEFAULT_DEMO_USER_ID,
+                )
+        except Exception:
+            pass
+
+    def get_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        clean_email = email.strip().lower()
+        res = self.client.table("users").select("*").eq("email", clean_email).execute()
+        data = res.data
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
+
+    def get_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        res = self.client.table("users").select("*").eq("id", user_id).execute()
+        data = res.data
+        if isinstance(data, list):
+            return data[0] if data else None
+        return data
+
+    def create_user(
+        self,
+        email: str,
+        password_hash: str,
+        full_name: str,
+        organization: str = "DealShield LegalTech Hackathon",
+        role: str = "Contract Sponsor",
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        uid = user_id or str(uuid.uuid4())
+        clean_email = email.strip().lower()
+        now = datetime.now(timezone.utc).isoformat()
+        row = {
+            "id": uid,
+            "email": clean_email,
+            "password_hash": password_hash,
+            "full_name": full_name or "Demo User",
+            "organization": organization or "DealShield LegalTech Hackathon",
+            "role": role or "Contract Sponsor",
+            "created_at": now,
+            "updated_at": now,
+        }
+        res = self.client.table("users").insert(row).execute()
+        return res.data[0] if isinstance(res.data, list) and res.data else res.data
+
 

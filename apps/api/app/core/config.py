@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     SUPABASE_SERVICE_ROLE_KEY: str = "placeholder-service-role-key"
 
     # Security salts & encryption
+    SECRET_KEY: str = "dealshield-auth-secret-key-change-in-production-2026"
     IP_HASH_SALT: str = "dealshield-default-dev-salt-change-in-production"
     ENCRYPTION_KEY: str = "rUqpl4OBAPgr-k1M_wughKIjIBOWpJn-YTRIEq6f3Wk="
 

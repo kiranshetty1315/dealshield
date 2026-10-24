@@ -7,13 +7,12 @@ import {
   Settings,
   LogOut,
   ChevronDown,
-  Shield,
-  KeyRound,
-  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/context/AuthContext";
 
 export function ProfileDropdown() {
+  const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -34,10 +33,22 @@ export function ProfileDropdown() {
     setIsLogoutDialogOpen(true);
   };
 
-  const handleConfirmLogout = () => {
+  const handleConfirmLogout = async () => {
     setIsLogoutDialogOpen(false);
-    // In production, Supabase Auth signOut() is invoked here
+    await logout();
   };
+
+  const displayName = user?.full_name || "Demo User";
+  const displayEmail = user?.email || "demo@dealshield.local";
+  const displayRole = user?.role || "Contract Sponsor";
+
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "DS";
 
   return (
     <>
@@ -50,9 +61,9 @@ export function ProfileDropdown() {
           aria-expanded={isOpen}
         >
           <div className="h-6 w-6 rounded-full bg-blue-600 text-white font-bold text-[11px] flex items-center justify-center shadow-xs">
-            DS
+            {initials}
           </div>
-          <span className="font-semibold text-slate-800 hidden sm:inline">Demo User</span>
+          <span className="font-semibold text-slate-800 hidden sm:inline">{displayName}</span>
           <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
         </button>
 
@@ -61,11 +72,11 @@ export function ProfileDropdown() {
           <div className="absolute right-0 mt-2 w-64 rounded-xl bg-white border border-slate-200 shadow-xl py-2 z-50 text-xs animate-in fade-in slide-in-from-top-1 duration-150">
             {/* User Account Info Header */}
             <div className="px-4 py-2.5 border-b border-slate-100 space-y-0.5">
-              <p className="font-bold text-slate-900 text-xs">Demo User</p>
-              <p className="text-[11px] text-slate-500 font-mono">demo@dealshield.local</p>
-              <div className="pt-1 flex items-center gap-1.5">
+              <p className="font-bold text-slate-900 text-xs truncate">{displayName}</p>
+              <p className="text-[11px] text-slate-500 font-mono truncate">{displayEmail}</p>
+              <div className="pt-1 flex items-center gap-1.5 flex-wrap">
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                  Contract Sponsor
+                  {displayRole}
                 </span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
                   AES-256 Protected
@@ -99,9 +110,9 @@ export function ProfileDropdown() {
               <button
                 type="button"
                 onClick={handleOpenLogoutDialog}
-                className="w-full px-4 py-2 text-left text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition-colors font-medium"
+                className="w-full px-4 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 transition-colors font-medium"
               >
-                <LogOut className="h-3.5 w-3.5 text-slate-400" />
+                <LogOut className="h-3.5 w-3.5 text-red-500" />
                 Log out
               </button>
             </div>
@@ -120,7 +131,7 @@ export function ProfileDropdown() {
               <div className="space-y-1.5">
                 <h3 className="font-bold text-base text-slate-900">Confirm Log Out</h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Are you sure you want to log out of DealShield AI? Any unsaved edits will be discarded.
+                  Are you sure you want to log out of DealShield AI? Your local session will be cleared.
                 </p>
               </div>
             </div>
@@ -140,10 +151,10 @@ export function ProfileDropdown() {
               </Button>
 
               <Button
-                variant="default"
+                variant="destructive"
                 size="sm"
                 onClick={handleConfirmLogout}
-                className="text-xs gap-1.5 bg-slate-900 hover:bg-slate-800 text-white shadow-sm"
+                className="text-xs gap-1.5 shadow-sm"
               >
                 <LogOut className="h-3.5 w-3.5" />
                 Yes, Log Out

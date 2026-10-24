@@ -26,8 +26,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api/client";
+import { useAuth } from "@/context/AuthContext";
 
 export default function ProfilePage() {
+  const { user, logout, isAuthenticated } = useAuth();
   const [chatCount, setChatCount] = useState<number | null>(null);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
   const [loggedOut, setLoggedOut] = useState(false);
@@ -44,10 +46,25 @@ export default function ProfilePage() {
     loadStats();
   }, []);
 
-  const handleConfirmLogout = () => {
-    setLoggedOut(true);
+  const handleConfirmLogout = async () => {
     setIsLogoutDialogOpen(false);
+    await logout();
+    setLoggedOut(true);
   };
+
+  const displayName = user?.full_name || "Demo User";
+  const displayEmail = user?.email || "demo@dealshield.local";
+  const displayRole = user?.role || "Contract Sponsor";
+  const displayOrg = user?.organization || "DealShield LegalTech Hackathon";
+  const displayId = user?.id || "00000000-0000-0000-0000-000000000001";
+
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "DS";
 
   return (
     <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-5xl">
@@ -117,7 +134,7 @@ export default function ProfilePage() {
         <div className="h-28 bg-gradient-to-r from-blue-700 via-indigo-600 to-blue-800 relative">
           <div className="absolute top-4 right-4 flex items-center gap-2">
             <Badge className="bg-white/90 text-blue-900 text-xs font-semibold backdrop-blur-sm border-0 shadow-xs">
-              Contract Sponsor
+              {displayRole}
             </Badge>
             <Badge className="bg-emerald-500/90 text-white text-xs font-semibold backdrop-blur-sm border-0 shadow-xs flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" />
@@ -131,14 +148,14 @@ export default function ProfilePage() {
             <div className="flex items-end gap-4">
               <div className="h-24 w-24 rounded-2xl bg-white p-1.5 shadow-md border border-slate-200 shrink-0">
                 <div className="h-full w-full rounded-xl bg-blue-600 text-white font-extrabold text-2xl flex items-center justify-center shadow-inner">
-                  DS
+                  {initials}
                 </div>
               </div>
               <div className="space-y-0.5 pb-1">
-                <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Demo User</h2>
+                <h2 className="text-xl sm:text-2xl font-bold text-slate-900">{displayName}</h2>
                 <p className="text-xs font-mono text-slate-500 flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  demo@dealshield.local
+                  {displayEmail}
                 </p>
               </div>
             </div>
@@ -160,7 +177,7 @@ export default function ProfilePage() {
                 <Building className="h-3 w-3 text-slate-500" />
                 Organization
               </span>
-              <p className="text-xs font-bold text-slate-800">DealShield LegalTech Hackathon</p>
+              <p className="text-xs font-bold text-slate-800">{displayOrg}</p>
               <p className="text-[11px] text-slate-500">Autonomous Contract Integrity Unit</p>
             </div>
 
@@ -170,7 +187,7 @@ export default function ProfilePage() {
                 Account Identifier (UUID)
               </span>
               <p className="text-xs font-mono font-bold text-slate-800 truncate">
-                00000000-0000-0000-0000-000000000001
+                {displayId}
               </p>
               <p className="text-[11px] text-slate-500">Dual-Mode Fallback & Supabase ID</p>
             </div>

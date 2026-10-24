@@ -8,6 +8,7 @@ from app.db.repository import (
     ConfirmationRepository,
     AuditRepository,
     EvidenceRepository,
+    UserRepository,
 )
 
 __all__ = [
@@ -19,4 +20,5 @@ __all__ = [
     "ConfirmationRepository",
     "AuditRepository",
     "EvidenceRepository",
+    "UserRepository",
 ]
