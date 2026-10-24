@@ -1,0 +1,46 @@
+{
+  "conversation_file": "sample-negotiation-01.txt",
+  "expected_parties": ["Raj Mehta", "Priya Sharma"],
+  "expected_message_count": 10,
+  "expected_conflicts": [
+    {
+      "type": "price_disagreement",
+      "description": "Multiple prices discussed: ₹75,000 (client), ₹1,50,000 (provider), ₹1,00,000 (proposed middle ground)",
+      "severity": "high"
+    },
+    {
+      "type": "ambiguous_acceptance",
+      "description": "Both parties use uncertain language: 'I might be able to do it', 'that works I think'",
+      "severity": "medium"
+    }
+  ],
+  "expected_extracted_terms": [
+    {
+      "term_type": "scope",
+      "value": "Full website redesign",
+      "status": "accepted"
+    },
+    {
+      "term_type": "price",
+      "value": "₹1,00,000",
+      "status": "ambiguous"
+    },
+    {
+      "term_type": "deadline",
+      "value": "End of April",
+      "status": "proposed"
+    },
+    {
+      "term_type": "payment_terms",
+      "value": "50% upfront",
+      "status": "ambiguous"
+    }
+  ],
+  "expected_missing_terms": [
+    "Detailed deliverables/scope",
+    "Remaining payment schedule",
+    "Revision policy",
+    "Late delivery consequences",
+    "IP ownership"
+  ]
+}

@@ -1,0 +1,197 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dealshield.ai/schemas/agreement-analysis.schema.json",
+  "title": "AgreementAnalysis",
+  "description": "Complete analysis output from processing a conversation, including extracted terms, conflicts, and missing information.",
+  "type": "object",
+  "required": [
+    "analysis_id",
+    "chat_id",
+    "parties",
+    "extracted_terms",
+    "conflicts",
+    "missing_terms",
+    "confidence_score",
+    "requires_human_review",
+    "analyzed_at"
+  ],
+  "properties": {
+    "analysis_id": {
+      "type": "string",
+      "description": "Unique identifier for this analysis"
+    },
+    "chat_id": {
+      "type": "string",
+      "description": "Reference to the source conversation"
+    },
+    "parties": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/Party"
+      },
+      "description": "Identified parties in the conversation"
+    },
+    "extracted_terms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ExtractedTerm"
+      },
+      "description": "Business terms extracted from the conversation"
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ConflictItem"
+      },
+      "description": "Detected contradictions or disagreements"
+    },
+    "missing_terms": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/MissingTerm"
+      },
+      "description": "Important terms not found in the conversation"
+    },
+    "confidence_score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Overall confidence in the analysis (0.0 to 1.0)"
+    },
+    "requires_human_review": {
+      "type": "boolean",
+      "description": "Whether human review is recommended before proceeding"
+    },
+    "analyzed_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp of analysis completion"
+    }
+  },
+  "definitions": {
+    "Party": {
+      "type": "object",
+      "required": ["name", "identified_from"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the party as identified in the conversation"
+        },
+        "role": {
+          "type": ["string", "null"],
+          "description": "Role of the party (e.g., 'service_provider', 'client')"
+        },
+        "identified_from": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Message IDs where this party was identified"
+        }
+      }
+    },
+    "ExtractedTerm": {
+      "type": "object",
+      "required": [
+        "term_type",
+        "description",
+        "value",
+        "source_message_ids",
+        "confidence",
+        "status"
+      ],
+      "properties": {
+        "term_type": {
+          "type": "string",
+          "enum": ["price", "deadline", "payment_terms", "scope", "deliverable", "penalty", "warranty", "other"],
+          "description": "Category of the business term"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the term"
+        },
+        "value": {
+          "type": "string",
+          "description": "The extracted value or statement"
+        },
+        "source_message_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Stable message IDs where this term was found"
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in the extraction accuracy"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["proposed", "accepted", "rejected", "ambiguous"],
+          "description": "Whether this term was proposed, accepted, rejected, or remains ambiguous"
+        }
+      }
+    },
+    "ConflictItem": {
+      "type": "object",
+      "required": [
+        "conflict_id",
+        "description",
+        "term_type",
+        "parties_involved",
+        "source_message_ids",
+        "severity"
+      ],
+      "properties": {
+        "conflict_id": {
+          "type": "string",
+          "description": "Unique identifier for this conflict"
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of the conflict"
+        },
+        "term_type": {
+          "type": "string",
+          "description": "Type of term in conflict"
+        },
+        "parties_involved": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Names of parties involved in the conflict"
+        },
+        "source_message_ids": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Message IDs containing conflicting statements"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["high", "medium", "low"],
+          "description": "Severity of the conflict"
+        },
+        "suggested_resolution": {
+          "type": ["string", "null"],
+          "description": "Optional suggested way to resolve the conflict"
+        }
+      }
+    },
+    "MissingTerm": {
+      "type": "object",
+      "required": ["term_type", "description", "importance"],
+      "properties": {
+        "term_type": {
+          "type": "string",
+          "description": "Type of missing term"
+        },
+        "description": {
+          "type": "string",
+          "description": "What is missing and why it matters"
+        },
+        "importance": {
+          "type": "string",
+          "enum": ["required", "recommended", "optional"],
+          "description": "How important this missing term is"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "analysis_id": "analysis-001",
+  "chat_id": "chat-001",
+  "parties": [
+    {
+      "name": "Raj Mehta",
+      "role": "client",
+      "identified_from": ["msg-001", "msg-003"]
+    },
+    {
+      "name": "Priya Sharma",
+      "role": "service_provider",
+      "identified_from": ["msg-002", "msg-004"]
+    }
+  ],
+  "extracted_terms": [
+    {
+      "term_type": "scope",
+      "description": "Full website redesign",
+      "value": "Full redesign of client's website",
+      "source_message_ids": ["msg-001", "msg-002"],
+      "confidence": 0.9,
+      "status": "accepted"
+    },
+    {
+      "term_type": "price",
+      "description": "Initial budget proposed by client",
+      "value": "₹75,000",
+      "source_message_ids": ["msg-003"],
+      "confidence": 0.95,
+      "status": "rejected"
+    },
+    {
+      "term_type": "price",
+      "description": "Service provider's standard rate",
+      "value": "₹1,50,000",
+      "source_message_ids": ["msg-004"],
+      "confidence": 0.95,
+      "status": "proposed"
+    },
+    {
+      "term_type": "price",
+      "description": "Negotiated middle-ground price",
+      "value": "₹1,00,000",
+      "source_message_ids": ["msg-005", "msg-008"],
+      "confidence": 0.85,
+      "status": "ambiguous"
+    },
+    {
+      "term_type": "deadline",
+      "description": "Project completion deadline",
+      "value": "End of April 2024",
+      "source_message_ids": ["msg-007"],
+      "confidence": 0.9,
+      "status": "proposed"
+    },
+    {
+      "term_type": "payment_terms",
+      "description": "Upfront payment requirement",
+      "value": "50% upfront payment",
+      "source_message_ids": ["msg-008"],
+      "confidence": 0.85,
+      "status": "ambiguous"
+    }
+  ],
+  "conflicts": [
+    {
+      "conflict_id": "conflict-001",
+      "description": "Price disagreement: Client proposed ₹75,000, provider quoted ₹1,50,000. A middle ground of ₹1,00,000 was discussed but acceptance is ambiguous — Priya said 'I might be able to do it' (conditional) and Raj said 'Sure, that works I think' (uncertain).",
+      "term_type": "price",
+      "parties_involved": ["Raj Mehta", "Priya Sharma"],
+      "source_message_ids": ["msg-003", "msg-004", "msg-005", "msg-008", "msg-009"],
+      "severity": "high",
+      "suggested_resolution": "Both parties should explicitly confirm the agreed price of ₹1,00,000 and whether it is inclusive of all deliverables."
+    }
+  ],
+  "missing_terms": [
+    {
+      "term_type": "scope",
+      "description": "Specific deliverables and pages included in the redesign are not defined.",
+      "importance": "required"
+    },
+    {
+      "term_type": "payment_terms",
+      "description": "Payment schedule for the remaining 50% is not specified.",
+      "importance": "required"
+    },
+    {
+      "term_type": "warranty",
+      "description": "No warranty or revision policy discussed.",
+      "importance": "recommended"
+    },
+    {
+      "term_type": "penalty",
+      "description": "No late delivery or non-payment penalties agreed upon.",
+      "importance": "recommended"
+    },
+    {
+      "term_type": "deliverable",
+      "description": "Timeline for mockup delivery and review cycles not specified.",
+      "importance": "recommended"
+    },
+    {
+      "term_type": "other",
+      "description": "Intellectual property ownership of the design not discussed.",
+      "importance": "recommended"
+    }
+  ],
+  "confidence_score": 0.72,
+  "requires_human_review": true,
+  "analyzed_at": "2024-03-15T14:30:00Z"
+}
