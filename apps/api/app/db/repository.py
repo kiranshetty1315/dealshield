@@ -28,6 +28,35 @@ from app.core.security import (
 )
 
 
+def is_valid_uuid(val: Any) -> bool:
+    """Check if value is a valid UUID string."""
+    if not val:
+        return False
+    try:
+        uuid.UUID(str(val).strip())
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
+def ensure_uuid(val: Any) -> str:
+    """Ensure a string or object is a valid RFC 4122 UUID string.
+    
+    If already a valid UUID, returns canonical string representation.
+    If not a valid UUID (e.g. LLM-generated slugs like 'anlys_0c6f9df5_20260901'
+    or fixture names like 'analysis_expected_01'), deterministically derives
+    a valid UUIDv5 using NAMESPACE_DNS so database constraints are satisfied
+    and repeated queries for the same key resolve consistently.
+    """
+    if not val:
+        return str(uuid.uuid4())
+    s = str(val).strip()
+    try:
+        return str(uuid.UUID(s))
+    except (ValueError, AttributeError, TypeError):
+        return str(uuid.uuid5(uuid.NAMESPACE_DNS, s))
+
+
 class ConversationRepository:
     """Manages conversations and message citations persistence."""
 
@@ -156,13 +185,14 @@ class AgreementRepository:
         agreement_id: Optional[str] = None,
     ) -> Agreement:
         ag_id = agreement_id or str(uuid.uuid4())
+        valid_analysis_id = ensure_uuid(analysis_id) if is_valid_uuid(analysis_id) else analysis_id
         now_dt = datetime.now(timezone.utc)
         now_iso = now_dt.isoformat()
 
         # Insert Agreement header
         ag_row = {
             "id": ag_id,
-            "analysis_id": analysis_id,
+            "analysis_id": valid_analysis_id,
             "parties": parties,
             "current_version": 1,
             "status": AgreementStatus.DRAFT.value,
@@ -196,7 +226,7 @@ class AgreementRepository:
 
         return Agreement(
             id=ag_id,
-            analysis_id=analysis_id,
+            analysis_id=valid_analysis_id,
             parties=parties,
             current_version=1,
             status=AgreementStatus.DRAFT,
@@ -208,6 +238,10 @@ class AgreementRepository:
     def get_agreement(self, agreement_id: str) -> Optional[Agreement]:
         res = self.client.table("agreements").select("*").eq("id", agreement_id).execute()
         ag_data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not ag_data and not is_valid_uuid(agreement_id):
+            target_id = ensure_uuid(agreement_id)
+            res = self.client.table("agreements").select("*").eq("id", target_id).execute()
+            ag_data = res.data[0] if isinstance(res.data, list) and res.data else res.data
         if not ag_data:
             return None
 
@@ -215,7 +249,7 @@ class AgreementRepository:
         v_res = (
             self.client.table("agreement_versions")
             .select("*")
-            .eq("agreement_id", agreement_id)
+            .eq("agreement_id", ag_data["id"])
             .order("version_number", desc=False)
             .execute()
         )
@@ -1263,9 +1297,9 @@ class AuditRepository:
         row = {
             "id": str(uuid.uuid4()),
             "entity_type": entity_type,
-            "entity_id": entity_id,
+            "entity_id": ensure_uuid(entity_id),
             "action": action,
-            "actor_id": actor_id,
+            "actor_id": ensure_uuid(actor_id) if actor_id else None,
             "metadata": metadata or {},
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -1275,15 +1309,27 @@ class AuditRepository:
     record_event = log_event
 
     def get_audit_trail(self, entity_id: str) -> List[Dict[str, Any]]:
+        target_id = ensure_uuid(entity_id)
         res = (
             self.client.table("audit_events")
             .select("*")
-            .eq("entity_id", entity_id)
+            .eq("entity_id", target_id)
             .order("created_at", desc=False)
             .execute()
         )
         data = res.data
-        return data if isinstance(data, list) else ([data] if data else [])
+        rows = data if isinstance(data, list) else ([data] if data else [])
+        if not rows and target_id != entity_id:
+            res = (
+                self.client.table("audit_events")
+                .select("*")
+                .eq("entity_id", entity_id)
+                .order("created_at", desc=False)
+                .execute()
+            )
+            data = res.data
+            rows = data if isinstance(data, list) else ([data] if data else [])
+        return rows
 
 
 class EvidenceRepository:
@@ -1300,7 +1346,7 @@ class EvidenceRepository:
     ) -> Dict[str, Any]:
         row = {
             "id": str(uuid.uuid4()),
-            "document_id": document_id,
+            "document_id": ensure_uuid(document_id),
             "document_type": document_type,
             "hash_algorithm": "sha256",
             "hash_value": hash_value,
@@ -1310,11 +1356,18 @@ class EvidenceRepository:
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
 
     def get_document_hash(self, document_id: str, document_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        qb = self.client.table("document_hashes").select("*").eq("document_id", document_id)
+        target_id = ensure_uuid(document_id)
+        qb = self.client.table("document_hashes").select("*").eq("document_id", target_id)
         if document_type:
             qb = qb.eq("document_type", document_type)
         res = qb.execute()
         data = res.data
+        if not data and target_id != document_id:
+            qb = self.client.table("document_hashes").select("*").eq("document_id", document_id)
+            if document_type:
+                qb = qb.eq("document_type", document_type)
+            res = qb.execute()
+            data = res.data
         if isinstance(data, list):
             return data[0] if data else None
         return data
@@ -1327,9 +1380,13 @@ class AnalysisRepository:
         self.client = client or get_supabase_client()
 
     def save_analysis(self, analysis: AgreementAnalysis) -> Dict[str, Any]:
+        analysis_uuid = ensure_uuid(analysis.analysis_id)
+        conv_uuid = ensure_uuid(analysis.chat_id)
+        analysis.analysis_id = analysis_uuid
+        analysis.chat_id = conv_uuid
         row = {
-            "id": analysis.analysis_id,
-            "conversation_id": analysis.chat_id,
+            "id": analysis_uuid,
+            "conversation_id": conv_uuid,
             "extracted_terms": [t.model_dump() for t in analysis.extracted_terms],
             "conflicts": [c.model_dump() for c in analysis.conflicts],
             "missing_terms": [m.model_dump() for m in analysis.missing_terms],
@@ -1346,8 +1403,39 @@ class AnalysisRepository:
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
 
     def get_analysis(self, analysis_id: str) -> Optional[AgreementAnalysis]:
-        res = self.client.table("analyses").select("*").eq("id", analysis_id).execute()
+        target_id = ensure_uuid(analysis_id)
+        res = self.client.table("analyses").select("*").eq("id", target_id).execute()
         data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not data and target_id != analysis_id:
+            res = self.client.table("analyses").select("*").eq("id", analysis_id).execute()
+            data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not data:
+            return None
+        an_at = data.get("analyzed_at")
+        an_dt = (
+            datetime.fromisoformat(an_at.replace("Z", "+00:00"))
+            if isinstance(an_at, str)
+            else datetime.now(timezone.utc)
+        )
+        return AgreementAnalysis(
+            analysis_id=data["id"],
+            chat_id=data.get("conversation_id", ""),
+            parties=data.get("parties", []),
+            extracted_terms=data.get("extracted_terms", []),
+            conflicts=data.get("conflicts", []),
+            missing_terms=data.get("missing_terms", []),
+            confidence_score=data.get("confidence_score", 0.0),
+            requires_human_review=data.get("requires_human_review", True),
+            analyzed_at=an_dt,
+        )
+
+    def get_analysis_by_chat_id(self, chat_id: str) -> Optional[AgreementAnalysis]:
+        target_conv_id = ensure_uuid(chat_id)
+        res = self.client.table("analyses").select("*").eq("conversation_id", target_conv_id).execute()
+        data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        if not data and target_conv_id != chat_id:
+            res = self.client.table("analyses").select("*").eq("conversation_id", chat_id).execute()
+            data = res.data[0] if isinstance(res.data, list) and res.data else res.data
         if not data:
             return None
         an_at = data.get("analyzed_at")

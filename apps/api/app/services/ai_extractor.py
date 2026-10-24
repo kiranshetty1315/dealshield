@@ -185,6 +185,8 @@ class AIExtractorService:
             parsed: Optional[AgreementAnalysis] = completion.choices[0].message.parsed
             if parsed:
                 parsed.chat_id = chat_id
+                from app.db.repository import ensure_uuid
+                parsed.analysis_id = ensure_uuid(parsed.analysis_id)
                 return parsed
         except Exception as parse_err:
             logger.info(f"{self.provider.upper()} structured parse failed ({parse_err}), trying JSON mode fallback.")
@@ -202,8 +204,8 @@ class AIExtractorService:
             raw_json = response.choices[0].message.content or "{}"
             data = json.loads(raw_json)
             data["chat_id"] = chat_id
-            if "analysis_id" not in data:
-                data["analysis_id"] = str(uuid.uuid4())
+            from app.db.repository import ensure_uuid
+            data["analysis_id"] = ensure_uuid(data.get("analysis_id"))
             return AgreementAnalysis.model_validate(data)
 
         return self._deterministic_extract(chat_id, messages, focus_areas)

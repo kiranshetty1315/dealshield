@@ -94,6 +94,11 @@ async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
         focus_areas=request.focus_areas,
     )
 
+    # Ensure valid UUIDs for PostgreSQL schema constraints
+    from app.db.repository import ensure_uuid
+    analysis.analysis_id = ensure_uuid(analysis.analysis_id)
+    analysis.chat_id = ensure_uuid(analysis.chat_id)
+
     # Persist findings to database
     analysis_repo.save_analysis(analysis)
 
@@ -103,7 +108,7 @@ async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
         entity_id=analysis.analysis_id,
         action="analysis_completed",
         metadata={
-            "chat_id": request.chat_id,
+            "chat_id": str(analysis.chat_id),
             "terms_extracted": len(analysis.extracted_terms),
             "conflicts_detected": len(analysis.conflicts),
             "missing_terms_flagged": len(analysis.missing_terms),
