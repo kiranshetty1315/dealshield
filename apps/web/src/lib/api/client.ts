@@ -298,6 +298,7 @@ export class ApiClient {
     const res = await fetch(`${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}`, {
       method: "GET",
       headers: { Accept: "application/json", ...this.getAuthHeaders() },
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -311,6 +312,7 @@ export class ApiClient {
     const res = await fetch(`${this.baseUrl}/api/v1/agreements/chat/${encodeURIComponent(chatId)}`, {
       method: "GET",
       headers: { Accept: "application/json", ...this.getAuthHeaders() },
+      cache: "no-store",
     });
 
     if (!res.ok) {
@@ -373,6 +375,7 @@ export class ApiClient {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations/${encodeURIComponent(agreementId)}`, {
       method: "GET",
       headers: { Accept: "application/json" },
+      cache: "no-store",
     });
 
     if (!res.ok) {

@@ -42,49 +42,17 @@ function formatAssentDate(dateStr: string | undefined): string {
   }
 }
 
-// Formal legal draft clauses fallback for review demonstration
-const fallbackClauses: Clause[] = [
-  {
-    clause_id: "cls_scope_01",
-    title: "1.0 Scope of Services & Deliverables",
-    body: "The Service Provider shall design, develop, and deliver a comprehensive native iOS and Android mobile application, including administrative dashboard interfaces and high-fidelity interactive Figma prototypes, strictly compliant with agreed design specifications.",
-    source_term_ids: ["term_scope_01"],
-    statutory_reference: "Indian Contract Act, 1872 — Section 37 (Obligation of Parties to Perform Contracts)",
-  },
-  {
-    clause_id: "cls_payment_02",
-    title: "2.0 Consideration, Fees & Payment Schedule",
-    body: "Total contract consideration is set at INR 1,50,000 (Rupees One Lakh Fifty Thousand only). An advance mobilization payment of 50% (INR 75,000) shall become payable upon contract execution, with the remaining 50% (INR 75,000) disbursed upon final user acceptance and code handover.",
-    source_term_ids: ["term_price_01"],
-    statutory_reference: "Indian Contract Act, 1872 — Section 10 (What Agreements are Contracts)",
-  },
-  {
-    clause_id: "cls_timeline_03",
-    title: "3.0 Delivery Milestones & Completion Timeline",
-    body: "Project execution shall adhere strictly to a 3-week timeline commencing from receipt of initial advance mobilization payment. Deliverables include weekly milestone demos and an unconditional 14-day warranty period for bug resolution following production release.",
-    source_term_ids: ["term_timeline_01"],
-    statutory_reference: "Indian Contract Act, 1872 — Section 46 (Time for Performance)",
-  },
-  {
-    clause_id: "cls_ip_04",
-    title: "4.0 Intellectual Property Rights & Governing Law",
-    body: "Upon complete remittance of the agreed consideration, all right, title, and interest in and to the source code, design assets, and documentation shall transfer unconditionally to the Client. This Agreement shall be governed by and construed in accordance with the substantive laws of India, under the jurisdiction of Bengaluru, Karnataka.",
-    source_term_ids: ["term_ip_01"],
-    statutory_reference: "Indian Contract Act, 1872 — Section 28 & Copyright Act, 1957",
-  },
-];
-
 function ReviewContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
-  const agreementIdParam = searchParams.get("agreement_id") || "sample-agreement-uuid";
+  const agreementIdParam = searchParams.get("agreement_id") || "";
 
-  const [isLoading, setIsLoading] = useState(Boolean(token));
+  const [isLoading, setIsLoading] = useState(Boolean(token || agreementIdParam));
   const [error, setError] = useState<string | null>(null);
   const [partyName, setPartyName] = useState<string>("Counterparty");
   const [agreementId, setAgreementId] = useState<string>(agreementIdParam);
   const [agreement, setAgreement] = useState<Agreement | null>(null);
-  const [clauses, setClauses] = useState<Clause[]>(fallbackClauses);
+  const [clauses, setClauses] = useState<Clause[]>([]);
 
   // Decision State: "pending" | "confirmed" | "declined"
   const [decisionStatus, setDecisionStatus] = useState<"pending" | "confirmed" | "declined">("pending");
@@ -101,7 +69,27 @@ function ReviewContent() {
 
   useEffect(() => {
     if (!token) {
-      setIsLoading(false);
+      if (agreementIdParam) {
+        setIsLoading(true);
+        api
+          .getAgreement(agreementIdParam)
+          .then((ag) => {
+            if (ag) {
+              setAgreement(ag);
+              const vers = ag.versions || [];
+              const latestVer = vers[vers.length - 1];
+              if (latestVer?.clauses && latestVer.clauses.length > 0) {
+                setClauses(latestVer.clauses);
+              }
+            }
+          })
+          .catch((err: any) => {
+            console.warn("Direct agreement load error:", err);
+          })
+          .finally(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -123,40 +111,40 @@ function ReviewContent() {
           setDeclineReason(data.decline_reason || null);
         }
 
-        if (data.agreement && data.agreement.versions?.[0]?.clauses?.length) {
+        if (data.agreement) {
           setAgreement(data.agreement);
-          setClauses(data.agreement.versions[0].clauses);
+          const vers = data.agreement.versions || [];
+          const latestVer = vers[vers.length - 1];
+          if (latestVer?.clauses && latestVer.clauses.length > 0) {
+            setClauses(latestVer.clauses);
+          }
         } else if (data.agreement_id) {
-          // Attempt to fetch full agreement clauses if not embedded
           api
             .getAgreement(data.agreement_id)
             .then((ag) => {
-              if (ag?.versions?.[0]?.clauses?.length) {
+              if (ag) {
                 setAgreement(ag);
-                setClauses(ag.versions[0].clauses);
+                const vers = ag.versions || [];
+                const latestVer = vers[vers.length - 1];
+                if (latestVer?.clauses && latestVer.clauses.length > 0) {
+                  setClauses(latestVer.clauses);
+                }
               }
             })
-            .catch(() => {
-              // Maintain rich fallback clauses
-            });
+            .catch(() => {});
         }
       })
       .catch((err: any) => {
         console.warn("Token inspect warning:", err);
-        // If inspecting fails in demo environment, fallback to demo mode gracefully
-        if (token.startsWith("tok_") || token.includes("demo")) {
-          setPartyName("Priya Sharma");
-        } else {
-          setError(
-            err.message ||
-              "This single-use review link is invalid, expired, or has already been completed."
-          );
-        }
+        setError(
+          err.message ||
+            "This single-use review link is invalid, expired, or has already been completed."
+        );
       })
       .finally(() => {
         setIsLoading(false);
       });
-  }, [token]);
+  }, [token, agreementIdParam]);
 
   // Handle "I Agree & Confirm"
   const handleAgree = async () => {
@@ -165,20 +153,53 @@ function ReviewContent() {
     setToastMessage(null);
 
     try {
-      if (token && !token.startsWith("tok_")) {
+      let confirmedTimestamp = new Date().toISOString();
+      let targetAgreementId = agreementId;
+      let targetPartyName = partyName;
+
+      if (token) {
         const res = await api.confirmByToken(
           token,
           `Direct counterparty formal agreement executed by ${partyName}`,
           "agree"
         );
-        setDecisionStatus("confirmed");
-        setConfirmedAt(res.confirmed_at || new Date().toISOString());
-      } else {
-        // Fallback demo simulation
-        setDecisionStatus("confirmed");
-        setConfirmedAt(new Date().toISOString());
+        confirmedTimestamp = res.confirmed_at || confirmedTimestamp;
+        if (res.agreement_id) targetAgreementId = res.agreement_id;
+        if (res.party_name) targetPartyName = res.party_name;
       }
+
+      setDecisionStatus("confirmed");
+      setConfirmedAt(confirmedTimestamp);
       setToastMessage("Agreement successfully executed and marked as complete.");
+
+      // Broadcast update across tabs so sender's confirmations page immediately updates
+      try {
+        const channel = new BroadcastChannel("dealshield_confirmations");
+        channel.postMessage({
+          type: "CONFIRMATION_UPDATED",
+          agreementId: targetAgreementId,
+          partyName: targetPartyName,
+          status: "confirmed",
+          timestamp: confirmedTimestamp,
+        });
+        channel.close();
+      } catch {
+        // BroadcastChannel optional fallback
+      }
+
+      try {
+        localStorage.setItem(
+          "dealshield_confirmation_broadcast",
+          JSON.stringify({
+            agreementId: targetAgreementId,
+            partyName: targetPartyName,
+            status: "confirmed",
+            timestamp: Date.now(),
+          })
+        );
+      } catch {
+        // localStorage optional fallback
+      }
     } catch (err: any) {
       setError(err.message || "Failed to record agreement confirmation.");
     } finally {
@@ -199,19 +220,57 @@ function ReviewContent() {
     setToastMessage(null);
 
     try {
-      if (token && !token.startsWith("tok_")) {
-        await api.confirmByToken(
+      let declinedTimestamp = new Date().toISOString();
+      let targetAgreementId = agreementId;
+      let targetPartyName = partyName;
+
+      if (token) {
+        const res = await api.confirmByToken(
           token,
           "Declined by counterparty with specific clause feedback",
           "decline",
           declineInput.trim()
         );
+        if (res.agreement_id) targetAgreementId = res.agreement_id;
+        if (res.party_name) targetPartyName = res.party_name;
       }
+
       setDecisionStatus("declined");
-      setDeclinedAt(new Date().toISOString());
+      setDeclinedAt(declinedTimestamp);
       setDeclineReason(declineInput.trim());
       setActionView("idle");
       setToastMessage("Your decline reason and feedback have been formally registered.");
+
+      // Broadcast update across tabs so sender's confirmations page immediately updates
+      try {
+        const channel = new BroadcastChannel("dealshield_confirmations");
+        channel.postMessage({
+          type: "CONFIRMATION_UPDATED",
+          agreementId: targetAgreementId,
+          partyName: targetPartyName,
+          status: "declined",
+          reason: declineInput.trim(),
+          timestamp: declinedTimestamp,
+        });
+        channel.close();
+      } catch {
+        // BroadcastChannel optional fallback
+      }
+
+      try {
+        localStorage.setItem(
+          "dealshield_confirmation_broadcast",
+          JSON.stringify({
+            agreementId: targetAgreementId,
+            partyName: targetPartyName,
+            status: "declined",
+            reason: declineInput.trim(),
+            timestamp: Date.now(),
+          })
+        );
+      } catch {
+        // localStorage optional fallback
+      }
     } catch (err: any) {
       setError(err.message || "Failed to record agreement decline.");
     } finally {
@@ -239,7 +298,7 @@ function ReviewContent() {
     );
   }
 
-  if (error && !token.startsWith("tok_")) {
+  if (error) {
     return (
       <div className="container max-w-3xl mx-auto py-16 px-4">
         <Card className="border-red-200 bg-red-50/50 shadow-sm">
@@ -264,6 +323,16 @@ function ReviewContent() {
       </div>
     );
   }
+
+  const otherParties = (agreement?.parties || []).filter(
+    (p) => p.trim().toLowerCase() !== partyName.trim().toLowerCase()
+  );
+  const partyAName =
+    otherParties.length > 0
+      ? otherParties.join(" & ")
+      : agreement?.parties?.[0] && agreement.parties[0] !== partyName
+      ? agreement.parties[0]
+      : "Contract Initiator";
 
   return (
     <div className="min-h-screen bg-slate-50/60 py-10 px-4 sm:px-6 lg:px-8">
@@ -327,7 +396,7 @@ function ReviewContent() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 rounded-lg p-4 border border-slate-200/60">
             <div className="space-y-1">
               <span className="text-xs font-semibold text-slate-500 uppercase">Party A (Initiator)</span>
-              <p className="font-semibold text-slate-900 text-base">Raj Mehta</p>
+              <p className="font-semibold text-slate-900 text-base">{partyAName}</p>
               <p className="text-xs text-slate-500">Author & Requesting Negotiator</p>
             </div>
             <div className="space-y-1">
@@ -351,32 +420,38 @@ function ReviewContent() {
           </div>
 
           <div className="space-y-6">
-            {clauses.map((clause, idx) => (
-              <div
-                key={clause.clause_id || idx}
-                className="rounded-lg border border-slate-200/90 bg-white p-5 hover:border-slate-300 transition-colors space-y-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-bold text-base text-slate-900 tracking-tight">
-                    {clause.title}
-                  </h3>
-                  <span className="text-xs font-mono font-medium text-slate-400">
-                    Clause {idx + 1}
-                  </span>
-                </div>
-
-                <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line pl-1 border-l-2 border-blue-500/30">
-                  {clause.body}
-                </p>
-
-                {clause.statutory_reference && (
-                  <div className="pt-2 text-xs font-medium text-slate-500 flex items-center gap-1.5 border-t border-slate-100">
-                    <span className="text-slate-400">Statutory Framework:</span>
-                    <span className="text-slate-700 italic">{clause.statutory_reference}</span>
-                  </div>
-                )}
+            {clauses.length === 0 ? (
+              <div className="p-8 text-center text-slate-500 text-sm italic bg-slate-50 rounded-lg border border-dashed border-slate-200">
+                No legal clauses recorded for this agreement draft yet.
               </div>
-            ))}
+            ) : (
+              clauses.map((clause, idx) => (
+                <div
+                  key={clause.clause_id || idx}
+                  className="rounded-lg border border-slate-200/90 bg-white p-5 hover:border-slate-300 transition-colors space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-bold text-base text-slate-900 tracking-tight">
+                      {clause.title}
+                    </h3>
+                    <span className="text-xs font-mono font-medium text-slate-400">
+                      Clause {idx + 1}
+                    </span>
+                  </div>
+
+                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-line pl-1 border-l-2 border-blue-500/30">
+                    {clause.body}
+                  </p>
+
+                  {clause.statutory_reference && (
+                    <div className="pt-2 text-xs font-medium text-slate-500 flex items-center gap-1.5 border-t border-slate-100">
+                      <span className="text-slate-400">Statutory Framework:</span>
+                      <span className="text-slate-700 italic">{clause.statutory_reference}</span>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
 

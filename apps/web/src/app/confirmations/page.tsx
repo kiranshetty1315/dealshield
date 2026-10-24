@@ -30,6 +30,7 @@ import {
   Upload,
   GitCompare,
   Info,
+  RefreshCw,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import {
@@ -192,6 +193,75 @@ function ConfirmationsContent() {
       setTokenInput(tokenParam);
     }
   }, [tokenParam]);
+
+  // Live Auto-Polling: periodically re-checks Supabase so external counterparty assent reflects in real-time
+  useEffect(() => {
+    if (!agreement?.id) return;
+    if (confirmationStatus?.all_confirmed) return;
+
+    const interval = setInterval(() => {
+      refreshStatus(agreement.id);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [agreement?.id, confirmationStatus?.all_confirmed, refreshStatus]);
+
+  // Cross-Tab & Visibility Sync: instantly updates sender view when counterparty confirms in another tab/window
+  useEffect(() => {
+    const handleStorageBroadcast = (e: StorageEvent) => {
+      if (e.key === "dealshield_confirmation_broadcast" && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (agreement?.id && payload.agreementId === agreement.id) {
+            refreshStatus(agreement.id);
+            setFeedbackMessage(
+              `Live assent received: ${payload.partyName} has formally ${
+                payload.status === "confirmed" ? "confirmed" : "declined"
+              } the agreement terms.`
+            );
+          }
+        } catch {
+          // ignore parsing error
+        }
+      }
+    };
+
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel("dealshield_confirmations");
+      channel.onmessage = (event) => {
+        if (
+          agreement?.id &&
+          event.data?.type === "CONFIRMATION_UPDATED" &&
+          event.data?.agreementId === agreement.id
+        ) {
+          refreshStatus(agreement.id);
+          setFeedbackMessage(
+            `Live assent received: ${event.data.partyName} has formally ${
+              event.data.status === "confirmed" ? "confirmed" : "declined"
+            } the agreement terms.`
+          );
+        }
+      };
+    } catch {
+      // BroadcastChannel optional fallback
+    }
+
+    window.addEventListener("storage", handleStorageBroadcast);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && agreement?.id) {
+        refreshStatus(agreement.id);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageBroadcast);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (channel) channel.close();
+    };
+  }, [agreement?.id, refreshStatus]);
 
   // Handle switching negotiation
   const handleSelectConversation = (chatId: string) => {
@@ -397,6 +467,12 @@ function ConfirmationsContent() {
                 Live Agreement ({agreement.id.slice(0, 8)}...)
               </Badge>
             )}
+            {agreement && !isAllConfirmed && (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Live sync active (auto-checks every 3s)
+              </span>
+            )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
             Both negotiating parties must independently review and formally assent to synthesize an enforceable commercial contract under Section 7 of the Indian Contract Act, 1872.
@@ -437,7 +513,19 @@ function ConfirmationsContent() {
           </div>
 
           {/* Action Controls */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => agreement?.id && refreshStatus(agreement.id)}
+              disabled={isLoadingStatus || !agreement?.id}
+              className="gap-1.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-50"
+              title="Force re-fetch confirmation status from database"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingStatus ? "animate-spin" : ""}`} />
+              <span>Refresh Status</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
