@@ -6,11 +6,17 @@ present (default in local dev and CI test environments), automatically utilizes
 an in-memory database engine supporting PostgREST query operations.
 """
 
-from typing import Any, Dict, List, Optional
+import os
+import sys
+import json
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
 import copy
 import uuid
 from datetime import datetime, timezone
 from app.core.config import settings
+
+LOCAL_CACHE_FILE = Path(__file__).parent.parent.parent / ".local_db_cache.json"
 
 try:
     from supabase import create_client, Client
@@ -29,9 +35,15 @@ class MockResponse:
 class MockTableQueryBuilder:
     """Simulates PostgREST query chain (insert, select, eq, order, execute)."""
 
-    def __init__(self, storage: Dict[str, List[Dict[str, Any]]], table_name: str):
+    def __init__(
+        self,
+        storage: Dict[str, List[Dict[str, Any]]],
+        table_name: str,
+        on_change: Optional[Callable[[], None]] = None,
+    ):
         self._storage = storage
         self._table = table_name
+        self._on_change = on_change
         self._action = "select"
         self._insert_data: Any = None
         self._update_data: Any = None
@@ -93,6 +105,8 @@ class MockTableQueryBuilder:
                     row["created_at"] = datetime.now(timezone.utc).isoformat()
                 rows.append(row)
                 inserted.append(row)
+            if self._on_change:
+                self._on_change()
             return MockResponse(inserted if isinstance(self._insert_data, list) else inserted[0])
 
         elif self._action == "update":
@@ -107,6 +121,8 @@ class MockTableQueryBuilder:
                     for k, v in self._update_data.items():
                         row[k] = v
                     updated.append(copy.deepcopy(row))
+            if self._on_change and updated:
+                self._on_change()
             return MockResponse(updated if not self._single else (updated[0] if updated else None))
 
         elif self._action == "delete":
@@ -124,6 +140,8 @@ class MockTableQueryBuilder:
                 else:
                     remaining.append(row)
             self._storage[self._table] = remaining
+            if self._on_change and deleted:
+                self._on_change()
             return MockResponse(deleted)
 
         else:  # select
@@ -155,7 +173,7 @@ class MockTableQueryBuilder:
 
 
 class LocalMemoryDatabase:
-    """In-memory PostgREST compatible database for tests and offline development."""
+    """In-memory PostgREST compatible database for tests and offline development with file persistence."""
 
     def __init__(self):
         self._storage: Dict[str, List[Dict[str, Any]]] = {
@@ -169,9 +187,36 @@ class LocalMemoryDatabase:
             "audit_events": [],
             "document_hashes": [],
         }
+        self._load_from_disk()
+
+    def _should_persist(self) -> bool:
+        return "pytest" not in sys.modules and not os.environ.get("PYTEST_CURRENT_TEST")
+
+    def _load_from_disk(self):
+        if not self._should_persist():
+            return
+        if LOCAL_CACHE_FILE.exists():
+            try:
+                with open(LOCAL_CACHE_FILE, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        for k, v in data.items():
+                            if k in self._storage and isinstance(v, list):
+                                self._storage[k] = v
+            except Exception:
+                pass
+
+    def save_to_disk(self):
+        if not self._should_persist():
+            return
+        try:
+            with open(LOCAL_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(self._storage, f, indent=2)
+        except Exception:
+            pass
 
     def table(self, table_name: str) -> MockTableQueryBuilder:
-        return MockTableQueryBuilder(self._storage, table_name)
+        return MockTableQueryBuilder(self._storage, table_name, on_change=self.save_to_disk)
 
     def reset(self):
         """Reset all tables (useful for unit test isolation)."""

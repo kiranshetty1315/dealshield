@@ -17,11 +17,14 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- TABLES
 -- ============================================================================
 
--- Users table (extends Supabase auth.users)
+-- Users table
 CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email TEXT NOT NULL UNIQUE,
+    password_hash TEXT,
     full_name TEXT,
+    organization TEXT DEFAULT 'DealShield User',
+    role TEXT DEFAULT 'Contract Sponsor',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -74,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.agreements (
     parties TEXT[] NOT NULL DEFAULT '{}',
     current_version INTEGER NOT NULL DEFAULT 1,
     status TEXT NOT NULL DEFAULT 'draft'
-        CHECK (status IN ('draft', 'pending_confirmation', 'partially_confirmed', 'fully_confirmed', 'superseded')),
+        CHECK (status IN ('draft', 'pending_confirmation', 'partially_confirmed', 'fully_confirmed', 'superseded', 'declined')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -100,10 +103,13 @@ CREATE TABLE IF NOT EXISTS public.confirmations (
     party_name TEXT NOT NULL,
     party_email TEXT,
     confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+    confirmed_at TIMESTAMPTZ,
+    declined BOOLEAN NOT NULL DEFAULT FALSE,
+    declined_at TIMESTAMPTZ,
+    decline_reason TEXT,
     notes TEXT,
     confirmation_token_hash TEXT UNIQUE,  -- SHA-256 digest of secret token for external counterparty access
     token_expires_at TIMESTAMPTZ,         -- Expiration timestamp for security
-    confirmed_at TIMESTAMPTZ,
     ip_hash TEXT,                         -- HMAC-SHA256 anonymized IP for DPDP Act 2023 compliance
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (agreement_id, version_id, party_name)
