@@ -26,6 +26,15 @@ export interface Message {
   raw_line: string;
 }
 
+export interface ConversationRecord {
+  id: string;
+  filename: string;
+  party_names: string[];
+  message_count: number;
+  uploaded_at: string;
+  raw_content_path?: string;
+}
+
 export interface ChatUploadResponse {
   chat_id: string;
   filename: string;

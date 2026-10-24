@@ -18,6 +18,7 @@ from app.schemas.agreement import Agreement, AgreementVersion, Clause, Agreement
 from app.schemas.confirmation import ConfirmationStatus, PartyConfirmationRecord
 from app.schemas.evidence import DocumentHashRecord, AuditEventRecord
 from app.services.hash_service import HashService
+from app.core.security import encrypt_message_content, decrypt_message_content
 
 
 class ConversationRepository:
@@ -56,13 +57,17 @@ class ConversationRepository:
                 if isinstance(msg.timestamp, datetime)
                 else str(msg.timestamp)
             )
+            # Application-level encryption at rest (Fernet AES-256)
+            encrypted_content = encrypt_message_content(msg.content)
+            encrypted_raw_line = encrypt_message_content(msg.raw_line)
+
             rows.append({
                 "conversation_id": conversation_id,
                 "message_id": msg.message_id,
                 "sender": msg.sender,
-                "content": msg.content,
+                "content": encrypted_content,
                 "timestamp": ts_iso,
-                "raw_line": msg.raw_line,
+                "raw_line": encrypted_raw_line,
                 "sequence_number": msg.sequence_number,
             })
         if not rows:
@@ -77,6 +82,11 @@ class ConversationRepository:
             return data[0] if data else None
         return data
 
+    def list_conversations(self) -> List[Dict[str, Any]]:
+        res = self.client.table("conversations").select("*").order("uploaded_at", desc=True).execute()
+        data = res.data
+        return data if isinstance(data, list) else ([data] if data else [])
+
     def get_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
         res = (
             self.client.table("messages")
@@ -86,7 +96,33 @@ class ConversationRepository:
             .execute()
         )
         data = res.data
-        return data if isinstance(data, list) else ([data] if data else [])
+        rows = data if isinstance(data, list) else ([data] if data else [])
+        
+        # Transparently decrypt message content and raw line when reading
+        decrypted_rows = []
+        for row in rows:
+            r = dict(row)
+            if "content" in r:
+                r["content"] = decrypt_message_content(r["content"])
+            if "raw_line" in r:
+                r["raw_line"] = decrypt_message_content(r["raw_line"])
+            decrypted_rows.append(r)
+        return decrypted_rows
+
+    def delete_conversation(self, conversation_id: str) -> bool:
+        """Permanently deletes conversation and all its parsed messages (Right to Erasure - DPDP Act 2023)."""
+        # 1. Delete associated messages
+        self.client.table("messages").delete().eq("conversation_id", conversation_id).execute()
+        # 2. Delete conversation record
+        res = self.client.table("conversations").delete().eq("id", conversation_id).execute()
+        return bool(res.data)
+
+    def delete_all_conversations(self) -> int:
+        """Permanently deletes all stored conversations and messages upon user request."""
+        self.client.table("messages").delete().execute()
+        res = self.client.table("conversations").delete().execute()
+        data = res.data if isinstance(res.data, list) else ([res.data] if res.data else [])
+        return len(data)
 
 
 class AgreementRepository:

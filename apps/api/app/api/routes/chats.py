@@ -204,3 +204,71 @@ async def get_chat(chat_id: str) -> ChatUploadResponse:
         date_format_inferred=None,
         is_date_ambiguous=False,
     )
+
+
+@router.get(
+    "",
+    summary="List Ingested Conversations",
+    description="Retrieve all stored conversations for the current workspace/user.",
+)
+async def list_chats():
+    """Returns list of conversations."""
+    return conv_repo.list_conversations()
+
+
+@router.delete(
+    "/{chat_id}",
+    summary="Delete Conversation and Messages",
+    description="Permanently erases conversation and all associated message transcripts from the database (DPDP Act 2023 Right to Erasure).",
+)
+async def delete_chat(chat_id: str):
+    """Deletes conversation and its messages."""
+    conv = conv_repo.get_conversation(chat_id)
+    if not conv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversation {chat_id} not found."
+        )
+
+    conv_repo.delete_conversation(chat_id)
+
+    # Log immutable audit event for DPDP erasure verification
+    audit_repo.log_event(
+        entity_type="conversation",
+        entity_id=chat_id,
+        action="conversation_erased_by_user",
+        metadata={
+            "reason": "user_requested_erasure_dpdp",
+            "filename": conv.get("filename"),
+        },
+    )
+
+    return {
+        "status": "deleted",
+        "chat_id": chat_id,
+        "message": "Conversation and all associated message transcripts have been permanently deleted.",
+    }
+
+
+@router.delete(
+    "",
+    summary="Delete All Conversation History",
+    description="Permanently erases all stored conversation transcripts and messages for privacy compliance.",
+)
+async def delete_all_chats():
+    """Deletes all conversations and messages."""
+    count = conv_repo.delete_all_conversations()
+
+    audit_repo.log_event(
+        entity_type="workspace",
+        entity_id="00000000-0000-0000-0000-000000000001",
+        action="all_conversations_erased_by_user",
+        metadata={"erased_count": count},
+    )
+
+    return {
+        "status": "deleted",
+        "erased_count": count,
+        "message": f"Successfully deleted {count} conversations and all associated message history.",
+    }
+

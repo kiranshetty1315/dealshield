@@ -49,10 +49,27 @@ def test_conversation_and_message_repository():
     ]
     repo.save_messages(conv_id, msgs)
 
+    # 1. Verify encrypted at rest: raw database storage has ciphertext, not plaintext!
+    raw_db_row = repo.client.table("messages").select("*").eq("message_id", "msg_raj_001").execute().data[0]
+    assert raw_db_row["content"].startswith("enc:")
+    assert "Hello Priya" not in raw_db_row["content"]
+
+    # 2. Verify transparent decryption on read
     stored_msgs = repo.get_messages(conv_id)
     assert len(stored_msgs) == 2
     assert stored_msgs[0]["message_id"] == "msg_raj_001"
+    assert stored_msgs[0]["content"] == "Hello Priya"
     assert stored_msgs[1]["message_id"] == "msg_priya_002"
+    assert stored_msgs[1]["content"] == "Hi Raj"
+
+    # 3. Test list and delete conversation (DPDP right to erasure)
+    chats_list = repo.list_conversations()
+    assert any(c["id"] == conv_id for c in chats_list)
+
+    delete_ok = repo.delete_conversation(conv_id)
+    assert delete_ok is True
+    assert repo.get_conversation(conv_id) is None
+    assert len(repo.get_messages(conv_id)) == 0
 
 
 def test_agreement_generation_and_retrieval():

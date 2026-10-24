@@ -54,6 +54,10 @@ class MockTableQueryBuilder:
         self._update_data = data
         return self
 
+    def delete(self):
+        self._action = "delete"
+        return self
+
     def select(self, columns: str = "*"):
         self._action = "select"
         return self
@@ -104,6 +108,23 @@ class MockTableQueryBuilder:
                         row[k] = v
                     updated.append(copy.deepcopy(row))
             return MockResponse(updated if not self._single else (updated[0] if updated else None))
+
+        elif self._action == "delete":
+            deleted = []
+            remaining = []
+            for row in rows:
+                match = True
+                if self._filters:
+                    for col, val in self._filters:
+                        if str(row.get(col)) != str(val):
+                            match = False
+                            break
+                if match:
+                    deleted.append(row)
+                else:
+                    remaining.append(row)
+            self._storage[self._table] = remaining
+            return MockResponse(deleted)
 
         else:  # select
             matched = []

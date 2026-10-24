@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ShieldCheck, Activity, AlertCircle } from "lucide-react";
 import { useHealthCheck } from "@/hooks/useHealthCheck";
 import { Badge } from "@/components/ui/badge";
+import { ProfileDropdown } from "@/components/layout/ProfileDropdown";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -50,9 +51,9 @@ export function Navbar() {
           </nav>
         </div>
 
-        {/* Backend Connectivity Status */}
+        {/* Backend Connectivity Status & User Profile Dropdown */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-xs border border-slate-200 px-3 py-1.5 rounded-full bg-slate-50">
+          <div className="hidden sm:flex items-center gap-2 text-xs border border-slate-200 px-3 py-1.5 rounded-full bg-slate-50">
             {isLoading && !health ? (
               <>
                 <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
@@ -70,6 +71,8 @@ export function Navbar() {
               </>
             )}
           </div>
+
+          <ProfileDropdown />
         </div>
       </div>
     </header>

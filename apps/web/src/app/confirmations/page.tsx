@@ -21,8 +21,10 @@ import {
   Database,
   FileCheck2,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
+import { SettingsModal } from "@/components/layout/SettingsModal";
 import { ConfirmationStatus, Agreement, PartyConfirmationRecord } from "@/types";
 
 function ConfirmationsContent() {
@@ -39,6 +41,7 @@ function ConfirmationsContent() {
   const [tokenResult, setTokenResult] = useState<string | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [isErasureModalOpen, setIsErasureModalOpen] = useState(false);
 
   // Default demo fallback if no live agreement
   const defaultParties: PartyConfirmationRecord[] = [
@@ -280,25 +283,49 @@ function ConfirmationsContent() {
 
           {/* Fully Confirmed Celebration Banner */}
           {isAllConfirmed && (
-            <div className="border border-emerald-300 bg-emerald-50 p-5 rounded-xl space-y-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-emerald-600" />
-                  <span className="font-bold text-emerald-950 text-sm">
-                    Agreement Fully Confirmed by Both Parties!
-                  </span>
+            <div className="space-y-3">
+              <div className="border border-emerald-300 bg-emerald-50 p-5 rounded-xl space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-emerald-600" />
+                    <span className="font-bold text-emerald-950 text-sm">
+                      Agreement Fully Confirmed by Both Parties!
+                    </span>
+                  </div>
+                  <Link href={`/evidence?entity_id=${encodeURIComponent(agreement?.id || agreementId)}`}>
+                    <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      Inspect Section 65B Evidence Vault
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </Link>
                 </div>
-                <Link href={`/evidence?entity_id=${encodeURIComponent(agreement?.id || agreementId)}`}>
-                  <Button size="sm" className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs gap-1.5">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Inspect Section 65B Evidence Vault
-                    <ArrowRight className="h-3.5 w-3.5" />
-                  </Button>
-                </Link>
+                <p className="text-xs text-emerald-800">
+                  Both parties have unconditionally assented under Section 7 of the Indian Contract Act. An immutable SHA-256 digital certificate is preserved in the evidence repository.
+                </p>
               </div>
-              <p className="text-xs text-emerald-800">
-                Both parties have unconditionally assented under Section 7 of the Indian Contract Act. An immutable SHA-256 digital certificate is preserved in the evidence repository.
-              </p>
+
+              {/* DPDP Act Message Erasure Option */}
+              <div className="border border-blue-200 bg-blue-50/70 p-4 rounded-xl flex items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <span className="font-bold text-blue-950 flex items-center gap-1.5">
+                    <Trash2 className="h-4 w-4 text-blue-700" />
+                    Agreement Finalized? Exercise DPDP Act Right to Erasure
+                  </span>
+                  <p className="text-blue-800 text-[11px]">
+                    Now that all obligations are formalized into the executed agreement, you can permanently erase underlying WhatsApp chat messages from the database.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsErasureModalOpen(true)}
+                  className="shrink-0 text-xs border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5"
+                >
+                  <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                  Manage & Erase Messages
+                </Button>
+              </div>
             </div>
           )}
 
@@ -307,6 +334,13 @@ function ConfirmationsContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Settings & Message Erasure Modal */}
+      <SettingsModal
+        isOpen={isErasureModalOpen}
+        onClose={() => setIsErasureModalOpen(false)}
+        initialTab="history"
+      />
 
       {/* Testable Single-Use Token Confirmation Box */}
       <Card className="border-slate-200 shadow-sm">

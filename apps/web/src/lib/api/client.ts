@@ -1,6 +1,7 @@
 import {
   HealthResponse,
   ChatUploadResponse,
+  ConversationRecord,
   AgreementAnalysis,
   Agreement,
   ConfirmationStatus,
@@ -75,6 +76,42 @@ export class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Conversation not found" }));
       throw new Error(err.detail || `Failed to fetch conversation (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async listChats(): Promise<ConversationRecord[]> {
+    const res = await fetch(`${this.baseUrl}/api/v1/chats`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to list conversations (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async deleteChat(chatId: string): Promise<{ status: string; chat_id: string; message: string }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/chats/${encodeURIComponent(chatId)}`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to delete conversation" }));
+      throw new Error(err.detail || `Delete failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async deleteAllChats(): Promise<{ status: string; erased_count: number; message: string }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/chats`, {
+      method: "DELETE",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to delete all conversations" }));
+      throw new Error(err.detail || `Delete failed (${res.status})`);
     }
     return res.json();
   }
