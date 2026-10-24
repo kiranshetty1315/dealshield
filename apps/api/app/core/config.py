@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Union, Optional
 from pydantic import AnyHttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str = "https://placeholder-project.supabase.co"
     SUPABASE_ANON_KEY: str = "placeholder-anon-key"
     SUPABASE_SERVICE_ROLE_KEY: str = "placeholder-service-role-key"
+    DATABASE_URL: Optional[str] = None
 
     # Security salts & encryption
     SECRET_KEY: str = "dealshield-auth-secret-key-change-in-production-2026"
