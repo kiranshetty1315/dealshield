@@ -119,6 +119,11 @@ def test_analysis_endpoint_success_and_persistence():
     assert retrieved["analysis_id"] == analysis_id
     assert retrieved["chat_id"] == chat_id
 
+    # 3b. Retrieve or auto-generate analysis directly by chat ID
+    by_chat_res = client.get(f"/api/v1/analysis/chat/{chat_id}")
+    assert by_chat_res.status_code == 200
+    assert by_chat_res.json()["chat_id"] == chat_id
+
     # 4. Generate draft agreement using this analysis (End-to-End pipeline)
     ag_res = client.post("/api/v1/agreements", json={"analysis_id": analysis_id})
     assert ag_res.status_code == 201

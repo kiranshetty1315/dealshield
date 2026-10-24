@@ -701,6 +701,37 @@ class AnalysisRepository:
             analyzed_at=an_dt,
         )
 
+    def get_analysis_by_chat_id(self, conversation_id: str) -> Optional[AgreementAnalysis]:
+        """Retrieves latest legal analysis record for a given conversation."""
+        res = (
+            self.client.table("analyses")
+            .select("*")
+            .eq("conversation_id", conversation_id)
+            .order("analyzed_at", desc=True)
+            .execute()
+        )
+        data = res.data
+        if not data:
+            return None
+        row = data[0] if isinstance(data, list) else data
+        an_at = row.get("analyzed_at")
+        an_dt = (
+            datetime.fromisoformat(an_at.replace("Z", "+00:00"))
+            if isinstance(an_at, str)
+            else datetime.now(timezone.utc)
+        )
+        return AgreementAnalysis(
+            analysis_id=row["id"],
+            chat_id=row.get("conversation_id", ""),
+            parties=row.get("parties", []),
+            extracted_terms=row.get("extracted_terms", []),
+            conflicts=row.get("conflicts", []),
+            missing_terms=row.get("missing_terms", []),
+            confidence_score=row.get("confidence_score", 0.0),
+            requires_human_review=row.get("requires_human_review", True),
+            analyzed_at=an_dt,
+        )
+
 
 class UserRepository:
     """Manages user persistence, authentication records, and demo user seeding."""

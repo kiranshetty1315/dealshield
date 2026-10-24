@@ -217,12 +217,24 @@ export class ApiClient {
   async getAnalysis(analysisId: string): Promise<AgreementAnalysis> {
     const res = await fetch(`${this.baseUrl}/api/v1/analysis/${encodeURIComponent(analysisId)}`, {
       method: "GET",
-      headers: { Accept: "application/json" },
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Analysis record not found" }));
       throw new Error(err.detail || `Failed to fetch analysis (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async getAnalysisForChat(chatId: string): Promise<AgreementAnalysis> {
+    const res = await fetch(`${this.baseUrl}/api/v1/analysis/chat/${encodeURIComponent(chatId)}`, {
+      method: "GET",
+      headers: { Accept: "application/json", ...this.getAuthHeaders() },
+    });
+
+    if (!res.ok) {
+      return this.analyzeChat(chatId);
     }
     return res.json();
   }

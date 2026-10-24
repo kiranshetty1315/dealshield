@@ -116,6 +116,20 @@ async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
 
 
 @router.get(
+    "/chat/{chat_id}",
+    response_model=AgreementAnalysis,
+    summary="Get or Generate Analysis by Chat ID",
+    description="Retrieve existing analysis for a conversation or automatically trigger analysis from stored messages.",
+)
+async def get_analysis_by_chat(chat_id: str) -> AgreementAnalysis:
+    """Retrieve analysis for conversation or generate on-the-fly."""
+    existing = analysis_repo.get_analysis_by_chat_id(chat_id)
+    if existing:
+        return existing
+    return await analyze_chat(AnalysisRequest(chat_id=chat_id))
+
+
+@router.get(
     "/{analysis_id}",
     response_model=AgreementAnalysis,
     summary="Get Analysis Result",
