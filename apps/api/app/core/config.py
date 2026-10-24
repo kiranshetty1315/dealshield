@@ -27,19 +27,32 @@ class Settings(BaseSettings):
     PORT: int = 8000
 
     # CORS configuration
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[List[str], str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",") if i.strip()]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    def assemble_cors_origins(cls, v: Union[str, List[str], None]) -> List[str]:
+        if not v:
+            return ["http://localhost:3000", "http://127.0.0.1:3000"]
+        if isinstance(v, str):
+            clean_str = v.strip()
+            if not clean_str:
+                return ["http://localhost:3000", "http://127.0.0.1:3000"]
+            if clean_str.startswith("["):
+                import json
+                try:
+                    parsed = json.loads(clean_str)
+                    if isinstance(parsed, list):
+                        return [str(i).strip() for i in parsed if str(i).strip()]
+                except Exception:
+                    pass
+            return [i.strip() for i in clean_str.split(",") if i.strip()]
+        elif isinstance(v, list):
+            return [str(i).strip() for i in v if str(i).strip()]
+        return ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # Supabase (Team D integration - placeholders allowed for local scaffold)
     SUPABASE_URL: str = "https://placeholder-project.supabase.co"
