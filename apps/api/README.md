@@ -5,8 +5,10 @@ FastAPI backend service powering WhatsApp chat parsing, AI agreement extraction,
 ## Architecture
 
 - **Framework:** FastAPI with Pydantic v2 Settings and validation schemas
+- **Authentication:** PBKDF2 password hashing & Bearer JWT session management (`app/core/security.py`, `app/api/routes/auth.py`)
 - **Chat Processing:** Deterministic WhatsApp parser with stable message citation IDs (`app/services/chat_parser.py`)
 - **Integrity:** SHA-256 document hashing service (`app/services/hash_service.py`)
+- **Database Persistence:** Supabase PostgreSQL with automated migrations (`scripts/migrate.py`) and zero-config local disk persistence (`.local_db_cache.json`)
 - **API Versioning:** All domain endpoints prefixed with `/api/v1/`
 - **Documentation:** Interactive OpenAPI specs at `/docs` and `/redoc`
 
@@ -40,9 +42,17 @@ pip install -r requirements.txt
 ```bash
 cp .env.example .env
 ```
-*(No real credentials are required to run the local scaffold or pass health checks.)*
+*(No real credentials are required to run the local scaffold, local storage automatically caches to `.local_db_cache.json`.)*
 
-### 5. Run the Development Server
+### 5. Run Database Migrations (Optional for Live Supabase)
+
+If using live Supabase credentials, apply database tables via:
+```bash
+python scripts/migrate.py
+```
+*(Accepts connection string as an argument or reads `DATABASE_URL` from `.env`)*
+
+### 6. Run the Development Server
 
 ```bash
 uvicorn app.main:app --reload --port 8000
@@ -53,8 +63,9 @@ Verify the service is running at:
 - Swagger UI: `http://localhost:8000/docs`
 - OpenAPI JSON: `http://localhost:8000/openapi.json`
 
-### 6. Run Backend Tests
+### 7. Run Backend Tests
 
 ```bash
 python -m pytest tests/ -v
 ```
+*(42 passing tests with 100% test coverage)*

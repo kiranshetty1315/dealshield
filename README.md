@@ -46,7 +46,7 @@ These negotiations suffer from:
 - **Runtime:** Python 3.9+ / 3.11+
 - **Data Validation & Settings:** Pydantic v2 & Pydantic-Settings (canonical single source of truth)
 - **Web Server:** Uvicorn with standard workers
-- **Testing:** Pytest 8.4+ & Pytest-Asyncio (34 passing unit & integration tests)
+- **Testing:** Pytest 8.4+ & Pytest-Asyncio (42 passing unit & integration tests)
 
 ### AI & Legal Intelligence Engine
 - **LLM Engine:** OpenAI API (`gpt-4o-mini`) with Pydantic structured output validation (`response_format=AgreementAnalysis`)
@@ -56,10 +56,11 @@ These negotiations suffer from:
 
 ### Database, Security & Evidence
 - **Database:** Supabase (PostgreSQL 15+) with Row-Level Security (RLS) policies
-- **Local Dev Engine:** In-memory PostgREST-compatible query engine supporting complete CRUD and filter chains for offline development
+- **Local Dev Engine:** In-memory PostgREST-compatible query engine with automatic local disk persistence (`.local_db_cache.json`) for zero-config persistence
+- **Authentication & Security:** PBKDF2 (SHA-256) password encryption, Bearer JWT session management, two-sided settings with Section 12 DPDP history erasure
 - **Document Integrity:** SHA-256 deterministic cryptographic hashing (`hashlib`)
 - **Privacy Compliance:** Digital Personal Data Protection Act (DPDP Act 2023) compliant secret-salted HMAC IP anonymization
-- **Access Control:** Single-use cryptographic token confirmation for unauthenticated counterparties
+- **Access Control:** Dedicated Counterparty Review Portal (`/review`) with single-use cryptographic token confirmation and conditional decline feedback
 - **Audit Logging:** Append-only immutable audit trail recording all contract lifecycle events
 
 ---
@@ -71,8 +72,8 @@ dealshield/
 ├── apps/
 │   ├── web/                    # Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn/ui
 │   │   ├── src/
-│   │   │   ├── app/            # Routes: /, /upload, /analysis, /agreements, /confirmations, /evidence, /dashboard
-│   │   │   ├── components/     # UI primitives, chat normalizer, conflict drawer, agreement preview
+│   │   │   ├── app/            # Routes: /, /upload, /analysis, /agreements, /confirmations, /evidence, /dashboard, /login, /signup, /settings, /profile, /review
+│   │   │   ├── components/     # UI primitives, chat normalizer, conflict drawer, agreement preview, profile dropdown
 │   │   │   ├── lib/            # Typed API client, Supabase auth boundary, utility helpers
 │   │   │   ├── hooks/          # React hooks (useHealthCheck with auto-polling)
 │   │   │   └── types/          # TypeScript contracts synced with backend Pydantic models
@@ -80,12 +81,13 @@ dealshield/
 │   │   └── .env.example
 │   └── api/                    # FastAPI backend (Python 3.9+)
 │       ├── app/
-│       │   ├── api/routes/     # /health, /chats, /analysis, /agreements, /confirmations, /evidence
-│       │   ├── core/           # Pydantic v2 settings, CORS, and security boundaries
-│       │   ├── db/             # Supabase client & repository layer (Conversation, Agreement, Confirmation, Audit)
+│       │   ├── api/routes/     # /health, /chats, /analysis, /agreements, /confirmations, /evidence, /auth
+│       │   ├── core/           # Pydantic v2 settings, CORS, and security boundaries (Fernet, PBKDF2)
+│       │   ├── db/             # Supabase client & repository layer (Conversation, Agreement, Confirmation, Audit, User)
 │       │   ├── schemas/        # Canonical Pydantic schemas (single source of truth)
 │       │   └── services/       # Chat parser, conflict detector, legal retriever, AI extractor, agreement generator
-│       ├── tests/              # 34 unit & integration tests (100% passing)
+│       ├── scripts/            # Automated PostgreSQL database migration runner (migrate.py)
+│       ├── tests/              # 42 unit & integration tests (100% passing)
 │       ├── requirements.txt
 │       └── .env.example
 ├── packages/
@@ -94,7 +96,7 @@ dealshield/
 ├── sample-data/                # Curated WhatsApp chat exports with price disputes & expected outputs
 ├── docs/                       # Architecture, API contracts, DB design, security, setup, and demo plan
 ├── infra/
-│   ├── supabase/migrations/    # Complete versioned PostgreSQL schema with RLS policies
+│   ├── supabase/migrations/    # Complete versioned PostgreSQL schema with RLS policies (001_initial_schema.sql)
 │   └── docker/                 # Container definitions & docker-compose.yml
 └── .github/                    # CI workflow, PR template & issue templates
 ```
@@ -124,17 +126,24 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 cp .env.example .env            # Or 'Copy-Item .env.example .env' on Windows PowerShell
-python -m pytest tests/ -v      # Run tests (34 passed, 100%)
+python -m pytest tests/ -v      # Run tests (42 passed, 100%)
 uvicorn app.main:app --reload --port 8000
 ```
 - API Health Status: [http://localhost:8000/health](http://localhost:8000/health)
 - Swagger OpenAPI Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-### 3. Start Frontend (Terminal 2)
+### 3. Database Migration (Optional for Live Supabase)
+If you have configured your live Supabase credentials in `apps/api/.env`, initialize your database tables with one command:
+```bash
+npm run db:migrate
+```
+*(Offline development automatically persists data to `.local_db_cache.json` without requiring live cloud credentials).*
+
+### 4. Start Frontend (Terminal 2)
 ```bash
 # From repository root or apps/web:
 npm install
-npm run build                   # Compiles all 10 static routes with zero errors
+npm run build                   # Compiles all routes with zero errors
 npm run dev
 ```
 - Web Application: [http://localhost:3000](http://localhost:3000)
@@ -144,14 +153,18 @@ npm run dev
 ## 🔄 End-to-End User Flow
 
 ```
-[1. Upload Chat] ───► [2. AI Extraction & Section 7 Conflict Resolution] ───► [3. Synthesize Agreement] ───► [4. Two-Party Confirmation] ───► [5. Section 65B Evidence Vault]
+[1. User Auth / Setup] ───► [2. Upload Chat] ───► [3. AI Extraction & Section 7 Conflict Resolution] ───► [4. Synthesize Agreement] ───► [5. Counterparty Review Portal] ───► [6. Section 65B Evidence Vault]
 ```
 
-1. **Upload Chat (`/upload`):** Upload an exported WhatsApp `.txt` file or paste raw negotiation messages. Normalized messages are assigned stable message citation IDs.
-2. **Analysis & Section 7 Resolution (`/analysis`):** Inspect extracted business terms (scope, pricing, payment terms, timeline). Interactive conflict resolution drawer flags qualified acceptances and price disagreements under Section 7 of the Indian Contract Act, 1872 with verbatim citations.
-3. **Synthesize Agreement (`/agreements`):** Plain-language synthesis generates clear commercial clauses with statutory legal notices (stamp duty disclosure, Copyright Act IP assignment).
-4. **Two-Party Confirmation (`/confirmations`):** Mutual independent sign-off transitions agreement state from `draft` → `partially_confirmed` → `fully_confirmed`. Includes testable single-use signed link tokens.
-5. **Evidence Vault (`/evidence`):** Query live append-only audit trail logs from Supabase and verify document integrity hashes with SHA-256 fingerprinting.
+1. **Authentication & Profile (`/login`, `/signup`, `/settings`, `/profile`):** Secure PBKDF2 authentication, Bearer JWT session management, two-sided settings with Section 12 DPDP chat history erasure and password change.
+2. **Upload Chat (`/upload`):** Upload an exported WhatsApp `.txt` file or paste raw negotiation messages. Normalized messages are assigned stable message citation IDs.
+3. **Analysis & Section 7 Resolution (`/analysis`):** Inspect extracted business terms (scope, pricing, payment terms, timeline). Interactive conflict resolution drawer flags qualified acceptances and price disagreements under Section 7 of the Indian Contract Act, 1872 with verbatim citations.
+4. **Synthesize Agreement (`/agreements`):** Plain-language synthesis generates clear commercial clauses with statutory legal notices (stamp duty disclosure, Copyright Act IP assignment).
+5. **Two-Party Confirmation & Review Portal (`/confirmations`, `/review`):** 
+   - Internal dashboard tracks mutual sign-off state (`draft` → `partially_confirmed` → `fully_confirmed`).
+   - Generates unguessable 32-byte single-use signed token links (`/review?token=...`).
+   - External counterparties access a dedicated, distraction-free legal review view with formal contract clauses, "I Agree & Confirm" assent execution, and a conditional decline feedback box.
+6. **Evidence Vault (`/evidence`):** Query live append-only audit trail logs from Supabase and verify document integrity hashes with SHA-256 fingerprinting.
 
 ---
 
