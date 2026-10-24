@@ -171,7 +171,138 @@ Verifies SHA-256 fingerprint consistency.
 
 ---
 
-## 4. Frontend TypeScript Type Generation Workflow
+## 4. Counterparty Confirmation & Assent Endpoints
+
+### `POST /api/v1/confirmations/tokens`
+Generates a secure review token for an external counterparty.
+- **Auth:** Requires Bearer JWT (`Authorization: Bearer <token>`).
+- **Authorization:** Only the owner/initiator of the agreement can issue tokens.
+- **Request Body:**
+```json
+{
+  "agreement_id": "c1f7a6b2-...",
+  "party_name": "Priya Sharma",
+  "party_email": "priya.sharma@example.com"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "party_name": "Priya Sharma",
+  "token": "raw-urlsafe-secret-token-string",
+  "expires_at": "2026-10-27T00:00:00Z",
+  "review_url": "/review?token=raw-urlsafe-secret-token-string"
+}
+```
+
+---
+
+### `GET /api/v1/confirmations/token/{token}`
+Inspects token metadata and agreement status.
+- **Safe:** Side-effect free; safe for WhatsApp/browser link prefetching.
+- **Session-Gated:** `agreement` (containing draft clauses) is `null` unless the request includes a valid, active `X-Review-Session` header.
+- **Response (200 OK):**
+```json
+{
+  "party_name": "Priya Sharma",
+  "status": "pending",
+  "agreement_id": "c1f7a6b2-...",
+  "masked_email": "p***a@e***e.com",
+  "email_verified": false,
+  "agreement": null
+}
+```
+
+---
+
+### `POST /api/v1/confirmations/token/{token}/email-check`
+Verifies the client's typed email against the stored HMAC-SHA256 hash.
+- **Rate Limit:** Locked after 5 failed attempts (HTTP 423).
+- **Request Body:**
+```json
+{
+  "email": "priya.sharma@example.com"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "passed": true,
+  "masked_email": "p***a@e***e.com"
+}
+```
+
+---
+
+### `POST /api/v1/confirmations/token/{token}/otp/send`
+Dispatches a 6-digit OTP to the stored, decrypted email address.
+- **Rate Limit:** 3 sends per rolling 15 minutes; minimum 30 seconds interval between resends (HTTP 429).
+- **Response (200 OK):**
+```json
+{
+  "sent": true,
+  "masked_email": "p***a@e***e.com",
+  "expires_in_minutes": 10
+}
+```
+
+---
+
+### `POST /api/v1/confirmations/token/{token}/otp/verify`
+Validates the counterparty's 6-digit OTP and generates an ephemeral review session token.
+- **Rate Limit:** 5 wrong guesses invalidates the current OTP; 10 cumulative wrong guesses permanently locks the row (HTTP 423).
+- **Request Body:**
+```json
+{
+  "otp": "481920"
+}
+```
+- **Response (200 OK):**
+```json
+{
+  "session_token": "ephemeral-session-secret-string",
+  "expires_at": "2026-10-25T03:45:00Z"
+}
+```
+
+---
+
+### `POST /api/v1/confirmations/token/{token}`
+Records formal assent or decline by the counterparty.
+- **Header:** `X-Review-Session: <session_token>` (Mandatory).
+- **Request Body (Assent):**
+```json
+{
+  "confirmed": true,
+  "notes": "Reviewed and agreed to milestone delivery terms."
+}
+```
+- **Request Body (Decline):**
+```json
+{
+  "confirmed": false,
+  "decline_reason": "Payment terms milestone 50% upfront is unacceptable."
+}
+```
+
+---
+
+### `GET /api/v1/confirmations/token/{token}/download`
+Downloads the finalized Commercial Agreement Record PDF containing the Certificate of Assent.
+- **Header:** `X-Review-Session: <session_token>` (Mandatory).
+- **Query Param:** `?format=pdf` (default) or `?format=txt`.
+- **Response:** PDF binary stream (`application/pdf`) or plain text.
+
+---
+
+### `POST /api/v1/confirmations` (Direct Initiator Assent)
+Direct dashboard assent endpoint.
+- **Auth:** Requires Bearer JWT (`Authorization: Bearer <token>`).
+- **Restriction:** Allowed only for `agreement.parties[0]` (the initiator). Counterparties must verify through the Email-OTP link.
+
+---
+
+## 5. Frontend TypeScript Type Generation Workflow
 
 Frontend engineers should **never write duplicate manual schemas**. When backend Pydantic models change:
 

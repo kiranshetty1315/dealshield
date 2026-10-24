@@ -76,15 +76,60 @@ Conversations uploaded to DealShield AI contain private commercial conversations
 
 ---
 
-## 5. Counterparty Access & Token Confirmation Model
+## 5. Counterparty Access & Email-OTP Confirmation Model
 
-Because the negotiating counterparty often lacks a platform account, granting access through standard user ownership RLS would fail:
-1. **Hashed Single-Use Tokens:** When an agreement version is ready for confirmation, Team D generates a random cryptographic secret token and stores its **SHA-256 digest** (`confirmation_token_hash`) in `confirmations` alongside an expiration timestamp (`token_expires_at`). Plaintext tokens are never stored in the database.
-2. **Strict Single-Use Enforcement:** `submit_confirmation_by_token(...)` checks `confirmed_at IS NULL`. Any subsequent attempt to submit with the same token raises an exception, preventing confirmation overwrite.
-3. **Automatic Audit Trail:** Successful token confirmation automatically appends an event to `audit_events` with entity type `confirmation`, action `party_confirmed`/`party_declined`, IP hash, and token hash prefix.
-4. **RPC Lockdown & Service Role:** PostgreSQL grants EXECUTE to PUBLIC by default. The migration strictly executes `REVOKE EXECUTE ... FROM PUBLIC, anon, authenticated` and `GRANT EXECUTE ... TO service_role`. Confirmations are routed through FastAPI using the backend service role, closing direct anon RPC exposure.
-5. **Append-Only Auditing with DPDP Erasure Exception:** The database enforces immutability on `audit_events` via trigger `enforce_audit_append_only` (blocking UPDATE/DELETE). It includes an explicit exception allowing `actor_id` to be `SET NULL` on user deletion, ensuring DPDP Act 2023 erasure requests succeed without violating audit record immutability.
-6. **Scoped Audit & Hash Access:** `audit_events` and `document_hashes` are strictly scoped to the entity owner, preventing cross-tenant information leakage.
+Negotiating counterparties typically lack an account on the platform. To guarantee verifiable mutual assent under Section 7 of the Indian Contract Act, 1872 without compromising draft confidentiality or security, DealShield AI implements an **Email-OTP Counterparty Review & Confirmation Architecture**:
+
+### 5.1 Architecture & Security Rules
+
+1. **Mandatory Authenticated Link Creation:**
+   - The contract initiator must be authenticated via Bearer token to generate a review link (`POST /api/v1/confirmations/tokens`).
+   - The initiator explicitly declares the counterparty's email address (`party_email`), verified to differ from their own email.
+   - Link generation returns a raw secret token (`/review?token=...`) without exposing the internal agreement UUID in the URL.
+
+2. **Email Storage, Privacy & Zero PII Exposure:**
+   - Plaintext emails are **never** stored directly in the database, logged in audit events, or exposed in error responses.
+   - `party_email_encrypted`: Email encrypted symmetrically using Fernet (`ENCRYPTION_KEY`).
+   - `party_email_hash`: Blind-index HMAC-SHA256 keyed with `SECRET_KEY`, enabling exact match queries without decryption.
+   - In all public confirmation responses and audit metadata, emails are masked (e.g. `c***y@e***e.com`).
+
+3. **Side-Effect-Free Link Inspection:**
+   - `GET /api/v1/confirmations/token/{token}` is strictly read-only and safe against browser and chat app prefetching (e.g. WhatsApp link previews).
+   - Draft text and agreement clauses are **completely withheld** from this response until a valid review session is established.
+
+4. **Step 1: Email-Check Verification & Lockout:**
+   - The counterparty submits their email via `POST /api/v1/confirmations/token/{token}/email-check`.
+   - The input is normalized (`strip().lower()`) and compared against `party_email_hash` using constant-time `hmac.compare_digest`.
+   - Mismatch returns a generic error (*"We couldn't verify this email"*) without disclosing the registered address.
+   - Max 5 failed email check attempts per token. Exceeding this limit locks the token (`locked_at`) and returns HTTP 423.
+
+5. **Step 2: Single-Use Cryptographic OTP Issuance:**
+   - The counterparty requests an OTP via `POST /api/v1/confirmations/token/{token}/otp/send`.
+   - The OTP is **always** delivered to the decrypted stored email—never to an arbitrary client-supplied address.
+   - Rate limits: Maximum 3 sends per rolling 15-minute window; minimum 30 seconds interval between resends (HTTP 429).
+   - OTP is a 6-digit cryptographic number (`secrets.randbelow(1_000_000)`), stored as a SHA-256 digest (`otp_hash`) with a 10-minute TTL (`otp_expires_at`).
+
+6. **Step 3: OTP Verification & Ephemeral Session Tokens:**
+   - The counterparty submits their code via `POST /api/v1/confirmations/token/{token}/otp/verify`.
+   - Max 5 wrong attempts per issued OTP immediately invalidates the OTP.
+   - Max 10 cumulative wrong attempts locks the confirmation row permanently (`locked_at`, HTTP 423).
+   - Upon successful verification, a cryptographically secure 32-byte session token is generated (`secrets.token_urlsafe(32)`), stored as SHA-256 (`session_token_hash`), with a 30-minute TTL (`SESSION_TTL_MINUTES`).
+
+7. **Step 4: Session-Gated Review & Actions (`X-Review-Session`):**
+   - The counterparty passes the session token via the `X-Review-Session` HTTP header.
+   - All subsequent operations require an active, unexpired session:
+     - Accessing draft clauses (`GET /api/v1/confirmations/token/{token}`)
+     - Recording assent (`POST /api/v1/confirmations/token/{token}`)
+     - Declining terms with reason (`POST /api/v1/confirmations/token/{token}`)
+     - Downloading agreement PDF (`GET /api/v1/confirmations/token/{token}/download`)
+   - Frontends store the session token purely in React memory state (`useState`), never in `localStorage` or `sessionStorage`.
+
+8. **Direct Initiator Assent Restriction:**
+   - Direct dashboard assent (`POST /api/v1/confirmations`) requires a valid Bearer token and is restricted exclusively to `agreement.parties[0]` (the initiator), unless `ALLOW_DIRECT_CONFIRM = True` is explicitly enabled for testing. All counterparties must verify through the Email-OTP link.
+
+9. **Append-Only Tamper-Evident Auditing:**
+   - Successful assent stamps the exact agreement version number, agreement SHA-256 content hash, client IP hash, and verification method into `confirmations` and append-only `audit_events`.
+   - Both parties receive confirmation email receipts with audit identifiers upon completion.
 
 ---
 

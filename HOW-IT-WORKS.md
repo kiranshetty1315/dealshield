@@ -31,8 +31,9 @@ DealShield AI converts informal WhatsApp commercial negotiations into structured
 
 ### 4. Two-Party Mutual Confirmation (`/confirmations`)
 * Requires mutual assent before activation:
-  * **Party 1:** Confirms via dashboard.
-  * **Party 2:** Confirms via secure, single-use signed token link without needing an account.
+  * **Party 1 (Initiator):** Assents via authenticated dashboard.
+  * **Party 2 (Counterparty):** Assents via email-OTP verified review link (/review?token=...) without needing a platform account.
+* Email-OTP verification ensures draft terms are disclosed only to the verified counterparty.
 * Database state transitions: `draft` → `partially_confirmed` → `fully_confirmed`.
 * Anonymizes IP addresses using secret-salted HMAC for **DPDP Act 2023** compliance.
 
