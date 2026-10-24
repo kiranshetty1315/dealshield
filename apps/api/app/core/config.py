@@ -69,5 +69,19 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = "sk-placeholder-openai-key"
     OPENAI_MODEL: str = "gpt-4o-mini"
 
+    # Counterparty Email-OTP Confirmation & Notification Config
+    REQUIRE_EMAIL_OTP: bool = True
+    ALLOW_DIRECT_CONFIRM: bool = False
+    EMAIL_BACKEND: str = "console"  # "console" | "smtp" | "memory"
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM: str = "no-reply@dealshield.local"
+    SMTP_USE_TLS: bool = True
+    OTP_TTL_MINUTES: int = 10
+    SESSION_TTL_MINUTES: int = 30
+    FRONTEND_BASE_URL: str = "http://localhost:3000"
+
 
 settings = Settings()

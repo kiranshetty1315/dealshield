@@ -1,11 +1,13 @@
 """DealShield AI — Automated Database Migration Runner.
 
-Runs infra/supabase/migrations/001_initial_schema.sql directly against
-your Supabase PostgreSQL database.
+Runs all migrations in infra/supabase/migrations/ in filename order against
+your Supabase PostgreSQL database and tracks applied migrations in public.schema_migrations.
 
 Usage:
     python scripts/migrate.py
+    python scripts/migrate.py --dry-run
     python scripts/migrate.py "postgresql://postgres:YOUR_PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres"
+    python scripts/migrate.py --dry-run "postgresql://postgres:YOUR_PASSWORD@db.PROJECT_ID.supabase.co:5432/postgres"
 """
 
 import os
@@ -17,7 +19,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).resolve().parent
 API_DIR = SCRIPT_DIR.parent
 ROOT_DIR = API_DIR.parent.parent
-MIGRATION_FILE = ROOT_DIR / "infra" / "supabase" / "migrations" / "001_initial_schema.sql"
+MIGRATIONS_DIR = ROOT_DIR / "infra" / "supabase" / "migrations"
 ENV_FILE = API_DIR / ".env"
 
 
@@ -53,21 +55,33 @@ def main():
 
     load_env()
 
+    args = sys.argv[1:]
+    dry_run = "--dry-run" in args
+    filtered_args = [a for a in args if a != "--dry-run"]
+
     print("=================================================================")
     print(" DealShield AI — Supabase Database Migration Runner")
+    if dry_run:
+        print(" MODE: DRY RUN (no modifications will be made)")
     print("=================================================================")
 
-    if not MIGRATION_FILE.exists():
-        print(f"ERROR: Migration file not found at: {MIGRATION_FILE}")
+    if not MIGRATIONS_DIR.exists():
+        print(f"ERROR: Migrations directory not found at: {MIGRATIONS_DIR}")
         sys.exit(1)
 
-    with open(MIGRATION_FILE, "r", encoding="utf-8") as f:
-        sql_content = f.read()
+    migration_files = sorted(MIGRATIONS_DIR.glob("*.sql"))
+    if not migration_files:
+        print(f"ERROR: No .sql migration files found in {MIGRATIONS_DIR}")
+        sys.exit(1)
+
+    print(f"Found {len(migration_files)} migration files in {MIGRATIONS_DIR.name}/:")
+    for mf in migration_files:
+        print(f"  - {mf.name}")
 
     # Determine connection string
     db_url = None
-    if len(sys.argv) > 1 and sys.argv[1].startswith("postgres"):
-        db_url = sys.argv[1]
+    if filtered_args and filtered_args[0].startswith("postgres"):
+        db_url = filtered_args[0]
     elif os.environ.get("DATABASE_URL"):
         db_url = os.environ.get("DATABASE_URL")
 
@@ -79,9 +93,9 @@ def main():
         if project_id and project_id != "your-project":
             print(f"Detected Project ID: {project_id}")
             print("\nDirect SQL Editor Browser Link (Alternative 1-Click option):")
-            print(f"  👉 https://supabase.com/dashboard/project/{project_id}/sql/new\n")
+            print(f"  -> https://supabase.com/dashboard/project/{project_id}/sql/new\n")
 
-        print("To run the migration directly from this terminal, please enter your")
+        print("To run migrations directly from this terminal, please enter your")
         print("Supabase PostgreSQL Database password (or full connection string).")
         print("Note: In Supabase, this is the password you created when creating the project.")
         print("(You can also find your connection string in: Supabase Dashboard -> Project Settings -> Database -> Connection string -> URI)\n")
@@ -97,8 +111,6 @@ def main():
             if not project_id or project_id == "your-project":
                 print("Error: Could not determine Supabase project ID from SUPABASE_URL in apps/api/.env.")
                 sys.exit(1)
-            # Default Supabase direct connection format
-            # Using port 6543 (pooler session mode) or 5432 (direct)
             db_url = f"postgresql://postgres:{user_input}@db.{project_id}.supabase.co:5432/postgres"
 
     print(f"\nConnecting to PostgreSQL database...")
@@ -115,26 +127,90 @@ def main():
         conn.autocommit = True
         cursor = conn.cursor()
 
-        print("Executing 001_initial_schema.sql migration...")
-        cursor.execute(sql_content)
+        # Check if schema_migrations table exists
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT 1 FROM information_schema.tables 
+                WHERE table_schema = 'public' AND table_name = 'schema_migrations'
+            );
+        """)
+        schema_migrations_exists = cursor.fetchone()[0]
+
+        if not schema_migrations_exists:
+            # Check if existing tables (e.g., users) exist from a legacy unversioned 001 run
+            cursor.execute("""
+                SELECT EXISTS (
+                    SELECT 1 FROM information_schema.tables 
+                    WHERE table_schema = 'public' AND table_name = 'users'
+                );
+            """)
+            users_exist = cursor.fetchone()[0]
+
+            if not dry_run:
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS public.schema_migrations (
+                        filename TEXT PRIMARY KEY,
+                        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    );
+                """)
+                if users_exist:
+                    print("Detected existing database schema. Recording '001_initial_schema.sql' as applied.")
+                    cursor.execute("""
+                        INSERT INTO public.schema_migrations (filename, applied_at)
+                        VALUES ('001_initial_schema.sql', NOW())
+                        ON CONFLICT (filename) DO NOTHING;
+                    """)
+
+        # Fetch applied migrations
+        applied = set()
+        if schema_migrations_exists or not dry_run:
+            cursor.execute("SELECT filename FROM public.schema_migrations;")
+            applied = {row[0] for row in cursor.fetchall()}
+
+        print(f"\nChecking migration status ({len(applied)} already recorded as applied)...")
+        pending_count = 0
+
+        for mf in migration_files:
+            filename = mf.name
+            if filename in applied:
+                print(f"  [ALREADY APPLIED] {filename}")
+                continue
+
+            pending_count += 1
+            if dry_run:
+                print(f"  [DRY RUN - WOULD APPLY] {filename}")
+            else:
+                print(f"  [APPLYING] {filename}...")
+                with open(mf, "r", encoding="utf-8") as f:
+                    sql_content = f.read()
+
+                cursor.execute(sql_content)
+                cursor.execute(
+                    "INSERT INTO public.schema_migrations (filename, applied_at) VALUES (%s, NOW());",
+                    (filename,)
+                )
+                print(f"  [SUCCESS] {filename}")
+
         cursor.close()
         conn.close()
 
-        print("\nSUCCESS! Migration executed successfully.")
-        print("Created tables: users, conversations, messages, analyses, agreements,")
-        print("agreement_versions, confirmations, audit_events, document_hashes.")
-        print("\nYour Supabase database is now fully initialized!")
+        if dry_run:
+            print(f"\nDry run complete. {pending_count} pending migration(s) identified.")
+        elif pending_count == 0:
+            print("\nDatabase is already up to date. No new migrations needed.")
+        else:
+            print(f"\nSUCCESS! Applied {pending_count} migration(s). Database is fully synchronized.")
 
     except Exception as e:
-        print(f"\nFailed to connect or execute migration: {e}")
+        print(f"\nFailed to connect or execute migrations: {e}")
         print("\nTroubleshooting tips:")
         print("1. If using IPv4 only network, use Supabase connection pooler URI:")
         print(f"   postgresql://postgres.[PROJECT_ID]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres")
-        print("2. You can also paste the migration directly in your browser:")
+        print("2. You can also paste pending migrations directly in your browser:")
         if project_id and project_id != "your-project":
-            print(f"   👉 https://supabase.com/dashboard/project/{project_id}/sql/new")
+            print(f"   -> https://supabase.com/dashboard/project/{project_id}/sql/new")
         else:
-            print("   👉 Supabase Dashboard -> SQL Editor -> New Query")
+            print("   -> Supabase Dashboard -> SQL Editor -> New Query")
         sys.exit(1)
 
 
