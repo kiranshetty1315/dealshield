@@ -775,7 +775,7 @@ class UserRepository:
                     email=self.DEFAULT_DEMO_EMAIL,
                     password_hash=demo_hash,
                     full_name="Demo User",
-                    organization="DealShield LegalTech Hackathon",
+                    organization=None,
                     role="Contract Sponsor",
                     user_id=self.DEFAULT_DEMO_USER_ID,
                 )
@@ -802,7 +802,7 @@ class UserRepository:
         email: str,
         password_hash: str,
         full_name: str,
-        organization: str = "DealShield LegalTech Hackathon",
+        organization: Optional[str] = None,
         role: str = "Contract Sponsor",
         user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
@@ -813,8 +813,8 @@ class UserRepository:
             "id": uid,
             "email": clean_email,
             "password_hash": password_hash,
-            "full_name": full_name or "Demo User",
-            "organization": organization or "DealShield LegalTech Hackathon",
+            "full_name": full_name or "DealShield User",
+            "organization": organization,
             "role": role or "Contract Sponsor",
             "created_at": now,
             "updated_at": now,

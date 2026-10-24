@@ -25,9 +25,9 @@ const STORAGE_KEY_TOKEN = "dealshield_auth_token";
 const DEFAULT_DEMO_USER: User = {
   id: "00000000-0000-0000-0000-000000000001",
   email: "demo@dealshield.local",
-  full_name: "Demo User",
+  full_name: "DealShield User",
   role: "Contract Sponsor",
-  organization: "DealShield LegalTech Hackathon",
+  organization: "",
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -43,12 +43,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const storedUser = localStorage.getItem(STORAGE_KEY_USER);
 
         if (storedToken && storedUser) {
+          const parsed = JSON.parse(storedUser);
+          if (parsed && parsed.organization === "DealShield LegalTech Hackathon") {
+            parsed.organization = "";
+          }
           setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+          setUser(parsed);
 
           // Background revalidation against Supabase database
           api.getMe(storedToken).then((freshUser) => {
             if (freshUser) {
+              if (freshUser.organization === "DealShield LegalTech Hackathon") {
+                freshUser.organization = "";
+              }
               setUser(freshUser);
               localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(freshUser));
             }
@@ -67,11 +74,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
     try {
       const authRes = await api.login({ email, password });
-      setUser(authRes.user);
+      const cleanUser: User = {
+        ...authRes.user,
+        organization:
+          authRes.user.organization === "DealShield LegalTech Hackathon"
+            ? ""
+            : authRes.user.organization || "",
+      };
+      setUser(cleanUser);
       setToken(authRes.access_token);
       localStorage.setItem(STORAGE_KEY_TOKEN, authRes.access_token);
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(authRes.user));
-      return authRes.user;
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanUser));
+      return cleanUser;
     } catch (err) {
       // Offline fallback: if backend is unreachable, allow standard demo user credentials
       if (email.trim().toLowerCase() === "demo@dealshield.local" && password === "password123") {
@@ -113,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         email: email.trim().toLowerCase(),
         full_name: fullName || "DealShield User",
         role: "Contract Sponsor",
-        organization: organization || "DealShield LegalTech Hackathon",
+        organization: organization || "",
       };
       setUser(fallbackUser);
       setToken("local-session-token");
@@ -158,9 +172,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!activeToken) return null;
     try {
       const freshUser = await api.getMe(activeToken);
-      setUser(freshUser);
-      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(freshUser));
-      return freshUser;
+      const cleanUser: User = {
+        ...freshUser,
+        organization:
+          freshUser.organization === "DealShield LegalTech Hackathon"
+            ? ""
+            : freshUser.organization || "",
+      };
+      setUser(cleanUser);
+      localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanUser));
+      return cleanUser;
     } catch {
       return null;
     }

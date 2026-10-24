@@ -48,7 +48,7 @@ async def signup(req: UserSignupRequest):
         email=clean_email,
         password_hash=pwd_hash,
         full_name=req.full_name or "DealShield User",
-        organization=req.organization or "DealShield LegalTech Hackathon",
+        organization=req.organization,
         role="Contract Sponsor",
     )
 
@@ -71,7 +71,7 @@ async def signup(req: UserSignupRequest):
         email=user_row["email"],
         full_name=user_row.get("full_name", "DealShield User"),
         role=user_row.get("role", "Contract Sponsor"),
-        organization=user_row.get("organization", "DealShield LegalTech Hackathon"),
+        organization=user_row.get("organization"),
         created_at=user_row.get("created_at"),
     )
     return AuthResponse(access_token=token, token_type="bearer", user=user_resp)
@@ -121,9 +121,9 @@ async def login(req: UserLoginRequest):
     user_resp = UserResponse(
         id=user["id"],
         email=user["email"],
-        full_name=user.get("full_name", "Demo User"),
+        full_name=user.get("full_name", "DealShield User"),
         role=user.get("role", "Contract Sponsor"),
-        organization=user.get("organization", "DealShield LegalTech Hackathon"),
+        organization=user.get("organization"),
         created_at=user.get("created_at"),
     )
     return AuthResponse(access_token=token, token_type="bearer", user=user_resp)
@@ -161,9 +161,9 @@ async def get_current_user(authorization: Optional[str] = Header(None)):
     return UserResponse(
         id=user["id"],
         email=user["email"],
-        full_name=user.get("full_name", "Demo User"),
+        full_name=user.get("full_name", "DealShield User"),
         role=user.get("role", "Contract Sponsor"),
-        organization=user.get("organization", "DealShield LegalTech Hackathon"),
+        organization=user.get("organization"),
         created_at=user.get("created_at"),
     )
 
@@ -225,7 +225,7 @@ async def update_current_user(req: UserUpdateRequest, authorization: Optional[st
         email=updated["email"],
         full_name=updated.get("full_name", "DealShield User"),
         role=updated.get("role", "Contract Sponsor"),
-        organization=updated.get("organization", "DealShield LegalTech Hackathon"),
+        organization=updated.get("organization"),
         created_at=updated.get("created_at"),
     )
 

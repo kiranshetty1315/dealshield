@@ -61,7 +61,7 @@ export default function SignupPage() {
         email.trim(),
         password,
         fullName.trim() || "DealShield User",
-        organization.trim() || "DealShield LegalTech Hackathon"
+        organization.trim() || undefined
       );
       router.push("/dashboard");
     } catch (err: any) {

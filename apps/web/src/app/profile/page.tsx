@@ -89,7 +89,11 @@ export default function ProfilePage() {
 
   const handleStartEdit = () => {
     setEditFullName(user?.full_name || "");
-    setEditOrganization(user?.organization || "");
+    const currentOrg =
+      user?.organization && user.organization !== "DealShield LegalTech Hackathon"
+        ? user.organization
+        : "";
+    setEditOrganization(currentOrg);
     setEditRole(user?.role || "Contract Sponsor");
     setSaveSuccess(null);
     setSaveError(null);
@@ -162,7 +166,12 @@ export default function ProfilePage() {
   const displayName = user?.full_name || "DealShield User";
   const displayEmail = user?.email || "";
   const displayRole = user?.role || "Contract Sponsor";
-  const displayOrg = user?.organization || "Independent Commercial Party";
+  const hasRealOrg = Boolean(
+    user?.organization &&
+      user.organization !== "DealShield LegalTech Hackathon" &&
+      user.organization.trim()
+  );
+  const displayOrg = hasRealOrg ? user!.organization.trim() : null;
   const displayId = user?.id || "";
 
   const initials = displayName
@@ -406,8 +415,26 @@ export default function ProfilePage() {
                 <Building className="h-3 w-3 text-slate-500" />
                 Organization
               </span>
-              <p className="text-xs font-bold text-slate-800">{displayOrg}</p>
-              <p className="text-[11px] text-slate-500">Commercial Contracting Entity</p>
+              {displayOrg ? (
+                <>
+                  <p className="text-xs font-bold text-slate-800">{displayOrg}</p>
+                  <p className="text-[11px] text-slate-500">Commercial Contracting Entity</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500 italic flex items-center gap-1.5 pt-0.5">
+                    <span>Not specified</span>
+                    <button
+                      type="button"
+                      onClick={handleStartEdit}
+                      className="text-blue-600 font-semibold not-italic hover:underline cursor-pointer"
+                    >
+                      &bull; Add Organization
+                    </button>
+                  </p>
+                  <p className="text-[11px] text-slate-400">Independent Negotiator</p>
+                </>
+              )}
             </div>
 
             <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
