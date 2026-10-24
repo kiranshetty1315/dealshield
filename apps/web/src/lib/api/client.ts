@@ -122,6 +122,26 @@ export class ApiClient {
     return res.json();
   }
 
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ status: string; message: string }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/auth/change-password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to update password" }));
+      throw new Error(err.detail || `Password update failed (${res.status})`);
+    }
+    return res.json();
+  }
+
   async logout(): Promise<void> {
     await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
       method: "POST",

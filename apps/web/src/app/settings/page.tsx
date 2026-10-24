@@ -19,8 +19,14 @@ import {
   Database,
   FileText,
   Clock,
-  Sparkles,
+  Building,
+  Edit2,
+  Save,
+  X,
   Info,
+  Loader2,
+  AlertCircle,
+  ShieldCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +38,8 @@ import { useAuth } from "@/context/AuthContext";
 import { ConversationRecord } from "@/types";
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, updateUser, refreshUser, isLoading: isAuthLoading } = useAuth();
+
   // --- Message History & DPDP Erasure State ---
   const [conversations, setConversations] = useState<ConversationRecord[]>([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
@@ -43,13 +50,22 @@ export default function SettingsPage() {
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // --- Organization & Entity Profile State ---
+  const [isEditingOrg, setIsEditingOrg] = useState(false);
+  const [editFullName, setEditFullName] = useState("");
+  const [editOrganization, setEditOrganization] = useState("");
+  const [editRole, setEditRole] = useState("");
+  const [isSavingOrg, setIsSavingOrg] = useState(false);
+  const [orgFeedback, setOrgFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+
   // --- Password & Security State ---
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
-  const [passwordSaved, setPasswordSaved] = useState(false);
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const [passwordSaved, setPasswordSaved] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [showForgotNotice, setShowForgotNotice] = useState(false);
 
@@ -69,7 +85,56 @@ export default function SettingsPage() {
 
   useEffect(() => {
     loadConversations();
-  }, []);
+    refreshUser();
+  }, [refreshUser]);
+
+  // Handle Organization & Profile Updates
+  const handleStartEditOrg = () => {
+    setEditFullName(user?.full_name || "");
+    const currentOrg =
+      user?.organization && user.organization !== "DealShield LegalTech Hackathon"
+        ? user.organization
+        : "";
+    setEditOrganization(currentOrg);
+    setEditRole(user?.role || "Contract Sponsor");
+    setOrgFeedback(null);
+    setIsEditingOrg(true);
+  };
+
+  const handleCancelEditOrg = () => {
+    setIsEditingOrg(false);
+    setOrgFeedback(null);
+  };
+
+  const handleSaveOrg = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editFullName.trim()) {
+      setOrgFeedback({ type: "error", text: "Full name cannot be empty." });
+      return;
+    }
+
+    setIsSavingOrg(true);
+    setOrgFeedback(null);
+    try {
+      await updateUser({
+        full_name: editFullName.trim(),
+        organization: editOrganization.trim() || undefined,
+        role: editRole.trim() || undefined,
+      });
+      setOrgFeedback({
+        type: "success",
+        text: "Organization and profile details successfully saved to the database.",
+      });
+      setIsEditingOrg(false);
+    } catch (err: any) {
+      setOrgFeedback({
+        type: "error",
+        text: err.message || "Failed to update organization details in database.",
+      });
+    } finally {
+      setIsSavingOrg(false);
+    }
+  };
 
   // Handle Permanent Chat Erasure
   const handleConfirmDelete = async () => {
@@ -102,18 +167,18 @@ export default function SettingsPage() {
     }
   };
 
-  // Handle Password Update
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  // Handle Password Update via API
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError(null);
-    setPasswordSaved(false);
+    setPasswordSaved(null);
 
     if (!currentPassword) {
       setPasswordError("Please enter your current password.");
       return;
     }
-    if (newPassword.length < 8) {
-      setPasswordError("New password must be at least 8 characters long.");
+    if (newPassword.length < 6) {
+      setPasswordError("New password must be at least 6 characters long.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -121,13 +186,53 @@ export default function SettingsPage() {
       return;
     }
 
-    setPasswordSaved(true);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
-    setTimeout(() => setPasswordSaved(false), 5000);
+    setIsSubmittingPassword(true);
+    try {
+      const res = await api.changePassword(currentPassword, newPassword);
+      setPasswordSaved(res.message || "Password successfully updated in database.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordError(err.message || "Failed to update password.");
+    } finally {
+      setIsSubmittingPassword(false);
+    }
   };
 
+  // Unauthenticated Fallback Notice
+  if (!isAuthLoading && !user) {
+    return (
+      <div className="container mx-auto px-4 py-20 max-w-xl text-center">
+        <Card className="border-slate-200 shadow-sm p-8 space-y-4">
+          <div className="mx-auto h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Lock className="h-6 w-6" />
+          </div>
+          <CardTitle className="text-xl font-bold text-slate-900">
+            Sign In to Access Settings
+          </CardTitle>
+          <CardDescription className="text-xs text-slate-500 max-w-sm mx-auto">
+            You must be logged in to manage your organization credentials, statutory message erasure, and security settings.
+          </CardDescription>
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white text-xs">
+              <Link href="/login">Log In to DealShield</Link>
+            </Button>
+            <Button asChild variant="outline" className="text-xs">
+              <Link href="/signup">Create Free Account</Link>
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasRealOrg = Boolean(
+    user?.organization &&
+      user.organization !== "DealShield LegalTech Hackathon" &&
+      user.organization.trim()
+  );
+  const displayOrg = hasRealOrg ? user!.organization.trim() : null;
   const selectedChatForDelete = conversations.find((c) => c.id === pendingDeleteId);
 
   return (
@@ -148,7 +253,7 @@ export default function SettingsPage() {
             Account Settings & Data Management
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Manage your encrypted WhatsApp message history, statutory data erasure under DPDP Act 2023, and security credentials.
+            Manage your organization credentials, encrypted WhatsApp message history, statutory data erasure under DPDP Act 2023, and security keys.
           </p>
         </div>
 
@@ -156,19 +261,185 @@ export default function SettingsPage() {
           <Link href="/profile">
             <Button variant="outline" size="sm" className="text-xs gap-1.5 border-slate-200 shadow-sm">
               <User className="h-3.5 w-3.5 text-blue-600" />
-              View Profile
+              View Full Profile
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* TWO-SIDED SETTINGS LAYOUT (Side A & Side B) */}
+      {/* TWO-SIDED SETTINGS LAYOUT */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
         {/* ========================================================
-            SIDE A (LEFT - 7 COLUMNS): Message History & DPDP Erasure
+            SIDE A (LEFT - 7 COLUMNS): Organization & DPDP Erasure
            ======================================================== */}
         <div className="lg:col-span-7 space-y-6">
+          {/* Organization & Commercial Identity Card */}
+          <Card className="border-slate-200 shadow-sm overflow-hidden">
+            <CardHeader className="bg-slate-50/60 border-b border-slate-200/80 pb-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+                    <Building className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold text-slate-900">
+                      Organization & Commercial Entity
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-500">
+                      Your legal contracting entity and professional role in negotiations
+                    </CardDescription>
+                  </div>
+                </div>
+
+                {!isEditingOrg && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleStartEditOrg}
+                    className="h-8 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                  >
+                    <Edit2 className="h-3 w-3" />
+                    Edit Details
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-6 space-y-4">
+              {orgFeedback && (
+                <Alert
+                  className={
+                    orgFeedback.type === "success"
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-900 text-xs"
+                      : "border-red-300 bg-red-50 text-red-900 text-xs"
+                  }
+                >
+                  {orgFeedback.type === "success" ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                  )}
+                  <AlertDescription className="text-xs">{orgFeedback.text}</AlertDescription>
+                </Alert>
+              )}
+
+              {isEditingOrg ? (
+                <form onSubmit={handleSaveOrg} className="space-y-4 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Organization / Entity Name</label>
+                      <Input
+                        value={editOrganization}
+                        onChange={(e) => setEditOrganization(e.target.value)}
+                        placeholder="e.g. Acme Technologies Pvt Ltd"
+                        className="text-xs bg-white"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-slate-700">Full Legal Name</label>
+                      <Input
+                        value={editFullName}
+                        onChange={(e) => setEditFullName(e.target.value)}
+                        placeholder="Your legal name"
+                        required
+                        className="text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Role in Contracts</label>
+                    <select
+                      value={editRole}
+                      onChange={(e) => setEditRole(e.target.value)}
+                      className="w-full h-9 px-3 text-xs font-medium rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                    >
+                      <option value="Contract Sponsor">Contract Sponsor</option>
+                      <option value="Legal Counsel / Advocate">Legal Counsel / Advocate</option>
+                      <option value="Commercial Manager">Commercial Manager</option>
+                      <option value="Procurement Lead">Procurement Lead</option>
+                      <option value="Founder / Director">Founder / Director</option>
+                      <option value="Compliance Officer">Compliance Officer</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleCancelEditOrg}
+                      className="text-xs"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      disabled={isSavingOrg}
+                      className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isSavingOrg ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="h-3.5 w-3.5" />
+                          Save to Database
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Organization
+                    </span>
+                    {displayOrg ? (
+                      <p className="text-xs font-bold text-slate-900 truncate">{displayOrg}</p>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">
+                        Not specified &bull;{" "}
+                        <button
+                          type="button"
+                          onClick={handleStartEditOrg}
+                          className="text-blue-600 font-semibold not-italic hover:underline cursor-pointer"
+                        >
+                          Add
+                        </button>
+                      </p>
+                    )}
+                    <span className="text-[10px] text-slate-500 block">Commercial Entity</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Contract Role
+                    </span>
+                    <p className="text-xs font-bold text-slate-900 truncate">{user?.role || "Contract Sponsor"}</p>
+                    <span className="text-[10px] text-slate-500 block">Signatory Level</span>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                      Account Email
+                    </span>
+                    <p className="text-xs font-mono font-bold text-slate-900 truncate" title={user?.email}>
+                      {user?.email}
+                    </p>
+                    <span className="text-[10px] text-emerald-600 font-medium block">Verified Account</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Message History & DPDP Erasure Card */}
           <Card className="border-slate-200 shadow-sm overflow-hidden">
             <CardHeader className="bg-slate-50/60 border-b border-slate-200/80 pb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
@@ -354,9 +625,7 @@ export default function SettingsPage() {
                 <Alert className="border-emerald-300 bg-emerald-50 text-emerald-950">
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                   <AlertTitle className="text-xs font-bold">Password Updated Successfully</AlertTitle>
-                  <AlertDescription className="text-xs">
-                    Your account security credentials have been updated.
-                  </AlertDescription>
+                  <AlertDescription className="text-xs">{passwordSaved}</AlertDescription>
                 </Alert>
               )}
 
@@ -378,7 +647,8 @@ export default function SettingsPage() {
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       placeholder="Enter current password..."
-                      className="text-xs pr-9"
+                      className="text-xs pr-9 bg-white"
+                      required
                     />
                     <button
                       type="button"
@@ -397,8 +667,9 @@ export default function SettingsPage() {
                       type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Minimum 8 characters..."
-                      className="text-xs pr-9"
+                      placeholder="Minimum 6 characters..."
+                      className="text-xs pr-9 bg-white"
+                      required
                     />
                     <button
                       type="button"
@@ -417,7 +688,8 @@ export default function SettingsPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Re-enter new password..."
-                    className="text-xs"
+                    className="text-xs bg-white"
+                    required
                   />
                 </div>
 
@@ -430,9 +702,23 @@ export default function SettingsPage() {
                     Forgot password?
                   </button>
 
-                  <Button type="submit" size="sm" className="text-xs gap-1.5 shadow-sm">
-                    <KeyRound className="h-3.5 w-3.5" />
-                    Save Changes
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={isSubmittingPassword}
+                    className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                  >
+                    {isSubmittingPassword ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <KeyRound className="h-3.5 w-3.5" />
+                        Save Password
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -445,7 +731,7 @@ export default function SettingsPage() {
                     Password Reset Procedure
                   </div>
                   <p className="text-[11px] leading-relaxed">
-                    DealShield uses cryptographic Supabase Auth. To reset your credentials, a one-time magic link is dispatched to your registered address (<code>{user?.email || "demo@dealshield.local"}</code>).
+                    DealShield uses cryptographic PBKDF2 authentication in Supabase. Password reset confirmation links are dispatched to your verified email address: <strong>{user?.email || "your registered email"}</strong>.
                   </p>
                 </div>
               )}
@@ -474,7 +760,6 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </div>
-
       </div>
 
       {/* ========================================================

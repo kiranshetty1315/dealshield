@@ -23,6 +23,11 @@ class UserUpdateRequest(BaseModel):
     role: Optional[str] = Field(None, description="User role in the system")
 
 
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., description="Current user password")
+    new_password: str = Field(..., min_length=6, description="New password (min 6 characters)")
+
+
 class UserResponse(BaseModel):
     id: str = Field(..., description="User unique UUID")
     email: str = Field(..., description="User email address")

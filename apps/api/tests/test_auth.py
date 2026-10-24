@@ -92,6 +92,25 @@ def test_signup_and_login_flow():
     assert updated_data["organization"] == "Supreme Court Legal Chambers"
     assert updated_data["role"] == "General Counsel"
 
+    # Test changing password via POST /api/v1/auth/change-password
+    change_resp = client.post(
+        "/api/v1/auth/change-password",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "current_password": "strongPassword#2026",
+            "new_password": "newSecurePassword#2027",
+        },
+    )
+    assert change_resp.status_code == 200
+    assert change_resp.json()["status"] == "success"
+
+    # Verify login with the updated password
+    new_login = client.post(
+        "/api/v1/auth/login",
+        json={"email": signup_email, "password": "newSecurePassword#2027"},
+    )
+    assert new_login.status_code == 200
+
 
 def test_signup_duplicate_email_fails():
     """Verify signing up with an already registered email returns 400."""
