@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Message } from "@/types";
 import { MessageSquare, Search, ArrowDown, User, Shield, Check } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -42,26 +42,45 @@ export function ChatMessageViewer({
     return matchesSearch && matchesSender;
   });
 
-  // Automatically smooth-scroll to cited message when activeCitationIds changes
-  useEffect(() => {
-    if (activeCitationIds.length > 0) {
-      const targetId = activeCitationIds[0];
+  const lastScrolledIdRef = useRef<string | null>(null);
+
+  // Smooth-scroll ONLY the internal message container, never the window/webpage
+  const scrollMessageIntoContainer = useCallback(
+    (targetId: string, behavior: ScrollBehavior = "smooth") => {
+      const container = containerRef.current;
       const targetEl = messageRefs.current.get(targetId);
-      if (targetEl) {
-        targetEl.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      }
+      if (!container || !targetEl) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = targetEl.getBoundingClientRect();
+      const relativeOffset = targetRect.top - containerRect.top;
+      const targetScrollTop =
+        container.scrollTop + relativeOffset - container.clientHeight / 2 + targetEl.clientHeight / 2;
+
+      container.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior,
+      });
+    },
+    []
+  );
+
+  const primaryTargetId = activeCitationIds.length > 0 ? activeCitationIds[0] : null;
+
+  // Only scroll the internal container when a DIFFERENT citation ID is explicitly active
+  useEffect(() => {
+    if (primaryTargetId && primaryTargetId !== lastScrolledIdRef.current) {
+      lastScrolledIdRef.current = primaryTargetId;
+      const timer = setTimeout(() => {
+        scrollMessageIntoContainer(primaryTargetId, "smooth");
+      }, 60);
+      return () => clearTimeout(timer);
     }
-  }, [activeCitationIds]);
+  }, [primaryTargetId, scrollMessageIntoContainer]);
 
   const scrollToActive = () => {
-    if (activeCitationIds.length > 0) {
-      const targetEl = messageRefs.current.get(activeCitationIds[0]);
-      if (targetEl) {
-        targetEl.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
+    if (primaryTargetId) {
+      scrollMessageIntoContainer(primaryTargetId, "smooth");
     }
   };
 
