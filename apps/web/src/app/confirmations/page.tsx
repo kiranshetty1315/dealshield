@@ -493,7 +493,7 @@ function ConfirmationsContent() {
   const latestVersion = agreement?.versions?.[agreement.versions.length - 1];
 
   return (
-    <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-5xl">
+    <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-7xl">
       {/* Top Header & Negotiation Selector */}
       <div className="space-y-4">
         <div>
@@ -521,16 +521,18 @@ function ConfirmationsContent() {
         </div>
 
         {/* Negotiation Selection Bar */}
-        <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <NegotiationSelector
-            conversations={conversations}
-            selectedChatId={selectedChatId}
-            onSelectChat={handleSelectConversation}
-            isLoading={isLoadingConversations}
-          />
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="flex-1 min-w-0 w-full">
+            <NegotiationSelector
+              conversations={conversations}
+              selectedChatId={selectedChatId}
+              onSelectChat={handleSelectConversation}
+              isLoading={isLoadingConversations}
+            />
+          </div>
 
           {/* Action Controls */}
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap shrink-0 pt-3 xl:pt-0 border-t xl:border-t-0 border-slate-100">
             <Button
               variant="outline"
               size="sm"

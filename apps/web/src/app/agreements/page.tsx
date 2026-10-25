@@ -393,16 +393,18 @@ function AgreementsContent() {
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-7xl">
       {/* Top Negotiation Selection Bar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        <NegotiationSelector
-          conversations={conversations}
-          selectedChatId={selectedChatId}
-          onSelectChat={handleSelectConversation}
-          isLoading={isLoadingConversations}
-        />
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="flex-1 min-w-0 w-full">
+          <NegotiationSelector
+            conversations={conversations}
+            selectedChatId={selectedChatId}
+            onSelectChat={handleSelectConversation}
+            isLoading={isLoadingConversations}
+          />
+        </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 flex-wrap shrink-0 pt-3 lg:pt-0 border-t lg:border-t-0 border-slate-100">
           <Button
             variant="outline"
             size="sm"

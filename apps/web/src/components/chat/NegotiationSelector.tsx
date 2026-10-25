@@ -86,10 +86,10 @@ export function NegotiationSelector({
   };
 
   return (
-    <div className={cn("relative flex-1 min-w-0 max-w-2xl", className)} ref={dropdownRef}>
-      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+    <div className={cn("relative flex-1 min-w-0", className)} ref={dropdownRef}>
+      <div className="flex items-center gap-2.5 w-full">
         {label && (
-          <span className="text-xs font-bold text-slate-700 shrink-0 hidden lg:inline-flex items-center gap-1.5">
+          <span className="text-xs font-bold text-slate-700 shrink-0 hidden sm:inline-flex items-center gap-1.5 whitespace-nowrap">
             <Users className="h-3.5 w-3.5 text-blue-600" />
             {label}
           </span>
@@ -101,10 +101,11 @@ export function NegotiationSelector({
           onClick={() => setIsOpen(!isOpen)}
           disabled={isLoading || conversations.length === 0}
           className={cn(
-            "w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border bg-white text-left transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20",
+            "flex-1 min-w-0 w-full flex items-center justify-between gap-3 px-3.5 py-2 rounded-xl border bg-white text-left transition-all shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20",
             isOpen
               ? "border-blue-500 ring-2 ring-blue-500/20 bg-blue-50/20"
-              : "border-slate-300 hover:border-slate-400 hover:bg-slate-50/50"
+              : "border-slate-300 hover:border-slate-400 hover:bg-slate-50/50",
+            (isLoading || conversations.length === 0) && "opacity-60 cursor-not-allowed"
           )}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
@@ -117,15 +118,15 @@ export function NegotiationSelector({
             <div className="min-w-0 flex-1 space-y-0.5">
               {selectedConv ? (
                 <>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
                     <p className="font-bold text-xs sm:text-sm text-slate-900 truncate">
                       {getPartiesText(selectedConv)}
                     </p>
-                    <Badge variant="outline" className="text-[10px] font-mono text-slate-500 bg-slate-50 border-slate-200 shrink-0 hidden xs:inline-flex">
+                    <Badge variant="outline" className="text-[10px] font-mono text-slate-500 bg-slate-50 border-slate-200 shrink-0 hidden sm:inline-flex">
                       {selectedConv.message_count} msgs
                     </Badge>
                   </div>
-                  <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5">
+                  <p className="text-[11px] text-slate-500 truncate flex items-center gap-1.5 min-w-0">
                     <FileText className="h-3 w-3 text-slate-400 shrink-0" />
                     <span className="font-mono truncate">{selectedConv.filename}</span>
                   </p>
@@ -137,12 +138,12 @@ export function NegotiationSelector({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0 pl-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full hidden sm:inline">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-full hidden md:inline">
               Negotiation
             </span>
             <ChevronDown
               className={cn(
-                "h-4 w-4 text-slate-500 transition-transform duration-200",
+                "h-4 w-4 text-slate-500 transition-transform duration-200 shrink-0",
                 isOpen && "rotate-180 text-blue-600"
               )}
             />
@@ -152,7 +153,7 @@ export function NegotiationSelector({
 
       {/* Floating Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 right-0 mt-2 z-50 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 max-w-2xl">
+        <div className="absolute left-0 right-0 mt-2 z-50 rounded-2xl bg-white border border-slate-200 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 w-full min-w-[280px]">
           {/* Header & Search */}
           <div className="p-3 bg-slate-50/90 border-b border-slate-200 space-y-2">
             <div className="flex items-center justify-between text-xs">
