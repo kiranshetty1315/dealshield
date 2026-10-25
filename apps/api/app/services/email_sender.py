@@ -96,17 +96,28 @@ class SmtpEmailSender(EmailSender):
         msg["To"] = to
         msg.set_content(body)
 
-        try:
-            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15) as server:
-                if settings.SMTP_USE_TLS:
-                    server.starttls()
-                if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
-                    server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                server.send_message(msg)
-                logger.info("Successfully sent SMTP email to %s (Subject: %s)", to, subject)
-        except Exception as e:
-            logger.error("Failed to send SMTP email to %s: %s", to, str(e))
-            raise
+        max_attempts = 3
+        last_error = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=25) as server:
+                    if settings.SMTP_USE_TLS:
+                        server.starttls()
+                    if settings.SMTP_USERNAME and settings.SMTP_PASSWORD:
+                        server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
+                    server.send_message(msg)
+                    logger.info("Successfully sent SMTP email to %s (Subject: %s) on attempt %d", to, subject, attempt)
+                    return
+            except Exception as e:
+                last_error = e
+                logger.warning("SMTP delivery attempt %d/%d to %s failed: %s", attempt, max_attempts, to, str(e))
+                if attempt < max_attempts:
+                    import time
+                    time.sleep(1.5)
+
+        logger.error("All %d SMTP delivery attempts to %s failed: %s", max_attempts, to, str(last_error))
+        if last_error:
+            raise last_error
 
 
 def get_email_sender() -> EmailSender:
