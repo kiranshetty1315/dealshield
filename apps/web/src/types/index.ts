@@ -45,6 +45,7 @@ export interface ChatUploadResponse {
   status: string;
   date_format_inferred?: string | null;
   is_date_ambiguous?: boolean;
+  date_range?: string | null;
 }
 
 export type ConfidenceLevel = "high" | "medium" | "low";

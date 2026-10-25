@@ -172,7 +172,8 @@ async def upload_chat(
         messages=messages,
         status="parsed",
         date_format_inferred=date_meta.get("date_format"),
-        is_date_ambiguous=date_meta.get("is_date_ambiguous", False)
+        is_date_ambiguous=date_meta.get("is_date_ambiguous", False),
+        date_range=date_meta.get("date_range"),
     )
 
 
@@ -215,6 +216,16 @@ async def get_chat(
         for m in raw_msgs
     ]
 
+    date_range_str = None
+    timestamps = [m.timestamp for m in messages if m.timestamp]
+    if timestamps:
+        min_ts = min(timestamps)
+        max_ts = max(timestamps)
+        if min_ts.date() == max_ts.date():
+            date_range_str = min_ts.strftime("%d %b %Y")
+        else:
+            date_range_str = f"{min_ts.strftime('%d %b %Y')} – {max_ts.strftime('%d %b %Y')}"
+
     return ChatUploadResponse(
         chat_id=conv["id"],
         filename=conv["filename"],
@@ -224,6 +235,7 @@ async def get_chat(
         status="retrieved",
         date_format_inferred=None,
         is_date_ambiguous=False,
+        date_range=date_range_str,
     )
 
 

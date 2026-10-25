@@ -202,10 +202,21 @@ def parse_whatsapp_chat(
 
     commit_current()
 
+    date_range_str = None
+    timestamps = [m.timestamp for m in messages if m.timestamp]
+    if timestamps:
+        min_ts = min(timestamps)
+        max_ts = max(timestamps)
+        if min_ts.date() == max_ts.date():
+            date_range_str = min_ts.strftime("%d %b %Y")
+        else:
+            date_range_str = f"{min_ts.strftime('%d %b %Y')} – {max_ts.strftime('%d %b %Y')}"
+
     metadata = {
         "date_format": format_desc,
         "is_date_ambiguous": is_ambiguous,
         "day_first_applied": day_first,
+        "date_range": date_range_str,
     }
 
     return messages, sorted(list(senders_set)), metadata

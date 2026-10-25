@@ -441,10 +441,36 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                    <Calendar className="h-3.5 w-3.5 text-blue-600" /> Date Protocol
+                    <Calendar className="h-3.5 w-3.5 text-blue-600" /> Negotiation Date
                   </div>
                   <p className="text-xs font-semibold text-slate-900 pt-0.5">
-                    {result.date_format_inferred || "Standard Inferred"}
+                    {result.date_range ||
+                      (() => {
+                        if (!result.messages || result.messages.length === 0) return "Not recorded";
+                        const dates = result.messages
+                          .map((m) => new Date(m.timestamp))
+                          .filter((d) => !isNaN(d.getTime()))
+                          .sort((a, b) => a.getTime() - b.getTime());
+                        if (dates.length === 0) return "Not recorded";
+                        const fmt = (d: Date) =>
+                          d.toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          });
+                        const first = dates[0];
+                        const last = dates[dates.length - 1];
+                        return first.toDateString() === last.toDateString()
+                          ? fmt(first)
+                          : `${fmt(first)} – ${fmt(last)}`;
+                      })()}
+                  </p>
+                  <p className="text-[10px] text-slate-500">
+                    Format: {result.date_format_inferred?.startsWith("MM/DD")
+                      ? "MM/DD/YYYY"
+                      : result.date_format_inferred?.startsWith("DD/MM")
+                      ? "DD/MM/YYYY"
+                      : result.date_format_inferred?.split("(")[0]?.trim() || "Standard"}
                   </p>
                   {result.is_date_ambiguous && (
                     <p className="text-[10px] text-amber-600 font-medium">
@@ -473,20 +499,37 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
                   <span>Displaying all {result.messages.length} messages</span>
                 </div>
                 <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                  {result.messages.map((msg) => (
-                    <div
-                      key={msg.message_id}
-                      className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs flex flex-col gap-1 shadow-2xs"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-blue-700">{msg.sender}</span>
-                        <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {msg.message_id}
-                        </span>
+                  {result.messages.map((msg) => {
+                    const formattedTime = msg.timestamp
+                      ? new Date(msg.timestamp).toLocaleString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "";
+                    return (
+                      <div
+                        key={msg.message_id}
+                        className="p-2.5 rounded-lg bg-white border border-slate-200 text-xs flex flex-col gap-1 shadow-2xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-blue-700">{msg.sender}</span>
+                          <div className="flex items-center gap-2">
+                            {formattedTime && (
+                              <span className="text-[10px] text-slate-400">
+                                {formattedTime}
+                              </span>
+                            )}
+                            <span className="font-mono text-[10px] text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                              {msg.message_id}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="text-slate-800 leading-normal">{msg.content}</p>
                       </div>
-                      <p className="text-slate-800 leading-normal">{msg.content}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
