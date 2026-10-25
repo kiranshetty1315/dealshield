@@ -112,7 +112,16 @@ export function StampPaperModal({
               className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
             >
               <Download className="h-3.5 w-3.5" />
-              <span>{isDownloading ? "Downloading..." : "Download Agreement PDF"}</span>
+              <span>
+                {isDownloading ? (
+                  "Downloading..."
+                ) : (
+                  <>
+                    <span className="hidden sm:inline">Download Agreement </span>
+                    <span className="sm:hidden">Download </span>PDF
+                  </>
+                )}
+              </span>
             </Button>
 
             <button
