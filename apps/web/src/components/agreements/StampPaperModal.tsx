@@ -275,6 +275,21 @@ export function StampPaperModal({
                   <p className="text-[10px] text-slate-600">
                     <strong>Timestamp:</strong> {p2Record?.confirmed_at ? new Date(p2Record.confirmed_at).toUTCString() : (p2Record?.declined_at ? new Date(p2Record.declined_at).toUTCString() : "Pending")}
                   </p>
+                  {p2Record?.gst_number && (
+                    <p className="text-[10px] text-slate-600">
+                      <strong>Business GST:</strong> <code className="font-mono text-slate-900">{p2Record.gst_number}</code>
+                    </p>
+                  )}
+                  {p2Record?.pan_last_4 && (
+                    <p className="text-[10px] text-slate-600">
+                      <strong>Business PAN (Last 4):</strong> <code className="font-mono text-slate-900">******{p2Record.pan_last_4}</code>
+                    </p>
+                  )}
+                  {p2Record?.office_address && (
+                    <p className="text-[10px] text-slate-600">
+                      <strong>Office Location:</strong> {p2Record.office_address}
+                    </p>
+                  )}
                   <p className="text-[10px] text-slate-500">
                     <strong>Method:</strong> Email OTP to declared counterparty address. Not an Aadhaar eSign.
                   </p>
@@ -284,6 +299,45 @@ export function StampPaperModal({
                     </p>
                   )}
                 </div>
+              </div>
+            </div>
+
+            {/* 4B. COMMERCIAL ENTITY REGISTRATION & OFFICE LOCATIONS */}
+            <div className="pt-3 border-t border-slate-200 space-y-2">
+              <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                Commercial Registration &amp; Office Location Details
+              </h3>
+              <div className="overflow-x-auto border border-slate-200 rounded-lg">
+                <table className="w-full text-left text-[11px] divide-y divide-slate-200">
+                  <thead className="bg-slate-50 text-slate-600 font-semibold">
+                    <tr>
+                      <th className="p-2.5">Party / Role</th>
+                      <th className="p-2.5">Business GST</th>
+                      <th className="p-2.5">Business PAN (Last 4)</th>
+                      <th className="p-2.5">Office Location / Address</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    <tr>
+                      <td className="p-2.5">
+                        <span className="font-bold text-slate-900">{firstParty}</span>
+                        <span className="block text-[10px] text-slate-500">First Party / Initiator</span>
+                      </td>
+                      <td className="p-2.5 font-mono text-slate-700">{p1Record?.gst_number || "Not declared"}</td>
+                      <td className="p-2.5 font-mono text-slate-700">{p1Record?.pan_last_4 ? `******${p1Record.pan_last_4}` : "Not declared"}</td>
+                      <td className="p-2.5 text-slate-700">{p1Record?.office_address || "Not declared"}</td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5">
+                        <span className="font-bold text-slate-900">{secondParty}</span>
+                        <span className="block text-[10px] text-slate-500">Second Party / Counterparty</span>
+                      </td>
+                      <td className="p-2.5 font-mono text-slate-900 font-semibold">{p2Record?.gst_number || "Not declared"}</td>
+                      <td className="p-2.5 font-mono text-slate-900 font-semibold">{p2Record?.pan_last_4 ? `******${p2Record.pan_last_4}` : "Not declared"}</td>
+                      <td className="p-2.5 text-slate-900">{p2Record?.office_address || "Not declared"}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
 

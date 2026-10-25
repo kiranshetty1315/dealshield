@@ -434,10 +434,18 @@ class StampPaperPdfService:
                 f"<font size=7 color='#334155'><b>Masked Email:</b> {masked_email}</font><br/>",
                 f"<font size=7 color='#334155'><b>Email Verified:</b> {email_ver_text}</font><br/>",
                 f"<font size=7 color='#334155'><b>Timestamp:</b> {confirmed_date}</font><br/>",
+            ]
+            if record and record.gst_number:
+                lines.append(f"<font size=7 color='#334155'><b>Business GST:</b> <code>{record.gst_number}</code></font><br/>")
+            if record and record.pan_last_4:
+                lines.append(f"<font size=7 color='#334155'><b>Business PAN (Last 4):</b> <code>******{record.pan_last_4}</code></font><br/>")
+            if record and record.office_address:
+                lines.append(f"<font size=6.5 color='#334155'><b>Office Location:</b> {record.office_address}</font><br/>")
+            lines.extend([
                 f"<font size=7 color='#334155'><b>Assent Version:</b> v{ver_num}.0 &bull; <b>IP Ref:</b> <code>{ip_val}</code></font><br/>",
                 f"<font size=6.5 color='#334155'><b>Agreed Hash:</b> <code>{c_hash}</code></font><br/>",
                 f"<font size=6.5 color='#64748B'><b>Verification Method:</b> {method_desc}</font>",
-            ]
+            ])
             if record and record.declined and record.decline_reason:
                 lines.append(f"<br/><font size=7 color='#DC2626'><b>Decline Reason:</b> {record.decline_reason}</font>")
 
@@ -462,6 +470,56 @@ class StampPaperPdfService:
             ])
         )
         elements.append(assent_table)
+        elements.append(Spacer(1, 8))
+
+        # ---------------------------------------------------------
+        # 4B. COMMERCIAL ENTITY REGISTRATION & OFFICE LOCATIONS
+        # ---------------------------------------------------------
+        elements.append(
+            Paragraph(
+                "<b>COMMERCIAL ENTITY REGISTRATION & OFFICE LOCATIONS</b>",
+                ParagraphStyle("BusDetailsTitle", fontName="Helvetica-Bold", fontSize=9.5, leading=12, textColor=colors.HexColor("#0F172A"), spaceAfter=4),
+            )
+        )
+
+        def get_party_bus_row(p_name: str, p_role: str, rec: Optional[PartyConfirmationRecord]):
+            gst_val = rec.gst_number if (rec and rec.gst_number) else "Not declared"
+            pan_val = f"******{rec.pan_last_4}" if (rec and rec.pan_last_4) else "Not declared"
+            addr_val = rec.office_address if (rec and rec.office_address) else "Not declared"
+            return [
+                Paragraph(f"<b>{p_name}</b><br/><font size=6.5 color='#64748B'>{p_role}</font>", cell_value_style),
+                Paragraph(f"<code>{gst_val}</code>", cell_value_style),
+                Paragraph(f"<code>{pan_val}</code>", cell_value_style),
+                Paragraph(addr_val, cell_value_style),
+            ]
+
+        bus_headers = [
+            Paragraph("<b>Party / Role</b>", cell_label_style),
+            Paragraph("<b>Business GST Number</b>", cell_label_style),
+            Paragraph("<b>Business PAN (Last 4)</b>", cell_label_style),
+            Paragraph("<b>Office Location / Registered Address</b>", cell_label_style),
+        ]
+
+        bus_rows = [
+            bus_headers,
+            get_party_bus_row(first_party, "First Party / Initiator", party_a_rec),
+            get_party_bus_row(second_party, "Second Party / Counterparty", party_b_rec),
+        ]
+
+        bus_table = Table(bus_rows, colWidths=[130, 110, 95, 188])
+        bus_table.setStyle(
+            TableStyle([
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F1F5F9")),
+                ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#FFFFFF")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ])
+        )
+        elements.append(bus_table)
         elements.append(Spacer(1, 8))
 
         # ---------------------------------------------------------

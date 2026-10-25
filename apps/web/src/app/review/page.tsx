@@ -18,6 +18,9 @@ import {
   Mail,
   KeyRound,
   RefreshCw,
+  Building2,
+  CreditCard,
+  MapPin,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +67,11 @@ function ReviewContent() {
 
   // Form Inputs
   const [emailInput, setEmailInput] = useState("");
+  const [panLast4Input, setPanLast4Input] = useState("");
+  const [gstNumber, setGstNumber] = useState<string | null>(null);
+  const [panLast4, setPanLast4] = useState<string | null>(null);
+  const [officeAddress, setOfficeAddress] = useState<string | null>(null);
+  const [hasPanCheck, setHasPanCheck] = useState<boolean>(false);
   const [otpInput, setOtpInput] = useState("");
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -117,6 +125,10 @@ function ReviewContent() {
       .then((data) => {
         setPartyName(data.party_name || "Counterparty");
         setMaskedEmail(data.masked_email || null);
+        if (data.gst_number) setGstNumber(data.gst_number);
+        if (data.pan_last_4) setPanLast4(data.pan_last_4);
+        if (data.office_address) setOfficeAddress(data.office_address);
+        setHasPanCheck(Boolean(data.has_pan_check));
 
         if (data.confirmed) {
           setDecisionStatus("confirmed");
@@ -154,21 +166,29 @@ function ReviewContent() {
       });
   }, [token]);
 
-  // Handle Step 1: Submit Email for Zero-Knowledge Check
+  // Handle Step 1: Submit Email and Business PAN for Verification
   const handleVerifyEmail = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!emailInput.trim()) return;
+    if (!emailInput.trim()) {
+      setErrorMessage("Please enter your email address.");
+      return;
+    }
+
+    if (hasPanCheck && (!panLast4Input.trim() || panLast4Input.trim().length !== 4)) {
+      setErrorMessage("Please enter the last 4 digits of your Business PAN card.");
+      return;
+    }
 
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      await api.emailCheck(token, emailInput.trim());
-      // Email matched! Proceed to dispatch OTP
+      await api.emailCheck(token, emailInput.trim(), panLast4Input.trim() || undefined);
+      // Credentials matched! Proceed to dispatch OTP
       await handleSendOtp();
       setStep(2);
     } catch (err: any) {
-      const msg = err.message || "We couldn't verify this email address.";
+      const msg = err.message || "We couldn't verify these credentials. Please check your email and Business PAN last 4 digits.";
       if (msg.includes("locked") || msg.includes("423")) {
         setIsLocked(true);
       }
@@ -227,6 +247,9 @@ function ReviewContent() {
         const latest = vers[vers.length - 1];
         if (latest?.clauses) setClauses(latest.clauses);
       }
+      if (inspectRes.gst_number) setGstNumber(inspectRes.gst_number);
+      if (inspectRes.pan_last_4) setPanLast4(inspectRes.pan_last_4);
+      if (inspectRes.office_address) setOfficeAddress(inspectRes.office_address);
       setStep(3);
     } catch (err: any) {
       const msg = err.message || "Invalid verification code. Please check and try again.";
@@ -514,31 +537,32 @@ function ReviewContent() {
           </Card>
         )}
 
-        {/* STEP 1: Email Verification Form */}
+        {/* STEP 1: Email and Business PAN Verification Form */}
         {!isLoading && decisionStatus === "pending" && !isLocked && step === 1 && (
           <Card className="border-slate-200 shadow-sm max-w-md mx-auto">
             <CardHeader className="text-center space-y-1 pb-4">
               <div className="h-10 w-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-200 mb-2">
-                <Mail className="h-5 w-5" />
+                <ShieldCheck className="h-5 w-5" />
               </div>
               <CardTitle className="text-base font-bold text-slate-900">
-                Verify Your Identity
+                Verify Your Business Identity
               </CardTitle>
               <CardDescription className="text-xs text-slate-500">
-                Hello <strong>{partyName}</strong>. To view and confirm this agreement, please verify your email address.
+                Hello <strong>{partyName}</strong>. Enter your declared Gmail/Email and the last 4 digits of your Business PAN card to request a verification OTP.
               </CardDescription>
             </CardHeader>
 
             <CardContent>
               <form onSubmit={handleVerifyEmail} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-slate-700">
-                    Your Email Address
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <Mail className="h-3.5 w-3.5 text-slate-500" />
+                    Client Email Address (Gmail / Counterparty Address)
                   </label>
                   <Input
                     type="email"
                     required
-                    placeholder="Enter the email declared by sender"
+                    placeholder="Enter declared client email"
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
                     className="text-xs"
@@ -551,6 +575,24 @@ function ReviewContent() {
                   )}
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <CreditCard className="h-3.5 w-3.5 text-slate-500" />
+                    Business PAN (Last 4 Digits)
+                  </label>
+                  <Input
+                    type="text"
+                    maxLength={4}
+                    placeholder="Enter last 4 digits of PAN, e.g. 1234"
+                    value={panLast4Input}
+                    onChange={(e) => setPanLast4Input(e.target.value.toUpperCase())}
+                    className="text-xs font-mono uppercase tracking-wider"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    Both your email and Business PAN last 4 digits must match the sender&apos;s registered link data.
+                  </p>
+                </div>
+
                 <Button
                   type="submit"
                   disabled={isLoading || !emailInput.trim()}
@@ -559,18 +601,18 @@ function ReviewContent() {
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Checking...
+                      Verifying Credentials...
                     </>
                   ) : (
                     <>
-                      <span>Continue &bull; Request Code</span>
+                      <span>Get OTP &bull; Request Verification Code</span>
                       <Send className="h-3.5 w-3.5" />
                     </>
                   )}
                 </Button>
 
                 <p className="text-[10px] text-slate-400 text-center leading-normal">
-                  Zero-knowledge verification: your email is checked against a cryptographic hash. The agreement draft will unlock once verified.
+                  Zero-knowledge verification: your credentials are cryptographically verified before single-use code dispatch.
                 </p>
               </form>
             </CardContent>
@@ -715,6 +757,34 @@ function ReviewContent() {
                       </div>
                     ))
                   )}
+                </div>
+
+                {/* Commercial Entity Registration & Office Location (Last Detail Part) */}
+                <div className="pt-4 border-t border-slate-200 space-y-3">
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Commercial Entity &amp; Office Location Details
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">First Party (Initiator)</span>
+                      <p className="font-bold text-slate-900">{agreement?.parties[0] || "Initiator"}</p>
+                      <p className="text-[11px] text-slate-600"><strong>Role:</strong> Originating Party</p>
+                    </div>
+
+                    <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 block">Second Party (Counterparty)</span>
+                      <p className="font-bold text-slate-900">{partyName}</p>
+                      <p className="text-[11px] text-slate-600">
+                        <strong>Business GST:</strong> <code className="font-mono">{gstNumber || "Not declared"}</code>
+                      </p>
+                      <p className="text-[11px] text-slate-600">
+                        <strong>Business PAN (Last 4):</strong> <code className="font-mono">{panLast4 ? `******${panLast4}` : (hasPanCheck ? "Verified" : "Not declared")}</code>
+                      </p>
+                      <p className="text-[11px] text-slate-600">
+                        <strong>Office Location:</strong> {officeAddress || "Not declared"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>

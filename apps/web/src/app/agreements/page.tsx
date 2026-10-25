@@ -35,7 +35,7 @@ import {
 } from "@/components/analysis/UpdatedChatComparisonModal";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { StampPaperModal } from "@/components/agreements/StampPaperModal";
-import { Agreement, Message, ConversationRecord, AgreementAnalysis, ChatUploadResponse } from "@/types";
+import { Agreement, Message, ConversationRecord, AgreementAnalysis, ChatUploadResponse, ConfirmationStatus } from "@/types";
 import { api } from "@/lib/api/client";
 
 function AgreementsContent() {
@@ -54,6 +54,7 @@ function AgreementsContent() {
   const [agreement, setAgreement] = useState<Agreement | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAnalysis, setCurrentAnalysis] = useState<AgreementAnalysis | null>(null);
+  const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus | null>(null);
   const [isLoadingAgreement, setIsLoadingAgreement] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -124,6 +125,11 @@ function AgreementsContent() {
 
       setAgreement(fetchedAgreement);
 
+      // Load confirmation status
+      api.getConfirmationStatus(fetchedAgreement.id)
+        .then(setConfirmationStatus)
+        .catch(() => null);
+
       // Load associated analysis
       if (fetchedAgreement.analysis_id) {
         try {
@@ -157,6 +163,7 @@ function AgreementsContent() {
       setError(err?.message || "Failed to load agreement. Please try again.");
       setAgreement(null);
       setMessages([]);
+      setConfirmationStatus(null);
     } finally {
       setIsLoadingAgreement(false);
     }
@@ -217,6 +224,10 @@ function AgreementsContent() {
       setMessages(newChat.messages);
       setCurrentAnalysis(newAnalysis);
       setResolutionBanner(summary);
+
+      api.getConfirmationStatus(updatedAgreement.id)
+        .then(setConfirmationStatus)
+        .catch(() => null);
 
       const url = new URL(window.location.href);
       url.searchParams.set("chat_id", newChat.chat_id);
@@ -488,6 +499,30 @@ function AgreementsContent() {
             </p>
           </div>
 
+          {/* Decline Warning Alert */}
+          {confirmationStatus?.parties?.some((p) => p.declined) && (
+            <div className="bg-rose-50 border border-rose-300 p-4 rounded-xl space-y-2">
+              <span className="font-bold text-xs text-rose-900 flex items-center gap-1.5">
+                <AlertTriangle className="h-4 w-4 text-rose-600" />
+                Agreement Terms Declined by Counterparty
+              </span>
+              {confirmationStatus.parties
+                .filter((p) => p.declined)
+                .map((p) => (
+                  <div key={p.party_name} className="text-xs text-rose-800 space-y-1">
+                    <p>
+                      <strong>{p.party_name}</strong> declined to confirm this commercial agreement.
+                    </p>
+                    {p.decline_reason && (
+                      <p className="italic bg-white/80 p-2.5 rounded border border-rose-200 text-rose-950">
+                        <strong>Reason for Decline:</strong> &ldquo;{p.decline_reason}&rdquo;
+                      </p>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
+
           {/* Split Pane: Agreement Document (Left) & Chat Evidence Transcript (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left Pane (7 cols): Agreement Clauses */}
@@ -496,6 +531,7 @@ function AgreementsContent() {
                 activeCitationId={activeCitationId}
                 onCitationClick={handleCitationClick}
                 agreement={agreement}
+                confirmationStatus={confirmationStatus}
               />
 
               {/* Cryptographic Audit Record Card */}
@@ -573,6 +609,7 @@ function AgreementsContent() {
           isOpen={isStampModalOpen}
           onClose={() => setIsStampModalOpen(false)}
           agreement={agreement}
+          confirmationStatus={confirmationStatus}
         />
       )}
     </div>

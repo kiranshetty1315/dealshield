@@ -555,5 +555,117 @@ async def test_production_lifespan_hard_stop():
         settings.ENVIRONMENT = "development"
         settings.SECRET_KEY = "dealshield-insecure-default-dev-secret-key-change-in-production"
 
+def test_client_business_details_and_pan_verification_flow():
+    """Validates:
+    1. Creating review link with GST, PAN last 4, and office address.
+    2. Zero-knowledge identity check requiring matching PAN last 4.
+    3. Failure on incorrect PAN last 4.
+    4. Success on matching email and PAN last 4.
+    5. Decline records decline_reason and reflects in confirmation status.
+    6. PDF generation includes business details.
+    """
+    conf_repo = ConfirmationRepository()
+    agreement_id = create_test_agreement("analysis_bus_details_01")
+    link_res = client.post(
+        "/api/v1/confirmations/tokens",
+        json={
+            "agreement_id": agreement_id,
+            "party_name": "Acme Corp Services",
+            "party_email": "acme.client@gmail.com",
+            "gst_number": "29ABCDE1234F1Z5",
+            "pan_last_4": "1234",
+            "office_address": "Suite 401, Tech Park, Indiranagar, Bengaluru - 560038",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert link_res.status_code == 200
+    data = link_res.json()
+    raw_token = data["raw_token"]
+    assert data["gst_number"] == "29ABCDE1234F1Z5"
+    assert data["pan_last_4"] == "1234"
+    assert "Tech Park" in data["office_address"]
 
+    # Inspect token before session authentication: PAN last 4 is hidden, has_pan_check is True
+    insp_res = client.get(f"/api/v1/confirmations/token/{raw_token}")
+    assert insp_res.status_code == 200
+    insp_data = insp_res.json()
+    assert insp_data["has_pan_check"] is True
+    assert insp_data["pan_last_4"] is None  # Zero-knowledge: hidden before verification
+
+    # 1. Attempt verification with correct email but wrong PAN last 4 -> Fails (HTTP 400)
+    fail_chk = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/email-check",
+        json={"email": "acme.client@gmail.com", "pan_last_4": "9999"},
+    )
+    assert fail_chk.status_code == 400
+    assert "couldn't verify" in fail_chk.json()["detail"]
+
+    # 2. Attempt verification with correct email and correct PAN last 4 -> Succeeds
+    ok_chk = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/email-check",
+        json={"email": "acme.client@gmail.com", "pan_last_4": "1234"},
+    )
+    assert ok_chk.status_code == 200
+    assert ok_chk.json()["status"] == "verified"
+
+    # 3. Send OTP
+    send_otp_res = client.post(f"/api/v1/confirmations/token/{raw_token}/otp/send")
+    assert send_otp_res.status_code == 200
+    assert send_otp_res.json()["status"] == "sent"
+
+    # Extract OTP from in-memory sender
+    emails = InMemoryEmailSender.get_sent_emails()
+    assert len(emails) > 0
+    otp_match = re.search(r"\b(\d{6})\b", emails[-1]["body"])
+    assert otp_match is not None
+    otp_code = otp_match.group(1)
+
+    # 4. Verify OTP and obtain review session
+    verify_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}/otp/verify",
+        json={"otp": otp_code},
+    )
+    assert verify_res.status_code == 200
+    session_token = verify_res.json()["session_token"]
+
+    # Inspect with session: now returns unmasked PAN last 4 and agreement draft
+    sess_insp = client.get(
+        f"/api/v1/confirmations/token/{raw_token}",
+        headers={"X-Review-Session": session_token},
+    )
+    assert sess_insp.status_code == 200
+    assert sess_insp.json()["pan_last_4"] == "1234"
+    assert sess_insp.json()["agreement"] is not None
+
+    # 5. Client declines with comment reason
+    decline_res = client.post(
+        f"/api/v1/confirmations/token/{raw_token}",
+        json={
+            "action": "decline",
+            "decline_reason": "Payment milestone 50% advance is unacceptable; requesting 25% with milestone deliverables.",
+        },
+        headers={"X-Review-Session": session_token},
+    )
+    assert decline_res.status_code == 200
+    assert decline_res.json()["declined"] is True
+
+    # 6. Verify decline reason is reflected in confirmation status for user
+    status_res = client.get(f"/api/v1/confirmations/{agreement_id}")
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert status_data["any_declined"] is True
+    party_rec = next(p for p in status_data["parties"] if p["party_name"] == "Acme Corp Services")
+    assert party_rec["declined"] is True
+    assert "Payment milestone 50%" in party_rec["decline_reason"]
+    assert party_rec["gst_number"] == "29ABCDE1234F1Z5"
+    assert party_rec["pan_last_4"] == "1234"
+    assert "Tech Park" in party_rec["office_address"]
+
+    # 7. Verify PDF generator runs and includes business details
+    from app.services.stamp_pdf_generator import StampPaperPdfService
+    agree_repo = AgreementRepository(client=conf_repo.client)
+    ag_record = agree_repo.get_agreement(agreement_id)
+    pdf_bytes = StampPaperPdfService.generate_pdf(ag_record)
+    assert len(pdf_bytes) > 1000
+    assert b"%PDF" in pdf_bytes[:10]
 

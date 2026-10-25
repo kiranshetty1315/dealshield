@@ -144,6 +144,9 @@ export interface PartyConfirmationRecord {
   party_name: string;
   party_email?: string;
   masked_email?: string;
+  gst_number?: string;
+  pan_last_4?: string;
+  office_address?: string;
   verification_method?: string;
   email_verified_at?: string;
   agreed_version_number?: number;
@@ -227,6 +230,10 @@ export interface TokenInspectResponse {
   token: string;
   party_name: string;
   masked_email?: string;
+  gst_number?: string;
+  pan_last_4?: string;
+  office_address?: string;
+  has_pan_check?: boolean;
   confirmed: boolean;
   confirmed_at?: string;
   declined: boolean;
@@ -244,6 +251,9 @@ export interface TokenGenerateResponse {
   raw_token: string;
   token: string;
   masked_email?: string;
+  gst_number?: string;
+  pan_last_4?: string;
+  office_address?: string;
   token_hash?: string;
   expires_at: string;
   confirmation_url: string;

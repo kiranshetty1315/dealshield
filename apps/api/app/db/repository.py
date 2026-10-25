@@ -502,6 +502,9 @@ class ConfirmationRepository:
         party_email: Optional[str] = None,
         initiator_user_id: Optional[str] = None,
         hours_valid: int = 72,
+        gst_number: Optional[str] = None,
+        pan_last_4: Optional[str] = None,
+        office_address: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Generates single-use confirmation tokens for external counterparties.
         
@@ -566,6 +569,12 @@ class ConfirmationRepository:
                 update_fields["party_email_hash"] = email_hash
             if initiator_user_id:
                 update_fields["initiator_user_id"] = str(initiator_user_id)
+            if gst_number is not None:
+                update_fields["gst_number"] = gst_number.strip().upper() if gst_number else None
+            if pan_last_4 is not None:
+                update_fields["pan_last_4"] = pan_last_4.strip().upper() if pan_last_4 else None
+            if office_address is not None:
+                update_fields["office_address"] = office_address.strip() if office_address else None
 
             if existing:
                 self.client.table("confirmations").update(update_fields).eq("id", existing["id"]).execute()
@@ -642,6 +651,9 @@ class ConfirmationRepository:
                 party_name=p_name,
                 party_email=None,  # Never leak plaintext email
                 masked_email=masked,
+                gst_number=row.get("gst_number"),
+                pan_last_4=row.get("pan_last_4"),
+                office_address=row.get("office_address"),
                 verification_method=method,
                 email_verified_at=dt_ev,
                 agreed_version_number=row.get("agreed_version_number"),
@@ -673,9 +685,9 @@ class ConfirmationRepository:
             last_updated=datetime.now(timezone.utc),
         )
 
-    def check_email(self, raw_token: str, typed_email: str) -> bool:
-        """Compares typed email to stored email hash. Locks link after 5 failed attempts."""
-        generic_err = "We couldn't verify this email address."
+    def check_email(self, raw_token: str, typed_email: str, typed_pan_last_4: Optional[str] = None) -> bool:
+        """Compares typed email and Business PAN last 4 digits to stored credentials. Locks link after 5 failed attempts."""
+        generic_err = "We couldn't verify these credentials. Please check your email and Business PAN last 4 digits."
         token_hash = self.hash_token(raw_token)
         res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
         data = res.data
@@ -698,8 +710,18 @@ class ConfirmationRepository:
 
         normalized_typed = typed_email.strip().lower()
         typed_hash = self.hash_email(normalized_typed)
+        email_match = hmac.compare_digest(typed_hash, stored_email_hash)
 
-        if not hmac.compare_digest(typed_hash, stored_email_hash):
+        # Match PAN last 4 digits if stored on the confirmation record
+        stored_pan_last_4 = row.get("pan_last_4")
+        pan_match = True
+        if stored_pan_last_4:
+            if not typed_pan_last_4:
+                pan_match = False
+            else:
+                pan_match = (typed_pan_last_4.strip().upper() == stored_pan_last_4.strip().upper())
+
+        if (not email_match) or (not pan_match):
             attempts = (row.get("email_check_attempts") or 0) + 1
             now_iso = datetime.now(timezone.utc).isoformat()
             audit_repo = AuditRepository(client=self.client)

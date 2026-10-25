@@ -437,7 +437,10 @@ export class ApiClient {
     agreementId: string,
     partyName: string,
     partyEmail: string,
-    hoursValid: number = 72
+    hoursValid: number = 72,
+    gstNumber?: string,
+    panLast4?: string,
+    officeAddress?: string
   ): Promise<TokenGenerateResponse> {
     const res = await fetch(`${this.baseUrl}/api/v1/confirmations/tokens`, {
       method: "POST",
@@ -450,6 +453,9 @@ export class ApiClient {
         party_name: partyName,
         party_email: partyEmail,
         hours_valid: hoursValid,
+        gst_number: gstNumber,
+        pan_last_4: panLast4,
+        office_address: officeAddress,
       }),
     });
 
@@ -478,13 +484,13 @@ export class ApiClient {
     return res.json();
   }
 
-  async emailCheck(token: string, email: string): Promise<{ status: string; message: string }> {
+  async emailCheck(token: string, email: string, panLast4?: string): Promise<{ status: string; message: string }> {
     const res = await fetch(
       `${this.baseUrl}/api/v1/confirmations/token/${encodeURIComponent(token)}/email-check`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, pan_last_4: panLast4 }),
       }
     );
 

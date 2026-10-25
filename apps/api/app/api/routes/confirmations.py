@@ -106,6 +106,10 @@ async def generate_counterparty_token(
     latest_ver = agreement.versions[-1]
     version_id = getattr(latest_ver, "version_id", None) or getattr(latest_ver, "id", None) or payload.agreement_id
 
+    clean_gst = payload.gst_number.strip().upper() if payload.gst_number else None
+    clean_pan = payload.pan_last_4.strip().upper() if payload.pan_last_4 else None
+    clean_address = payload.office_address.strip() if payload.office_address else None
+
     try:
         tokens = conf_repo.create_confirmation_tokens(
             agreement_id=payload.agreement_id,
@@ -114,6 +118,9 @@ async def generate_counterparty_token(
             party_email=clean_email,
             initiator_user_id=current_user["id"],
             hours_valid=payload.hours_valid,
+            gst_number=clean_gst,
+            pan_last_4=clean_pan,
+            office_address=clean_address,
         )
         if not tokens:
             raise HTTPException(status_code=400, detail="Failed to generate confirmation token.")
@@ -132,6 +139,8 @@ async def generate_counterparty_token(
             metadata={
                 "party_name": payload.party_name,
                 "masked_email": masked,
+                "gst_number": clean_gst,
+                "pan_last_4": clean_pan,
                 "expires_at": tok["expires_at"],
             },
         )
@@ -143,6 +152,9 @@ async def generate_counterparty_token(
             "raw_token": tok["raw_token"],
             "token": tok["raw_token"],
             "masked_email": masked,
+            "gst_number": clean_gst,
+            "pan_last_4": clean_pan,
+            "office_address": clean_address,
             "expires_at": tok["expires_at"],
             "confirmation_url": confirmation_url,
         }
@@ -209,10 +221,16 @@ async def inspect_token(
     masked = conf_repo.mask_email(raw_email) if raw_email else None
     requires_verification = settings.REQUIRE_EMAIL_OTP and not has_valid_session
 
+    pan_last_4_val = row.get("pan_last_4") if has_valid_session else None
+
     return TokenInspectResponse(
         token=token,
         party_name=row.get("party_name", ""),
         masked_email=masked,
+        gst_number=row.get("gst_number"),
+        pan_last_4=pan_last_4_val,
+        office_address=row.get("office_address"),
+        has_pan_check=bool(row.get("pan_last_4")),
         confirmed=bool(row.get("confirmed", False)),
         confirmed_at=row.get("confirmed_at"),
         declined=bool(row.get("declined", False)),
@@ -226,22 +244,23 @@ async def inspect_token(
 
 @router.post(
     "/token/{token}/email-check",
-    summary="Verify Counterparty Email Hash",
-    description="Zero-knowledge email check: compares client-entered email HMAC to stored email hash.",
+    summary="Verify Counterparty Email & Business PAN Hash",
+    description="Zero-knowledge email check: compares client-entered email HMAC and Business PAN to stored credentials.",
 )
 async def check_counterparty_email(token: str, payload: EmailCheckRequest):
-    """Compares entered email to stored recipient hash. Locks after 5 failed guesses."""
+    """Compares entered email and Business PAN to stored recipient hash. Locks after 5 failed guesses."""
     clean_email = payload.email.strip().lower()
     if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Please provide a valid email address.",
         )
+    clean_pan = payload.pan_last_4.strip().upper() if payload.pan_last_4 else None
     try:
-        conf_repo.check_email(raw_token=token, typed_email=clean_email)
+        conf_repo.check_email(raw_token=token, typed_email=clean_email, typed_pan_last_4=clean_pan)
         return {
             "status": "verified",
-            "message": "Email address verified. You may now request a verification code.",
+            "message": "Credentials verified. You may now request a verification code.",
         }
     except PermissionError as e:
         raise HTTPException(status_code=status.HTTP_423_LOCKED, detail=str(e))

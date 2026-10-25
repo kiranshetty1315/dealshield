@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   CheckCircle2,
+  AlertTriangle,
   XCircle,
   Clock,
   Users,
@@ -33,6 +34,9 @@ import {
   Eye,
   Mail,
   MessageSquare,
+  Building2,
+  CreditCard,
+  MapPin,
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
@@ -93,11 +97,21 @@ function ConfirmationsContent() {
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Counterparty Email Input state per party
+  // Counterparty Details state per party
   const [counterpartyEmails, setCounterpartyEmails] = useState<Record<string, string>>({});
+  const [counterpartyGst, setCounterpartyGst] = useState<Record<string, string>>({});
+  const [counterpartyPanLast4, setCounterpartyPanLast4] = useState<Record<string, string>>({});
+  const [counterpartyAddress, setCounterpartyAddress] = useState<Record<string, string>>({});
 
   // Shareable link state
-  const [shareableLink, setShareableLink] = useState<{ partyName: string; url: string; maskedEmail?: string } | null>(null);
+  const [shareableLink, setShareableLink] = useState<{
+    partyName: string;
+    url: string;
+    maskedEmail?: string;
+    gstNumber?: string;
+    panLast4?: string;
+    officeAddress?: string;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
   const [isGeneratingToken, setIsGeneratingToken] = useState<string | null>(null);
 
@@ -318,14 +332,39 @@ function ConfirmationsContent() {
       return;
     }
 
+    const panLast4 = counterpartyPanLast4[partyName]?.trim().toUpperCase();
+    if (panLast4 && panLast4.length !== 4) {
+      setErrorMessage(`Business PAN last 4 digits must be exactly 4 characters.`);
+      return;
+    }
+
+    const gstNumber = counterpartyGst[partyName]?.trim().toUpperCase();
+    const officeAddress = counterpartyAddress[partyName]?.trim();
+
     setIsGeneratingToken(partyName);
     setCopied(false);
     setErrorMessage(null);
     try {
-      const res = await api.generatePartyToken(agreement.id, partyName, email);
+      const res = await api.generatePartyToken(
+        agreement.id,
+        partyName,
+        email,
+        72,
+        gstNumber || undefined,
+        panLast4 || undefined,
+        officeAddress || undefined
+      );
       const origin = typeof window !== "undefined" ? window.location.origin : "";
       const fullUrl = `${origin}/review?token=${res.token}`;
-      setShareableLink({ partyName, url: fullUrl, maskedEmail: res.masked_email });
+      setShareableLink({
+        partyName,
+        url: fullUrl,
+        maskedEmail: res.masked_email,
+        gstNumber: res.gst_number,
+        panLast4: res.pan_last_4,
+        officeAddress: res.office_address,
+      });
+      await refreshStatus(agreement.id);
     } catch (err: any) {
       setErrorMessage(`Failed to generate review link: ${err.message || err}`);
     } finally {
@@ -617,6 +656,30 @@ function ConfirmationsContent() {
             </div>
           )}
 
+          {/* Prominent Decline Notice to User */}
+          {partiesList.some((p) => p.declined) && (
+            <Alert variant="destructive" className="border-rose-400 bg-rose-50 text-rose-950">
+              <AlertTriangle className="h-4 w-4 text-rose-600" />
+              <div className="space-y-1">
+                <span className="font-bold text-xs text-rose-900 block">Agreement Terms Declined by Counterparty</span>
+                <div className="text-xs text-rose-800">
+                  {partiesList
+                    .filter((p) => p.declined)
+                    .map((p) => (
+                      <div key={p.party_name} className="mt-1">
+                        <strong>{p.party_name}</strong> declined the agreement.
+                        {p.decline_reason && (
+                          <span className="block mt-0.5 italic bg-white/70 p-1.5 rounded border border-rose-200">
+                            Reason: &ldquo;{p.decline_reason}&rdquo;
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </Alert>
+          )}
+
           {feedbackMessage && (
             <Alert className="border-emerald-300 bg-emerald-50 text-emerald-900 text-xs">
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -717,11 +780,30 @@ function ConfirmationsContent() {
                     </p>
 
                     {party.decline_reason && (
-                      <div className="bg-rose-100/60 p-2.5 rounded border border-rose-200 text-xs text-rose-900 space-y-0.5">
-                        <span className="font-bold block text-[10px] uppercase text-rose-800">
+                      <div className="bg-rose-100/80 p-3 rounded-lg border border-rose-300 text-xs text-rose-950 space-y-1">
+                        <span className="font-bold flex items-center gap-1 text-[11px] uppercase text-rose-800">
+                          <XCircle className="h-3.5 w-3.5 text-rose-600" />
                           Reason for Decline:
                         </span>
-                        <p className="italic">&ldquo;{party.decline_reason}&rdquo;</p>
+                        <p className="italic font-medium text-rose-900 bg-white/70 p-2 rounded border border-rose-200">
+                          &ldquo;{party.decline_reason}&rdquo;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Declared Business Entity Details */}
+                    {(party.gst_number || party.pan_last_4 || party.office_address) && (
+                      <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-[11px] space-y-1 text-slate-700">
+                        <span className="font-bold text-[10px] uppercase text-slate-500 block">Declared Commercial Details:</span>
+                        {party.gst_number && (
+                          <p><strong>Business GST:</strong> <code className="font-mono text-slate-900">{party.gst_number}</code></p>
+                        )}
+                        {party.pan_last_4 && (
+                          <p><strong>Business PAN (Last 4):</strong> <code className="font-mono text-slate-900">******{party.pan_last_4}</code></p>
+                        )}
+                        {party.office_address && (
+                          <p><strong>Office Location:</strong> <span className="text-slate-900">{party.office_address}</span></p>
+                        )}
                       </div>
                     )}
 
