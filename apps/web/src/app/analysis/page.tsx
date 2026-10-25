@@ -36,6 +36,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
+import { NegotiationSelector } from "@/components/chat/NegotiationSelector";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
   ConflictResolutionDrawer,
@@ -332,37 +333,13 @@ function AnalysisContent() {
   return (
     <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-7xl">
       {/* Top Negotiation Selection Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          <label htmlFor="chat-select" className="text-xs font-bold text-slate-700 shrink-0">
-            Select Negotiation:
-          </label>
-          <div className="relative flex-1 max-w-md">
-            <select
-              id="chat-select"
-              value={selectedChatId || ""}
-              onChange={(e) => handleSelectConversation(e.target.value)}
-              className="w-full h-9 pl-3 pr-8 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 appearance-none truncate"
-            >
-              {conversations.map((conv) => {
-                const partiesLabel =
-                  conv.party_names && conv.party_names.length > 0
-                    ? conv.party_names.join(" & ")
-                    : "Unassigned Parties";
-                return (
-                  <option key={conv.id} value={conv.id}>
-                    {partiesLabel} — {conv.filename} ({conv.message_count} msgs)
-                  </option>
-                );
-              })}
-            </select>
-            <ChevronDown className="h-4 w-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
-          </div>
-
-          <Badge variant="outline" className="text-[11px] font-mono text-slate-500 shrink-0 hidden sm:inline-flex">
-            {conversations.length} {conversations.length === 1 ? "Chat" : "Chats"} Available
-          </Badge>
-        </div>
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <NegotiationSelector
+          conversations={conversations}
+          selectedChatId={selectedChatId}
+          onSelectChat={handleSelectConversation}
+          isLoading={isLoadingConversations}
+        />
 
         {/* Action Controls: Follow-up Upload & Ingest New */}
         <div className="flex items-center gap-2.5 shrink-0">
