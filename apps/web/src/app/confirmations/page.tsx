@@ -841,20 +841,20 @@ function ConfirmationsContent() {
                             </Button>
                           </div>
                         ) : (
-                          <div className="space-y-2">
-                            <div className="space-y-1">
-                              <label
-                                htmlFor={`email-${party.party_name}`}
-                                className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
-                              >
-                                <Mail className="h-3 w-3 text-slate-500" />
-                                Counterparty Email ({party.party_name}):
-                              </label>
-                              <div className="flex gap-2">
+                          <div className="space-y-3">
+                            <div className="space-y-3 bg-slate-50/70 p-3 rounded-lg border border-slate-200">
+                              <div className="space-y-1">
+                                <label
+                                  htmlFor={`email-${party.party_name}`}
+                                  className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
+                                >
+                                  <Mail className="h-3 w-3 text-slate-500" />
+                                  Client Email (Gmail / Counterparty Address): <span className="text-rose-500">*</span>
+                                </label>
                                 <Input
                                   id={`email-${party.party_name}`}
                                   type="email"
-                                  placeholder="counterparty@example.com"
+                                  placeholder="client@gmail.com"
                                   value={counterpartyEmails[party.party_name] || ""}
                                   onChange={(e) =>
                                     setCounterpartyEmails((prev) => ({
@@ -865,41 +865,117 @@ function ConfirmationsContent() {
                                   className="text-xs h-8 bg-white"
                                   disabled={isGeneratingToken !== null}
                                 />
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleGenerateShareableToken(party.party_name)}
-                                  disabled={
-                                    isGeneratingToken !== null ||
-                                    !counterpartyEmails[party.party_name]?.trim()
-                                  }
-                                  className="text-xs font-semibold border-blue-300 text-blue-700 hover:bg-blue-50 gap-1.5 shrink-0 h-8"
-                                >
-                                  {isGeneratingToken === party.party_name ? (
-                                    <>
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      Generating...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Share2 className="h-3.5 w-3.5" />
-                                      Create Review Link
-                                    </>
-                                  )}
-                                </Button>
                               </div>
-                              <p className="text-[10px] text-slate-500">
-                                Link requires OTP sent to this email before {party.party_name} can review or confirm.
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <div className="space-y-1">
+                                  <label
+                                    htmlFor={`gst-${party.party_name}`}
+                                    className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
+                                  >
+                                    <Building2 className="h-3 w-3 text-slate-500" />
+                                    Client Business GST Number:
+                                  </label>
+                                  <Input
+                                    id={`gst-${party.party_name}`}
+                                    type="text"
+                                    placeholder="e.g. 29ABCDE1234F1Z5"
+                                    value={counterpartyGst[party.party_name] || ""}
+                                    onChange={(e) =>
+                                      setCounterpartyGst((prev) => ({
+                                        ...prev,
+                                        [party.party_name]: e.target.value.toUpperCase(),
+                                      }))
+                                    }
+                                    className="text-xs h-8 bg-white font-mono"
+                                    disabled={isGeneratingToken !== null}
+                                  />
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label
+                                    htmlFor={`pan-${party.party_name}`}
+                                    className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
+                                  >
+                                    <CreditCard className="h-3 w-3 text-slate-500" />
+                                    Business PAN (Last 4 Digits):
+                                  </label>
+                                  <Input
+                                    id={`pan-${party.party_name}`}
+                                    type="text"
+                                    maxLength={4}
+                                    placeholder="e.g. 1234"
+                                    value={counterpartyPanLast4[party.party_name] || ""}
+                                    onChange={(e) =>
+                                      setCounterpartyPanLast4((prev) => ({
+                                        ...prev,
+                                        [party.party_name]: e.target.value.toUpperCase(),
+                                      }))
+                                    }
+                                    className="text-xs h-8 bg-white font-mono"
+                                    disabled={isGeneratingToken !== null}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="space-y-1">
+                                <label
+                                  htmlFor={`addr-${party.party_name}`}
+                                  className="text-[11px] font-semibold text-slate-700 flex items-center gap-1"
+                                >
+                                  <MapPin className="h-3 w-3 text-slate-500" />
+                                  Office Location / Address:
+                                </label>
+                                <Input
+                                  id={`addr-${party.party_name}`}
+                                  type="text"
+                                  placeholder="e.g. Suite 401, Tech Park, Indiranagar, Bengaluru - 560038"
+                                  value={counterpartyAddress[party.party_name] || ""}
+                                  onChange={(e) =>
+                                    setCounterpartyAddress((prev) => ({
+                                      ...prev,
+                                      [party.party_name]: e.target.value,
+                                    }))
+                                  }
+                                  className="text-xs h-8 bg-white"
+                                  disabled={isGeneratingToken !== null}
+                                />
+                              </div>
+
+                              <Button
+                                size="sm"
+                                onClick={() => handleGenerateShareableToken(party.party_name)}
+                                disabled={
+                                  isGeneratingToken !== null ||
+                                  !counterpartyEmails[party.party_name]?.trim()
+                                }
+                                className="w-full text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1.5 h-8 mt-1"
+                              >
+                                {isGeneratingToken === party.party_name ? (
+                                  <>
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    Creating Review Link...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Share2 className="h-3.5 w-3.5" />
+                                    Create Review Link
+                                  </>
+                                )}
+                              </Button>
+
+                              <p className="text-[10px] text-slate-500 leading-tight">
+                                Client must enter both matching Gmail/Email and Last 4 digits of Business PAN to receive the verification OTP.
                               </p>
                             </div>
 
                             {/* Expandable Shareable Token Box */}
                             {shareableLink?.partyName === party.party_name && (
-                              <div className="p-3 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2 animate-in fade-in duration-150 text-xs">
+                              <div className="p-3.5 bg-blue-50/90 border border-blue-200 rounded-lg space-y-2.5 animate-in fade-in duration-150 text-xs">
                                 <div className="flex items-center justify-between">
                                   <span className="font-bold text-[11px] text-blue-950 flex items-center gap-1">
                                     <Link2 className="h-3.5 w-3.5 text-blue-700" />
-                                    Shareable Counterparty Link
+                                    Shareable Review Link Ready
                                   </span>
                                   <div className="flex items-center gap-1.5">
                                     <Button
@@ -944,13 +1020,25 @@ function ConfirmationsContent() {
                                   value={shareableLink.url}
                                   className="text-[10px] font-mono h-7 bg-white text-slate-800"
                                 />
-                                {shareableLink.maskedEmail && (
-                                  <p className="text-[10px] text-blue-900 font-medium">
-                                    Recipient OTP Destination: <strong>{shareableLink.maskedEmail}</strong>
-                                  </p>
-                                )}
+
+                                <div className="bg-white/80 p-2 rounded border border-blue-100 text-[11px] text-slate-700 space-y-0.5">
+                                  <p className="font-semibold text-blue-900 text-[10px] uppercase">Registered Verification Details:</p>
+                                  {shareableLink.maskedEmail && (
+                                    <p>Email: <span className="font-mono text-slate-900">{shareableLink.maskedEmail}</span></p>
+                                  )}
+                                  {shareableLink.gstNumber && (
+                                    <p>Business GST: <span className="font-mono font-bold text-slate-900">{shareableLink.gstNumber}</span></p>
+                                  )}
+                                  {shareableLink.panLast4 && (
+                                    <p>Business PAN (Last 4): <span className="font-mono font-bold text-slate-900">******{shareableLink.panLast4}</span></p>
+                                  )}
+                                  {shareableLink.officeAddress && (
+                                    <p>Office Location: <span className="text-slate-900">{shareableLink.officeAddress}</span></p>
+                                  )}
+                                </div>
+
                                 <p className="text-[10px] text-blue-800 leading-normal">
-                                  Send this link to {party.party_name}. They will enter their declared email and verify with a one-time passcode to review and assent.
+                                  Share this review link with {party.party_name}. They will enter their Gmail and Business PAN last 4 digits to get an OTP and review the agreement.
                                 </p>
                               </div>
                             )}
