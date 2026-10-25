@@ -66,6 +66,19 @@ function AgreementsContent() {
 
   // Indian Non-Judicial Stamp Paper Modal
   const [isStampModalOpen, setIsStampModalOpen] = useState<boolean>(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+
+  const handleDownloadPdf = async () => {
+    if (!agreement?.id) return;
+    setIsDownloadingPdf(true);
+    try {
+      await api.downloadAgreementPdf(agreement.id);
+    } catch (err: any) {
+      alert(err?.message || "Failed to download agreement PDF");
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
 
   // 1. Fetch conversations list
   const loadConversations = useCallback(async () => {
@@ -435,11 +448,22 @@ function AgreementsContent() {
                 <Award className="h-4 w-4 text-amber-600" /> Preview Agreement
               </Button>
 
-              <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
-                <Button size="sm" className="gap-2 text-xs h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs">
-                  <Download className="h-4 w-4" /> Download Agreement PDF
-                </Button>
-              </a>
+              <Button
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="gap-2 text-xs h-9 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs"
+              >
+                {isDownloadingPdf ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" /> Downloading...
+                  </>
+                ) : (
+                  <>
+                    <Download className="h-4 w-4" /> Download Agreement PDF
+                  </>
+                )}
+              </Button>
 
               <Link href={confirmationHref}>
                 <Button size="sm" className="gap-2 text-xs font-semibold shadow-sm bg-blue-600 hover:bg-blue-700 text-white h-9">

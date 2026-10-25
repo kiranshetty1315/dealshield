@@ -110,12 +110,20 @@ class ConflictDetectorService:
         if not price_msgs:
             return None
 
-        # Collect distinct prices mentioned
+        # Collect distinct prices mentioned, prioritizing base consideration over ancillary costs
+        ancillary_pattern = re.compile(r"(\bad spend\b|\bfor ads\b|\/month\b|\bper month\b|\bmonthly\b)", re.IGNORECASE)
         distinct_prices: List[str] = []
-        for _, prices in price_msgs:
+        base_prices: List[str] = []
+        for msg, prices in price_msgs:
+            is_ancillary = bool(ancillary_pattern.search(msg.content))
             for p in prices:
                 if p not in distinct_prices:
                     distinct_prices.append(p)
+                if not is_ancillary and p not in base_prices:
+                    base_prices.append(p)
+
+        # Target consideration prices
+        target_prices = base_prices if base_prices else distinct_prices
 
         # If 2 or more distinct prices are proposed, or price is hedged
         parties_involved: Dict[str, Dict[str, Tuple[Message, str]]] = {}
@@ -123,7 +131,7 @@ class ConflictDetectorService:
             parties_involved.setdefault(msg.sender, {})[msg.message_id] = (msg, ", ".join(prices))
 
         # Check if there is price variation or negotiation
-        has_multiple_prices = len(distinct_prices) >= 2
+        has_multiple_prices = len(target_prices) >= 2
         has_hedge_near_price = False
         source_message_ids: List[str] = [msg.message_id for msg, _ in price_msgs]
 
@@ -144,15 +152,15 @@ class ConflictDetectorService:
                 quoted = [f"{e[1]} ({e[0].content.strip()})" if e[1] != "hedged statement" else e[0].content.strip() for e in entries]
                 party_positions[sender] = f"Proposed/discussed: {'; '.join(quoted[:4])}"
 
-            if len(distinct_prices) >= 3:
-                prices_str = f"{', '.join(distinct_prices[:-1])} and {distinct_prices[-1]}"
-            elif len(distinct_prices) == 2:
-                prices_str = f"{distinct_prices[0]} and {distinct_prices[1]}"
-            elif distinct_prices:
-                prices_str = distinct_prices[0]
+            if len(target_prices) >= 3:
+                prices_str = f"{', '.join(target_prices[:-1])} and {target_prices[-1]}"
+            elif len(target_prices) == 2:
+                prices_str = f"{target_prices[0]} and {target_prices[1]}"
+            elif target_prices:
+                prices_str = target_prices[0]
             else:
                 prices_str = "disputed consideration"
-            final_price = distinct_prices[-1] if distinct_prices else "the proposed amount"
+            final_price = target_prices[-1] if target_prices else "the proposed amount"
 
             statutory_notes = (
                 "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. "

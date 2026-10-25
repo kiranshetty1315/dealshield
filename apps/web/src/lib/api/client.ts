@@ -343,6 +343,28 @@ export class ApiClient {
     return `${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}/pdf`;
   }
 
+  async downloadAgreementPdf(agreementId: string, filename?: string): Promise<void> {
+    const res = await fetch(`${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}/pdf`, {
+      method: "GET",
+      headers: this.getAuthHeaders(),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Download failed" }));
+      throw new Error(err.detail || "Failed to download agreement PDF");
+    }
+
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || `DealShield_Agreement_${agreementId.slice(0, 8)}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
   // --- Team D: Confirmations & Single-Use Tokens ---
 
   async recordConfirmation(

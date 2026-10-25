@@ -6,9 +6,10 @@ Supports versioning, SHA-256 fingerprinting, and audit logging.
 """
 
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from app.schemas.agreement import Agreement, AgreementVersion, Clause, AgreementStatus
+from app.schemas.analysis import ExtractedTerm
 from app.services.hash_service import HashService
 from app.db.repository import (
     AgreementRepository,
@@ -45,19 +46,48 @@ class AgreementGeneratorService:
     ) -> Agreement:
         """Generate Version 1 draft agreement from structured analysis."""
         analysis = self.analysis_repo.get_analysis(analysis_id)
-        if analysis and not parties and analysis.parties:
+        client_party = None
+        provider_party = None
+        if analysis and analysis.parties:
+            client_party = next((p.name for p in analysis.parties if p.detected_role and "client" in p.detected_role.lower()), None)
+            provider_party = next((p.name for p in analysis.parties if p.detected_role and ("provider" in p.detected_role.lower() or "freelancer" in p.detected_role.lower() or "vendor" in p.detected_role.lower())), None)
+
+        if client_party and provider_party and client_party != provider_party:
+            p1 = client_party
+            p2 = provider_party
+            contracting_parties = [p1, p2]
+        elif parties:
+            contracting_parties = parties
+            p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
+            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
+        elif analysis and analysis.parties:
             contracting_parties = [p.name for p in analysis.parties]
+            p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
+            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
         else:
-            contracting_parties = parties or ["Raj Mehta", "Priya Sharma"]
+            contracting_parties = ["Raj Mehta", "Priya Sharma"]
+            p1 = contracting_parties[0]
+            p2 = contracting_parties[1]
 
-        p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
-        p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
-
-        # Dynamically synthesize clauses from analysis.extracted_terms if available
-        clauses = []
+        # Dynamically synthesize clauses: merge incoming resolved terms over analysis terms
+        extracted_terms = []
         if analysis and analysis.extracted_terms:
+            extracted_terms = list(analysis.extracted_terms)
+
+        if terms:
+            incoming_terms = [
+                ExtractedTerm.model_validate(t) if isinstance(t, dict) else t
+                for t in terms
+            ]
+            merged = {t.category: t for t in extracted_terms}
+            for it in incoming_terms:
+                merged[it.category] = it
+            extracted_terms = list(merged.values())
+
+        clauses = []
+        if extracted_terms:
             # 1. Scope
-            scope_term = next((t for t in analysis.extracted_terms if t.category == "scope"), None)
+            scope_term = next((t for t in extracted_terms if t.category == "scope"), None)
             if scope_term:
                 clauses.append(Clause(
                     clause_id="clause_scope_01",
@@ -68,8 +98,8 @@ class AgreementGeneratorService:
                 ))
 
             # 2. Consideration
-            pricing_term = next((t for t in analysis.extracted_terms if t.category == "pricing"), None)
-            payment_term = next((t for t in analysis.extracted_terms if t.category == "payment_terms"), None)
+            pricing_term = next((t for t in extracted_terms if t.category == "pricing"), None)
+            payment_term = next((t for t in extracted_terms if t.category == "payment_terms"), None)
             if pricing_term or payment_term:
                 price_val = pricing_term.accepted_value or pricing_term.proposed_value if pricing_term else "As agreed"
                 pay_desc = payment_term.description if payment_term else "Payable per agreed milestone schedule"
@@ -83,7 +113,7 @@ class AgreementGeneratorService:
                 ))
 
             # 3. Timeline
-            timeline_term = next((t for t in analysis.extracted_terms if t.category == "timeline"), None)
+            timeline_term = next((t for t in extracted_terms if t.category == "timeline"), None)
             if timeline_term:
                 clauses.append(Clause(
                     clause_id="clause_timeline_03",
@@ -93,7 +123,7 @@ class AgreementGeneratorService:
                 ))
 
             # 4. Other extracted terms
-            other_terms = [t for t in analysis.extracted_terms if t.category not in ("scope", "pricing", "payment_terms", "timeline")]
+            other_terms = [t for t in extracted_terms if t.category not in ("scope", "pricing", "payment_terms", "timeline")]
             for idx, ot in enumerate(other_terms, start=4):
                 clauses.append(Clause(
                     clause_id=f"clause_{ot.category}_{idx:02d}",
@@ -103,7 +133,7 @@ class AgreementGeneratorService:
                 ))
 
             # 5. IP & Statutory Safeguards
-            ip_missing = next((m for m in analysis.missing_terms if "ip" in m.category.lower() or "intellectual" in m.category.lower()), None)
+            ip_missing = next((m for m in analysis.missing_terms if "ip" in m.category.lower() or "intellectual" in m.category.lower()), None) if (analysis and analysis.missing_terms) else None
             idx_next = len(clauses) + 1
             clauses.append(Clause(
                 clause_id="clause_ip_safeguards",

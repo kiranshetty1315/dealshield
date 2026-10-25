@@ -262,7 +262,7 @@ function AnalysisContent() {
     setIsGenerating(true);
     try {
       const partyNames = analysis.parties.map((p) => p.name);
-      const agreement = await api.createAgreement(analysis.analysis_id, partyNames);
+      const agreement = await api.createAgreement(analysis.analysis_id, partyNames, terms);
       router.push(
         `/agreements?agreement_id=${encodeURIComponent(agreement.id)}&analysis_id=${encodeURIComponent(analysis.analysis_id)}`
       );

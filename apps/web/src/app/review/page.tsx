@@ -104,8 +104,16 @@ function ReviewContent() {
     setIsLoading(true);
     setErrorMessage(null);
 
+    const storedSession =
+      typeof window !== "undefined"
+        ? sessionStorage.getItem(`dealshield_review_session_${token}`)
+        : null;
+    if (storedSession) {
+      setSessionToken(storedSession);
+    }
+
     api
-      .inspectToken(token)
+      .inspectToken(token, storedSession || undefined)
       .then((data) => {
         setPartyName(data.party_name || "Counterparty");
         setMaskedEmail(data.masked_email || null);
@@ -207,6 +215,9 @@ function ReviewContent() {
       const sessionRes = await api.verifyOtp(token, cleanOtp);
       const activeSessionToken = sessionRes.session_token;
       setSessionToken(activeSessionToken);
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem(`dealshield_review_session_${token}`, activeSessionToken);
+      }
 
       // Fetch agreement draft using the new session token
       const inspectRes = await api.inspectToken(token, activeSessionToken);

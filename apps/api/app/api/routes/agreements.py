@@ -73,6 +73,7 @@ async def create_agreement(request: AgreementCreateRequest) -> Agreement:
     agreement = generator_service.generate_draft(
         analysis_id=request.analysis_id,
         parties=request.parties,
+        terms=request.terms,
     )
     return agreement
 

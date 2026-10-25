@@ -43,10 +43,20 @@ SCOPE_KEYWORDS = [
     "work",
     "deliver",
     "project",
+    "article",
+    "content",
+    "video",
+    "edit",
+    "consult",
+    "service",
+    "marketing",
+    "build",
+    "audit",
+    "redesign",
 ]
 
 PRICE_REPLY_REGEX = re.compile(
-    r"\b(price|prices|budget|budgets|rate|rates|fee|fees|charge|charges|cost|costs|ok|okay|deal|agree|agreed|works|can do|too high|too low|instead)\b",
+    r"\b(price|prices|budget|budgets|rate|rates|fee|fees|charge|charges|cost|costs|ok|okay|deal|agree|agreed|works|can do|too high|too low|instead|sounds good|sure|perfect|fine|accepted|accept|done|yes|confirmed|confirm|go ahead|great)\b",
     re.IGNORECASE,
 )
 
@@ -368,16 +378,50 @@ class AIExtractorService:
         self, chat_id: str, analysis_id: str, messages: List[Message]
     ) -> AgreementAnalysis:
         """Dynamic extraction for arbitrary conversations."""
-        # 1. Identify Parties & Roles
+        # 1. Identify Parties & Infer Roles from message content
         unique_senders: List[str] = []
         for m in messages:
             if m.sender not in unique_senders:
                 unique_senders.append(m.sender)
 
+        provider_patterns = [
+            r"\b(i can handle|i can do|i can design|i can develop|i can build|i normally charge|i'd normally charge|my charge|my fee|my rate|i'll send over|i will deliver|initial mockups|mockups|deliverables|my service fee|50% upfront|upfront)\b",
+        ]
+        client_patterns = [
+            r"\b(my budget|our budget|budget is|can you|can we meet|i need|we need|requirement|requirements|how much|what do you charge)\b",
+        ]
+        provider_score: Dict[str, int] = {s: 0 for s in unique_senders}
+        client_score: Dict[str, int] = {s: 0 for s in unique_senders}
+        for m in messages:
+            sender = m.sender
+            if sender not in provider_score:
+                continue
+            text = m.content.lower()
+            if any(re.search(pat, text, re.IGNORECASE) for pat in provider_patterns):
+                provider_score[sender] += 1
+            if any(re.search(pat, text, re.IGNORECASE) for pat in client_patterns):
+                client_score[sender] += 1
+
+        detected_roles: Dict[str, str] = {}
+        if len(unique_senders) == 2:
+            s1, s2 = unique_senders[0], unique_senders[1]
+            if provider_score[s1] > provider_score[s2] or client_score[s2] > client_score[s1]:
+                detected_roles[s1] = "Service Provider"
+                detected_roles[s2] = "Client"
+            elif provider_score[s2] > provider_score[s1] or client_score[s1] > client_score[s2]:
+                detected_roles[s1] = "Client"
+                detected_roles[s2] = "Service Provider"
+            else:
+                detected_roles[s1] = "Client"
+                detected_roles[s2] = "Service Provider"
+        else:
+            for idx, s in enumerate(unique_senders, start=1):
+                detected_roles[s] = "Client" if idx == 1 else "Service Provider"
+
         parties: List[Party] = []
         for idx, s in enumerate(unique_senders, start=1):
             slug = re.sub(r"[^a-z0-9]", "", s.split()[0].lower())[:10] or "user"
-            role = "Client" if idx == 1 else "Service Provider"
+            role = detected_roles.get(s, "Client" if idx == 1 else "Service Provider")
             parties.append(
                 Party(
                     party_id=f"party_{slug}_{idx:02d}",
@@ -408,16 +452,26 @@ class AIExtractorService:
         # 3. Extract Terms dynamically
         extracted_terms: List[ExtractedTerm] = []
 
-        # Pricing detection
+        # Pricing detection: separate base consideration from ancillary/monthly expenses
         price_msgs = self.conflict_detector.extract_price_mentions(messages)
         if price_msgs:
-            prices_found: List[str] = []
-            source_ids: List[str] = []
-            for msg, plist in price_msgs:
-                prices_found.extend(plist)
-                source_ids.append(msg.message_id)
+            ancillary_re = re.compile(r"(\bad spend\b|\bfor ads\b|\/month\b|\bper month\b|\bmonthly\b)", re.IGNORECASE)
+            base_prices_found: List[str] = []
+            base_source_ids: List[str] = []
+            all_prices_found: List[str] = []
+            all_source_ids: List[str] = []
 
-            unique_prices = list(dict.fromkeys(prices_found))
+            for msg, plist in price_msgs:
+                all_prices_found.extend(plist)
+                all_source_ids.append(msg.message_id)
+                if not ancillary_re.search(msg.content):
+                    base_prices_found.extend(plist)
+                    base_source_ids.append(msg.message_id)
+
+            target_prices = base_prices_found if base_prices_found else all_prices_found
+            target_ids = base_source_ids if base_source_ids else all_source_ids
+
+            unique_prices = list(dict.fromkeys(target_prices))
             is_ambiguous = len(unique_prices) > 1
             proposed_str = " / ".join(unique_prices[:-1]) if len(unique_prices) > 1 else unique_prices[0]
             accepted_str = unique_prices[-1]
@@ -430,7 +484,7 @@ class AIExtractorService:
                     proposed_value=proposed_str,
                     accepted_value=accepted_str,
                     status=TermStatus.AMBIGUOUS if is_ambiguous else TermStatus.AGREED,
-                    source_message_ids=source_ids,
+                    source_message_ids=target_ids,
                     confidence=ConfidenceLevel.MEDIUM if is_ambiguous else ConfidenceLevel.HIGH,
                 )
             )

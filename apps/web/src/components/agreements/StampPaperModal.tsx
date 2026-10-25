@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   FileText,
   Download,
@@ -30,6 +30,8 @@ export function StampPaperModal({
   agreement,
   confirmationStatus,
 }: StampPaperModalProps) {
+  const [isDownloading, setIsDownloading] = useState(false);
+
   if (!isOpen) return null;
 
   const currentVersion = agreement.versions?.[agreement.versions.length - 1];
@@ -60,7 +62,16 @@ export function StampPaperModal({
     window.print();
   };
 
-  const pdfUrl = api.getAgreementPdfUrl(agreement.id);
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      await api.downloadAgreementPdf(agreement.id);
+    } catch (err: any) {
+      alert(err?.message || "Failed to download agreement PDF");
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-xs overflow-y-auto print:p-0 print:bg-white print:static">
@@ -94,13 +105,12 @@ export function StampPaperModal({
 
             <Button
               size="sm"
-              asChild
+              onClick={handleDownload}
+              disabled={isDownloading}
               className="text-xs gap-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-sm"
             >
-              <a href={pdfUrl} target="_blank" rel="noopener noreferrer" download>
-                <Download className="h-3.5 w-3.5" />
-                <span>Download Agreement PDF</span>
-              </a>
+              <Download className="h-3.5 w-3.5" />
+              <span>{isDownloading ? "Downloading..." : "Download Agreement PDF"}</span>
             </Button>
 
             <button

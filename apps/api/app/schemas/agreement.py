@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -46,3 +46,4 @@ class AgreementCreateRequest(BaseModel):
     analysis_id: str = Field(..., description="Analysis ID to generate agreement from")
     template_type: str = Field(default="service_agreement", description="Template to base agreement on")
     parties: Optional[List[str]] = Field(default=None, description="Optional contracting party names override")
+    terms: Optional[List[Dict[str, Any]]] = Field(default=None, description="Optional resolved terms override")
