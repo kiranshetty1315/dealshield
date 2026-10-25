@@ -506,13 +506,58 @@ function ConfirmationsContent() {
     return p;
   });
 
+  // Stable helper to determine if a party is the contract initiator
+  const isPartyInitiator = (partyName: string): boolean => {
+    const pLower = partyName.trim().toLowerCase();
+    if (["you", "user", "me"].includes(pLower)) return true;
+
+    const firstAgreedParty = agreement?.parties?.[0];
+    if (firstAgreedParty) {
+      const firstLower = firstAgreedParty.trim().toLowerCase();
+      if (firstAgreedParty === partyName || firstLower === pLower) return true;
+      if (["you", "user", "me"].includes(firstLower)) {
+        if (user?.full_name && partyName.toLowerCase().includes(user.full_name.toLowerCase())) return true;
+      }
+    }
+
+    if (user?.full_name && (pLower.includes(user.full_name.toLowerCase()) || user.full_name.toLowerCase().includes(pLower))) {
+      return true;
+    }
+
+    return false;
+  };
+
   const partiesMap = new Map<string, PartyConfirmationRecord>();
   for (const p of rawParties) {
     if (!partiesMap.has(p.party_name) || (p.confirmed && !partiesMap.get(p.party_name)?.confirmed)) {
       partiesMap.set(p.party_name, p);
     }
   }
-  const partiesList = Array.from(partiesMap.values());
+
+  // Ensure deterministic, stable column placement:
+  // Column 1 (Left): Contract Initiator (You)
+  // Column 2 (Right): External Counterparty (Client)
+  const partiesList = Array.from(partiesMap.values()).sort((a, b) => {
+    const aIsInit = isPartyInitiator(a.party_name);
+    const bIsInit = isPartyInitiator(b.party_name);
+    if (aIsInit && !bIsInit) return -1;
+    if (!aIsInit && bIsInit) return 1;
+
+    // Secondary fallback: adhere to agreement.parties declaration order
+    if (agreement?.parties && agreement.parties.length > 0) {
+      const aIdx = agreement.parties.findIndex(
+        (p) => p === a.party_name || a.party_name.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(a.party_name.toLowerCase())
+      );
+      const bIdx = agreement.parties.findIndex(
+        (p) => p === b.party_name || b.party_name.toLowerCase().includes(p.toLowerCase()) || p.toLowerCase().includes(b.party_name.toLowerCase())
+      );
+      if (aIdx !== -1 && bIdx !== -1) return aIdx - bIdx;
+      if (aIdx !== -1) return -1;
+      if (bIdx !== -1) return 1;
+    }
+
+    return a.party_name.localeCompare(b.party_name);
+  });
 
   const isAllConfirmed = confirmationStatus
     ? confirmationStatus.all_confirmed
@@ -726,7 +771,9 @@ function ConfirmationsContent() {
               {partiesList.map((party, idx) => {
                 const isDeclined = Boolean(party.declined);
                 const isConfirmed = Boolean(party.confirmed);
-                const isInitiator = agreement?.parties?.[0] === party.party_name;
+                const isInitiator =
+                  isPartyInitiator(party.party_name) ||
+                  (idx === 0 && !isPartyInitiator(partiesList[1]?.party_name || ""));
 
                 return (
                   <div

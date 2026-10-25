@@ -625,6 +625,7 @@ class ConfirmationRepository:
             self.client.table("confirmations")
             .select("*")
             .eq("agreement_id", agreement_id)
+            .order("created_at", desc=False)
             .execute()
         )
         data = res.data if isinstance(res.data, list) else [res.data]
@@ -707,6 +708,25 @@ class ConfirmationRepository:
                 party_map[p_name] = rec
 
         records = list(party_map.values())
+
+        # Preserve stable party ordering: match agreement.parties order if available
+        try:
+            ag_res = self.client.table("agreements").select("parties").eq("id", agreement_id).execute()
+            ag_rows = ag_res.data if isinstance(ag_res.data, list) else ([ag_res.data] if ag_res.data else [])
+            if ag_rows and ag_rows[0].get("parties"):
+                ag_parties = [decrypt_message_content(p).strip().lower() for p in ag_rows[0]["parties"]]
+                def get_sort_idx(rec_name: str) -> int:
+                    rn = rec_name.strip().lower()
+                    if rn in ("you", "user", "me"):
+                        return 0
+                    for idx, ap in enumerate(ag_parties):
+                        if rn == ap or rn in ap or ap in rn:
+                            return idx
+                    return 999
+                records.sort(key=lambda r: get_sort_idx(r.party_name))
+        except Exception:
+            pass
+
         all_conf = len(records) > 0 and all(r.confirmed for r in records)
         any_dec = any(r.declined for r in records)
         return ConfirmationStatus(
