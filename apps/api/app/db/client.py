@@ -230,6 +230,9 @@ _local_db_instance = LocalMemoryDatabase()
 
 def is_live_supabase_configured() -> bool:
     """Checks whether non-placeholder Supabase credentials are configured."""
+    # Always isolate tests to in-memory local database engine
+    if "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
     url = settings.SUPABASE_URL.lower()
     key = settings.SUPABASE_SERVICE_ROLE_KEY.lower()
     if not url or "placeholder" in url or "your-project" in url:

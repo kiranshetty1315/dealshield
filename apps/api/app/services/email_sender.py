@@ -81,9 +81,13 @@ class SmtpEmailSender(EmailSender):
         if not settings.SMTP_HOST:
             raise ValueError("SMTP_HOST must be configured to use SmtpEmailSender")
 
+        from_address = settings.SMTP_FROM
+        if (not from_address or "dealshield.local" in from_address) and settings.SMTP_USERNAME and "@" in settings.SMTP_USERNAME:
+            from_address = f"DealShield AI <{settings.SMTP_USERNAME}>"
+
         msg = email.message.EmailMessage()
         msg["Subject"] = subject
-        msg["From"] = settings.SMTP_FROM
+        msg["From"] = from_address
         msg["To"] = to
         msg.set_content(body)
 
@@ -118,5 +122,10 @@ def get_email_sender() -> EmailSender:
         return InMemoryEmailSender()
     elif backend == "smtp":
         return SmtpEmailSender()
+    elif backend == "console":
+        return ConsoleEmailSender()
     else:
+        # If not explicitly specified, auto-select SMTP if host is configured
+        if settings.SMTP_HOST and settings.SMTP_USERNAME:
+            return SmtpEmailSender()
         return ConsoleEmailSender()
