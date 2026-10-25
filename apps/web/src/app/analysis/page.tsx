@@ -33,6 +33,7 @@ import {
   RefreshCw,
   ShieldCheck,
   AlertCircle,
+  Cpu,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -482,6 +483,25 @@ function AnalysisContent() {
                   <ShieldCheck className="h-3 w-3" />
                   Verified & Secured ({analysis.analysis_id.slice(0, 8)}...)
                 </Badge>
+                {analysis.extraction_engine === "llm" ? (
+                  <Badge
+                    variant="outline"
+                    className="border-indigo-300 bg-indigo-50 text-indigo-700 font-semibold text-xs flex items-center gap-1"
+                    title="Analyzed with Google Gemini 3.8 Flash structured legal reasoning"
+                  >
+                    <Sparkles className="h-3 w-3 text-indigo-600" />
+                    Gemini 3.8 Flash (LLM)
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-400 bg-amber-50 text-amber-800 font-semibold text-xs flex items-center gap-1"
+                    title="Analyzed with deterministic rule engine fallback (offline/no API key)"
+                  >
+                    <Cpu className="h-3 w-3 text-amber-600" />
+                    Rule Engine (Fallback)
+                  </Badge>
+                )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
                 Verified WhatsApp negotiation between{" "}
