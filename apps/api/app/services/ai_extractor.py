@@ -233,7 +233,7 @@ class AIExtractorService:
         client_kwargs: Dict[str, Any] = {
             "api_key": self.api_key,
             "max_retries": 0,
-            "timeout": 15.0,
+            "timeout": 45.0,
         }
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
