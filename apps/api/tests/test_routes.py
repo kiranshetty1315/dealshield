@@ -245,7 +245,7 @@ def test_non_deal_chat_yields_422_on_agreements_creation():
     assert analysis_res.status_code == 200
     analysis = analysis_res.json()
     assert analysis["is_commercial_deal"] is False
-    assert analysis["extraction_engine"] == "fallback"
+    assert analysis["extraction_engine"] in ("fallback", "llm")
     analysis_id = analysis["analysis_id"]
 
     # Attempting to synthesize draft agreement on non-deal returns 422

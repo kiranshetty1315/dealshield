@@ -720,11 +720,16 @@ class ConfirmationRepository:
 
     def check_email(self, raw_token: str, typed_email: str, typed_pan_last_4: Optional[str] = None) -> bool:
         """Compares typed email and Business PAN last 4 digits to stored credentials. Locks link after 5 failed attempts."""
-        generic_err = "We couldn't verify these credentials. Please check your email and Business PAN last 4 digits."
         token_hash = self.hash_token(raw_token)
         res = self.client.table("confirmations").select("*").eq("confirmation_token_hash", token_hash).execute()
         data = res.data
         row = data[0] if isinstance(data, list) and data else data
+        has_pan = bool(row and (row.get("pan_last_4_encrypted") or row.get("pan_last_4")))
+        generic_err = (
+            "We couldn't verify these credentials. Please check your email and Business PAN last 4 digits."
+            if has_pan
+            else "We couldn't verify this email address."
+        )
         if not row:
             raise ValueError(generic_err)
 
@@ -1502,11 +1507,17 @@ class AnalysisRepository:
 
     def get_analysis(self, analysis_id: str) -> Optional[AgreementAnalysis]:
         target_id = ensure_uuid(analysis_id)
-        res = self.client.table("analyses").select("*").eq("id", target_id).execute()
-        data = res.data[0] if isinstance(res.data, list) and res.data else res.data
-        if not data and target_id != analysis_id:
-            res = self.client.table("analyses").select("*").eq("id", analysis_id).execute()
+        try:
+            res = self.client.table("analyses").select("*").eq("id", target_id).execute()
             data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        except Exception:
+            data = None
+        if not data and is_valid_uuid(analysis_id) and target_id != analysis_id:
+            try:
+                res = self.client.table("analyses").select("*").eq("id", analysis_id).execute()
+                data = res.data[0] if isinstance(res.data, list) and res.data else res.data
+            except Exception:
+                pass
         if not data:
             return None
         an_at = data.get("analyzed_at")
@@ -1533,23 +1544,29 @@ class AnalysisRepository:
     def get_analysis_by_chat_id(self, conversation_id: str) -> Optional[AgreementAnalysis]:
         """Retrieves latest legal analysis record for a given conversation."""
         target_conv_id = ensure_uuid(conversation_id)
-        res = (
-            self.client.table("analyses")
-            .select("*")
-            .eq("conversation_id", target_conv_id)
-            .order("analyzed_at", desc=True)
-            .execute()
-        )
-        data = res.data
-        if not data and target_conv_id != conversation_id:
+        try:
             res = (
                 self.client.table("analyses")
                 .select("*")
-                .eq("conversation_id", conversation_id)
+                .eq("conversation_id", target_conv_id)
                 .order("analyzed_at", desc=True)
                 .execute()
             )
             data = res.data
+        except Exception:
+            data = None
+        if not data and is_valid_uuid(conversation_id) and target_conv_id != conversation_id:
+            try:
+                res = (
+                    self.client.table("analyses")
+                    .select("*")
+                    .eq("conversation_id", conversation_id)
+                    .order("analyzed_at", desc=True)
+                    .execute()
+                )
+                data = res.data
+            except Exception:
+                pass
 
         if not data:
             return None

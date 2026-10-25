@@ -116,7 +116,7 @@ def test_two_party_confirmation_workflow():
     # Create agreement
     res = client.post(
         "/api/v1/agreements",
-        json={"analysis_id": "analysis_conf_01"},
+        json={"analysis_id": "analysis_conf_01", "parties": ["Raj Mehta", "Priya Sharma"]},
     )
     agreement_id = res.json()["id"]
 
