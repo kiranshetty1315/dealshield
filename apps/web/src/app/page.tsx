@@ -241,13 +241,15 @@ function PublicLandingPage() {
           and issue counterparty confirmation links.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
-          <Link href="/login">
-            <Button size="lg" className="w-full sm:w-auto font-bold bg-white text-blue-700 hover:bg-blue-50 shadow-md">
+          <Link href="/login" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto font-bold bg-white text-blue-700 hover:bg-blue-50 shadow-md gap-2 px-6">
+              <LogIn className="h-4 w-4" />
               Sign In to Your Account
             </Button>
           </Link>
-          <Link href="/signup">
-            <Button size="lg" variant="outline" className="w-full sm:w-auto font-semibold border-white/40 text-white hover:bg-white/10">
+          <Link href="/signup" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto font-bold bg-slate-900 hover:bg-slate-950 text-white border-2 border-white/80 shadow-md gap-2 px-6 transition-all">
+              <UserPlus className="h-4 w-4" />
               Register New Account
             </Button>
           </Link>
