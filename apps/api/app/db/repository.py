@@ -1431,7 +1431,19 @@ class AnalysisRepository:
             "deal_rationale": analysis.deal_rationale,
             "extraction_engine": analysis.extraction_engine,
         }
-        res = self.client.table("analyses").insert(row).execute()
+        try:
+            res = self.client.table("analyses").insert(row).execute()
+        except Exception as e:
+            err_msg = str(e)
+            if "PGRST204" in err_msg or "schema cache" in err_msg or "Could not find" in err_msg:
+                # Fallback for un-migrated databases: strip migration 003 columns and retry
+                legacy_row = {
+                    k: v for k, v in row.items()
+                    if k not in ("is_commercial_deal", "deal_rationale", "extraction_engine")
+                }
+                res = self.client.table("analyses").insert(legacy_row).execute()
+            else:
+                raise e
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
 
     def get_analysis(self, analysis_id: str) -> Optional[AgreementAnalysis]:
