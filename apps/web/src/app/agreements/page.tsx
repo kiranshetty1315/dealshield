@@ -141,7 +141,7 @@ function AgreementsContent() {
       }
     } catch (err: any) {
       console.error("Failed to load agreement:", err);
-      setError(err?.message || "Failed to load agreement from Supabase database.");
+      setError(err?.message || "Failed to load agreement. Please try again.");
       setAgreement(null);
       setMessages([]);
     } finally {
@@ -231,7 +231,7 @@ function AgreementsContent() {
     return (
       <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-sm font-medium text-slate-700">Loading agreements from Supabase...</p>
+        <p className="text-sm font-medium text-slate-700">Loading agreements. Please wait...</p>
       </div>
     );
   }
@@ -485,9 +485,9 @@ function AgreementsContent() {
                 <CardContent className="pt-3 text-[11px] text-slate-600 space-y-2">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[10px]">
                     <div className="p-2 bg-white rounded border border-slate-200">
-                      <span className="text-slate-400 block">Conversation UUID:</span>
+                      <span className="text-slate-400 block">Conversation ID:</span>
                       <span className="text-slate-800 break-all font-semibold">
-                        {currentConversation?.id || selectedChatId || "Recorded in Supabase"}
+                        {currentConversation?.id || selectedChatId || "Recorded & Verified"}
                       </span>
                     </div>
                     <div className="p-2 bg-white rounded border border-slate-200">

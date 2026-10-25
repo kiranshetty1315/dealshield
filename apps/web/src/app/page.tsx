@@ -88,7 +88,7 @@ function PublicLandingPage() {
     {
       step: "05",
       title: "Tamper-Evident Evidence Vault",
-      desc: "Every record is sealed with SHA-256 cryptographic hashes and append-only audit ledgers for dispute protection.",
+      desc: "Every record is sealed with tamper-evident digital verification and immutable audit ledgers for dispute protection.",
       icon: Lock,
     },
   ];
@@ -261,7 +261,7 @@ function PublicLandingPage() {
           Statutory Standards & Privacy Architecture
         </p>
         <p className="max-w-3xl mx-auto leading-relaxed">
-          DealShield AI utilizes SHA-256 cryptographic digests and Fernet AES-128 encryption. Transcripts are parsed
+          DealShield AI utilizes tamper-evident cryptographic seals and enterprise-grade encryption. Transcripts are parsed
           in strict compliance with DPDP Act 2023 principles. Generated records serve as commercial evidence of agreement
           and do not substitute for statutory stamp duty payment or CA-certified digital signatures.
         </p>
@@ -309,7 +309,7 @@ function AuthenticatedWorkspace({ user }: { user: any }) {
     },
     {
       title: "5. Tamper-Evident Evidence Vault",
-      desc: "Record SHA-256 integrity digests and append-only audit trails for dispute protection.",
+      desc: "Maintain immutable integrity seals and tamper-evident audit trails for dispute protection.",
       icon: Lock,
       href: "/evidence",
       badge: "Ready",
@@ -415,7 +415,7 @@ function AuthenticatedWorkspace({ user }: { user: any }) {
           Integrity & Legal Disclaimers
         </h3>
         <p>
-          DealShield AI utilizes SHA-256 cryptographic digests to verify file consistency against append-only audit records.
+          DealShield AI utilizes digital cryptographic seals to verify file consistency against immutable audit records.
           In accordance with Indian legal principles (Indian Contract Act 1872, Information Technology Act 2000),
           a cryptographic hash proves document immutability since hashing, but does not substitute for statutory eSign / Certifying Authority digital signatures.
         </p>

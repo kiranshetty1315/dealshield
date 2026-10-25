@@ -60,7 +60,7 @@ export default function DashboardPage() {
       setStats(data);
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
-      setError(err?.message || "Failed to load live workspace metrics from database.");
+      setError(err?.message || "Failed to load workspace metrics. Please try again.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -107,7 +107,7 @@ export default function DashboardPage() {
             onClick={() => fetchDashboardData(true)}
             disabled={isLoading || isRefreshing}
             className="gap-2 text-slate-600 border-slate-300 hover:bg-slate-50"
-            title="Refresh live data from database"
+            title="Refresh workspace data"
           >
             <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             <span className="hidden sm:inline">Refresh</span>
@@ -241,7 +241,7 @@ export default function DashboardPage() {
               </CardTitle>
             )}
             <p className="text-xs text-slate-500 mt-1">
-              100% SHA-256 tamper-evident
+              100% Tamper-Evident Vault
             </p>
           </CardContent>
         </Card>

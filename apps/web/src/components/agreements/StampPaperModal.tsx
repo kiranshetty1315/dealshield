@@ -161,7 +161,7 @@ export function StampPaperModal({
                 </div>
                 <div className="p-2.5 space-y-0.5">
                   <span className="font-semibold text-slate-500 block text-[10px]">Integrity Digest</span>
-                  <span className="font-mono text-slate-700 truncate block">SHA-256 Fingerprint</span>
+                  <span className="font-mono text-slate-700 truncate block">Digital Fingerprint</span>
                 </div>
                 <div className="p-2.5 space-y-0.5">
                   <span className="font-semibold text-slate-500 block text-[10px]">Assent Method</span>
@@ -284,10 +284,10 @@ export function StampPaperModal({
                 DealShield AI Cryptographic Record &amp; Integrity Seal
               </p>
               <p className="font-mono truncate">
-                SHA-256 Digest: {currentVersion?.content_hash || "Standard Agreement Fingerprint"}
+                Verification Digest: {currentVersion?.content_hash || "Standard Agreement Fingerprint"}
               </p>
               <p className="text-slate-500">
-                Private Commercial Record &bull; Notary/Statutory Stamp Duty Not Included &bull; Tamper-Evident SHA-256 Ledger
+                Private Commercial Record &bull; Notary/Statutory Stamp Duty Not Included &bull; Tamper-Evident Audit Ledger
               </p>
             </div>
           </div>

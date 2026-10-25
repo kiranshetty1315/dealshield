@@ -31,6 +31,7 @@ import {
   CheckCircle2,
   ChevronDown,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -143,7 +144,7 @@ function AnalysisContent() {
       }
     } catch (err: any) {
       console.error("Failed to load analysis for chat:", err);
-      setError(err?.message || "Failed to load legal analysis from Supabase.");
+      setError(err?.message || "Failed to load legal analysis. Please try again.");
       setAnalysis(null);
       setMessages([]);
     } finally {
@@ -278,7 +279,7 @@ function AnalysisContent() {
     return (
       <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-sm font-medium text-slate-700">Loading negotiations from Supabase...</p>
+        <p className="text-sm font-medium text-slate-700">Loading negotiations. Please wait...</p>
       </div>
     );
   }
@@ -461,8 +462,8 @@ function AnalysisContent() {
                   variant="outline"
                   className="border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold text-xs flex items-center gap-1"
                 >
-                  <Database className="h-3 w-3" />
-                  Live Supabase Verified ({analysis.analysis_id.slice(0, 8)}...)
+                  <ShieldCheck className="h-3 w-3" />
+                  Verified & Secured ({analysis.analysis_id.slice(0, 8)}...)
                 </Badge>
               </div>
               <p className="text-xs sm:text-sm text-slate-500 mt-1">
@@ -653,7 +654,7 @@ function AnalysisContent() {
                 <p className="leading-relaxed text-[11px] text-blue-800">
                   Every extracted term and conflict is tied to an immutable citation ID (e.g.,{" "}
                   <code className="font-mono bg-blue-100 text-blue-900 px-1 py-0.5 rounded">msg_...</code>).
-                  Tamper-evident SHA-256 cryptographic hashing ensures the original chat export is matched with each generated agreement clause.
+                  Tamper-evident digital verification ensures the original chat export is matched with each generated agreement clause.
                 </p>
               </div>
             </div>

@@ -176,7 +176,7 @@ function ConfirmationsContent() {
         if (analysisData) setCurrentAnalysis(analysisData);
       } catch (err: any) {
         console.error("Failed to load confirmations for agreement:", err);
-        setErrorMessage(err?.message || "Failed to load agreement confirmations from Supabase.");
+        setErrorMessage(err?.message || "Failed to load agreement confirmations. Please try again.");
         setAgreement(null);
         setConfirmationStatus(null);
       } finally {
@@ -295,7 +295,7 @@ function ConfirmationsContent() {
       );
       setConfirmationStatus(updatedStatus);
       await refreshStatus(agreement.id);
-      setFeedbackMessage(`Successfully recorded formal assent for ${partyName} in database.`);
+      setFeedbackMessage(`Successfully recorded formal assent for ${partyName}.`);
     } catch (err: any) {
       setErrorMessage(`Confirmation failed: ${err.message || err}`);
     } finally {
@@ -386,7 +386,7 @@ function ConfirmationsContent() {
     return (
       <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-        <p className="text-sm font-medium text-slate-700">Loading negotiations from Supabase...</p>
+        <p className="text-sm font-medium text-slate-700">Loading negotiations. Please wait...</p>
       </div>
     );
   }
@@ -511,7 +511,7 @@ function ConfirmationsContent() {
               onClick={() => agreement?.id && refreshStatus(agreement.id)}
               disabled={isLoadingStatus || !agreement?.id}
               className="gap-1.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-50"
-              title="Force re-fetch confirmation status from database"
+              title="Refresh confirmation status"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${isLoadingStatus ? "animate-spin" : ""}`} />
               <span>Refresh Status</span>
@@ -946,7 +946,7 @@ function ConfirmationsContent() {
                   )}
                 </div>
                 <p className="text-xs text-emerald-800">
-                  Both parties have unconditionally assented under Section 7 of the Indian Contract Act. An immutable SHA-256 digital certificate is preserved in the evidence repository.
+                  Both parties have unconditionally assented under Section 7 of the Indian Contract Act. An immutable digital certificate is preserved in the evidence repository.
                 </p>
               </div>
 
@@ -1001,7 +1001,7 @@ function ConfirmationsContent() {
                     Agreement Finalized? Exercise DPDP Act Right to Erasure
                   </span>
                   <p className="text-blue-800 text-[11px]">
-                    Now that all obligations are formalized into the executed agreement, you can permanently erase underlying WhatsApp chat messages from the database.
+                    Now that all obligations are formalized into the executed agreement, you can permanently erase underlying WhatsApp chat messages from your vault.
                   </p>
                 </div>
                 <Link href="/settings">

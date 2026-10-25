@@ -54,7 +54,7 @@ export default function UploadPage() {
               <ShieldCheck className="h-4 w-4 text-emerald-600" /> 3. Tamper-Evident Security
             </div>
             <p className="text-emerald-800/90 leading-relaxed">
-              Transcript is automatically encrypted (Fernet AES-128) and fingerprinted with SHA-256 into a tamper-evident audit ledger.
+              Transcripts are automatically encrypted and secured in an immutable, tamper-evident audit vault.
             </p>
           </div>
         </div>

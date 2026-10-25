@@ -225,7 +225,7 @@ export default function SignupPage() {
                 Statutory Privacy Protection
               </div>
               <p>
-                All uploaded WhatsApp transcripts are protected under application-level Fernet (AES-128-CBC + HMAC) encryption with Section 12 DPDP Act 2023 erasure rights.
+                All uploaded WhatsApp transcripts are protected under secure application-level encryption with Section 12 DPDP Act 2023 erasure rights.
               </p>
             </div>
 

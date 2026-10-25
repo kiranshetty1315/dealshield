@@ -87,11 +87,11 @@ function EvidenceContent() {
             Tamper-Evident Ledger
           </Badge>
           <Badge variant="outline" className="border-blue-300 text-blue-700 bg-blue-50">
-            SHA-256 Protected
+            Cryptographically Protected
           </Badge>
         </div>
         <p className="text-sm text-slate-500 mt-1">
-          Cryptographically verify document integrity and inspect append-only audit records from Supabase.
+          Cryptographically verify document integrity and inspect immutable audit records.
         </p>
       </div>
 
@@ -119,7 +119,7 @@ function EvidenceContent() {
         <CardContent className="space-y-4 pt-4">
           <div className="flex items-center gap-2 flex-wrap">
             <Input
-              placeholder="Enter Entity ID (UUID of agreement, analysis, or conversation)..."
+              placeholder="Enter Entity ID (ID of agreement, analysis, or conversation)..."
               value={auditEntityId}
               onChange={(e) => setAuditEntityId(e.target.value)}
               className="text-xs font-mono max-w-lg"
@@ -133,7 +133,7 @@ function EvidenceContent() {
               {isFetchingAudit ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Fetching Log...
+                  Loading records... Please wait
                 </>
               ) : (
                 <>

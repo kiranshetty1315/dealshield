@@ -121,7 +121,7 @@ export default function ProfilePage() {
         organization: editOrganization.trim() || undefined,
         role: editRole.trim() || undefined,
       });
-      setSaveSuccess("Profile successfully updated in PostgreSQL database.");
+      setSaveSuccess("Profile successfully updated.");
       setIsEditing(false);
     } catch (err: any) {
       setSaveError(err.message || "Failed to update profile.");
@@ -244,7 +244,7 @@ export default function ProfilePage() {
             <div>
               <p className="font-bold text-sm">Successfully Logged Out</p>
               <p className="text-xs text-emerald-800">
-                You have been safely signed out of your DealShield database session.
+                You have been safely signed out of your DealShield account.
               </p>
             </div>
           </div>
@@ -289,7 +289,7 @@ export default function ProfilePage() {
               </Button>
             </div>
             <CardDescription className="text-xs text-blue-800">
-              Update your commercial identity. Changes are directly saved to the Supabase database.
+              Update your commercial identity and profile details.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5">
@@ -354,7 +354,7 @@ export default function ProfilePage() {
                   {isSaving ? (
                     <>
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      Saving to Database...
+                      Saving changes... Please wait
                     </>
                   ) : (
                     <>
@@ -378,7 +378,7 @@ export default function ProfilePage() {
             </Badge>
             <Badge className="bg-emerald-500/90 text-white text-xs font-semibold backdrop-blur-sm border-0 shadow-xs flex items-center gap-1">
               <ShieldCheck className="h-3 w-3" />
-              Database Verified Account
+              Verified Commercial Account
             </Badge>
           </div>
         </div>
@@ -442,12 +442,12 @@ export default function ProfilePage() {
             <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
                 <Fingerprint className="h-3 w-3 text-slate-500" />
-                Account Identifier (UUID)
+                Account Identifier
               </span>
               <p className="text-xs font-mono font-bold text-slate-800 truncate" title={displayId}>
                 {displayId}
               </p>
-              <p className="text-[11px] text-slate-500">PostgreSQL / Supabase Identity Record</p>
+              <p className="text-[11px] text-slate-500">Verified Account Identity Record</p>
             </div>
 
             <div className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/70 space-y-1">
@@ -458,7 +458,7 @@ export default function ProfilePage() {
               <p className="text-xs font-bold text-slate-800">
                 {formatMemberDate(user?.created_at)}
               </p>
-              <p className="text-[11px] text-emerald-600 font-medium">Active Database User</p>
+              <p className="text-[11px] text-emerald-600 font-medium">Active Commercial Account</p>
             </div>
           </div>
         </CardContent>
@@ -482,9 +482,9 @@ export default function ProfilePage() {
                 <Lock className="h-4 w-4" />
               </div>
               <div className="space-y-0.5">
-                <span className="font-bold text-slate-900 block">Fernet (AES-128) Message Encryption</span>
+                <span className="font-bold text-slate-900 block">End-to-End Vault Encryption</span>
                 <p className="text-[11px] text-slate-500">
-                  Transcripts and raw WhatsApp messages are encrypted at rest with Fernet symmetric cryptography in Supabase.
+                  Transcripts and negotiation messages are securely encrypted at rest in your tamper-evident vault.
                 </p>
               </div>
             </div>
@@ -496,7 +496,7 @@ export default function ProfilePage() {
               <div className="space-y-0.5">
                 <span className="font-bold text-slate-900 block">DPDP Act 2023 Compliance</span>
                 <p className="text-[11px] text-slate-500">
-                  Supports Section 12 Right to Erasure with irreversible database purging and HMAC IP anonymization.
+                  Supports Section 12 Right to Erasure with permanent data purging and privacy protection.
                 </p>
               </div>
             </div>
@@ -519,11 +519,11 @@ export default function ProfilePage() {
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="pb-3 border-b border-slate-100 bg-slate-50/50">
             <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900">
-              <Database className="h-4 w-4 text-blue-600" />
-              Live Database Workspace Metrics
+              <ShieldCheck className="h-4 w-4 text-blue-600" />
+              Workspace Metrics
             </CardTitle>
             <CardDescription className="text-xs">
-              Real-time records queried directly from PostgreSQL database
+              Real-time activity and records for your account
             </CardDescription>
           </CardHeader>
           <CardContent className="p-5 space-y-4 text-xs">
@@ -593,10 +593,10 @@ export default function ProfilePage() {
               <div>
                 <CardTitle className="text-sm font-bold flex items-center gap-2 text-slate-900">
                   <Activity className="h-4 w-4 text-blue-600" />
-                  Recent Negotiations in Database
+                  Recent Negotiations
                 </CardTitle>
                 <CardDescription className="text-xs">
-                  Your latest transcripts saved in Supabase
+                  Your latest transcripts secured in your account
                 </CardDescription>
               </div>
               <Link href="/dashboard">
@@ -665,13 +665,13 @@ export default function ProfilePage() {
               <div className="space-y-1.5">
                 <h3 className="font-bold text-base text-slate-900">Confirm Log Out</h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Are you sure you want to log out of your DealShield database session?
+                  Are you sure you want to log out of your DealShield account?
                 </p>
               </div>
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
-              Logging out terminates your authenticated JWT Bearer session and securely clears local storage credentials.
+              Logging out will securely end your session on this device.
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">

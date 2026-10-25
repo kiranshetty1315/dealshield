@@ -333,7 +333,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
                       {isUploading ? (
                         <>
                           <Loader2 className="h-4 w-4 animate-spin" />
-                          Encrypting, hashing, and parsing negotiation...
+                          Encrypting and verifying negotiation...
                         </>
                       ) : (
                         <>
@@ -386,7 +386,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
                     {isUploading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Validating and parsing transcript...
+                        Validating and verifying transcript...
                       </>
                     ) : (
                       <>
@@ -414,7 +414,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
                       Negotiation Successfully Ingested
                     </h3>
                     <p className="text-xs text-slate-500">
-                      {result.filename} • Encrypted in Supabase with SHA-256 fingerprint
+                      {result.filename} • Encrypted and secured in tamper-evident vault
                     </p>
                   </div>
                 </div>

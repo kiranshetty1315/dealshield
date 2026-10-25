@@ -178,7 +178,7 @@ export default function LoginPage() {
       fallback={
         <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-slate-700">Loading Sign In...</p>
+          <p className="text-sm font-medium text-slate-700">Loading... Please wait</p>
         </div>
       }
     >

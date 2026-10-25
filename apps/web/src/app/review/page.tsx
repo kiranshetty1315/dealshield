@@ -826,7 +826,7 @@ export default function ReviewPage() {
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-slate-50 text-xs text-slate-500">
           <Loader2 className="h-6 w-6 animate-spin text-blue-600 mr-2" />
-          Loading agreement review...
+          Loading agreement. Please wait...
         </div>
       }
     >

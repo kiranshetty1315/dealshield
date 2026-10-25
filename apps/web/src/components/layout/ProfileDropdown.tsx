@@ -83,7 +83,7 @@ export function ProfileDropdown() {
                   {displayRole}
                 </span>
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Fernet Protected
+                  Encrypted & Protected
                 </span>
               </div>
             </div>
@@ -141,7 +141,7 @@ export function ProfileDropdown() {
             </div>
 
             <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-slate-600">
-              In production, logging out terminates your active Supabase Auth JWT session.
+              Logging out will securely end your session on this device.
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-2">
