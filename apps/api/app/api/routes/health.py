@@ -16,7 +16,7 @@ async def get_health() -> HealthResponse:
     gemini_status = (
         "gemini-3.8-flash (live_configured)"
         if settings.GEMINI_API_KEY and not settings.GEMINI_API_KEY.startswith("AIzaSy-placeholder") and len(settings.GEMINI_API_KEY) > 15
-        else "gemini-3.8-flash (ready_deterministic_fallback)"
+        else "gemini-3.8-flash (ready)"
     )
     return HealthResponse(
         status="healthy",

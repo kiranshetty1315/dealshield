@@ -190,16 +190,8 @@ async def inspect_token(
         ag_id = row.get("agreement_id")
         if ag_id:
             try:
-                from app.services.agreement_generator import AgreementGeneratorService
                 ag_repo = AgreementRepository(client=conf_repo.client)
                 ag = ag_repo.get_agreement(ag_id)
-                if not ag and ag_id == "sample-agreement-uuid":
-                    gen = AgreementGeneratorService()
-                    ag = gen.generate_draft(
-                        analysis_id="analysis_sample_01",
-                        parties=["Raj Mehta", "Priya Sharma"],
-                        agreement_id="sample-agreement-uuid",
-                    )
                 if ag:
                     agreement_data = ag.model_dump()
             except Exception:
@@ -437,14 +429,6 @@ async def download_counterparty_pdf(
 
     ag_repo = AgreementRepository(client=conf_repo.client)
     agreement = ag_repo.get_agreement(ag_id)
-    if not agreement and ag_id == "sample-agreement-uuid":
-        gen = AgreementGeneratorService()
-        agreement = gen.generate_draft(
-            analysis_id="analysis_sample_01",
-            parties=["Raj Mehta", "Priya Sharma"],
-            agreement_id="sample-agreement-uuid",
-        )
-
     if not agreement:
         raise HTTPException(status_code=404, detail="Agreement record not found.")
 

@@ -61,12 +61,6 @@ function LoginContent() {
     }
   };
 
-  const handleFillDemoCredentials = () => {
-    setEmail("demo@dealshield.local");
-    setPassword("password123");
-    setError(null);
-  };
-
   return (
     <div className="container mx-auto px-4 py-12 sm:py-20 flex flex-col items-center justify-center min-h-[calc(100vh-160px)]">
       <div className="w-full max-w-md space-y-6">
@@ -164,27 +158,6 @@ function LoginContent() {
                 )}
               </Button>
             </form>
-
-            {/* Quick Demo Helper Box */}
-            <div className="border border-blue-100 bg-blue-50/70 rounded-xl p-3.5 text-xs text-blue-900 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold flex items-center gap-1.5 text-xs">
-                  <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                  Evaluation & Demo Mode
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleFillDemoCredentials}
-                  className="h-6 text-[10px] px-2 border-blue-300 text-blue-700 hover:bg-blue-100"
-                >
-                  Fill Demo
-                </Button>
-              </div>
-              <p className="text-[11px] text-blue-800 leading-relaxed font-mono">
-                demo@dealshield.local / password123
-              </p>
-            </div>
 
             <div className="pt-2 text-center text-xs text-slate-500">
               Don&apos;t have an account yet?{" "}

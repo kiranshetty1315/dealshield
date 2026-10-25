@@ -27,9 +27,6 @@ def check_agreement_access(
     x_review_session: Optional[str] = None,
 ) -> bool:
     """Verifies that caller has authorization to view or download agreement record."""
-    if agreement_id == "sample-agreement-uuid" and settings.ENVIRONMENT == "development":
-        return True
-
     if current_user and user_owns_agreement(agreement_repo.client, current_user["id"], agreement_id):
         return True
 
@@ -152,15 +149,6 @@ async def get_agreement(
 
     agreement = agreement_repo.get_agreement(agreement_id)
     if not agreement:
-        if agreement_id == "sample-agreement-uuid":
-            # Auto-seed sample agreement draft so confirmations view is immediately operational
-            agreement = generator_service.generate_draft(
-                analysis_id="analysis_sample_01",
-                parties=["Raj Mehta", "Priya Sharma"],
-                agreement_id="sample-agreement-uuid",
-            )
-            return agreement
-
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Agreement {agreement_id} not found."
@@ -188,17 +176,10 @@ async def export_agreement_pdf(
 
     agreement = agreement_repo.get_agreement(agreement_id)
     if not agreement:
-        if agreement_id == "sample-agreement-uuid":
-            agreement = generator_service.generate_draft(
-                analysis_id="analysis_sample_01",
-                parties=["Raj Mehta", "Priya Sharma"],
-                agreement_id="sample-agreement-uuid",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Agreement {agreement_id} not found."
-            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agreement {agreement_id} not found."
+        )
 
     # If explicitly requested as plain text
     if format in ("txt", "text"):

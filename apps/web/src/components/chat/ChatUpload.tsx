@@ -352,7 +352,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
                       value={chatText}
                       onChange={(e) => setChatText(e.target.value)}
                       disabled={isUploading}
-                      placeholder={`Paste exported WhatsApp conversation lines here...&#10;&#10;Format Examples:&#10;12/03/24, 10:15 - Raj Mehta: Hi Priya, regarding the project scope&#10;12/03/24, 10:18 - Priya Sharma: Yes, ₹1,00,000 with 50% upfront`}
+                      placeholder={`Paste exported WhatsApp conversation lines here...&#10;&#10;Format Examples:&#10;12/03/24, 10:15 - Client: Hi, regarding the project scope&#10;12/03/24, 10:18 - Provider: Yes, ₹1,00,000 with 50% upfront`}
                       className="w-full h-52 p-4 text-xs font-mono border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-600 resize-none bg-slate-50/40 text-slate-800 placeholder:text-slate-400 leading-relaxed"
                     />
                   </div>

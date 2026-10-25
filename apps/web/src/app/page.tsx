@@ -151,18 +151,6 @@ function PublicLandingPage() {
             </Button>
           </Link>
         </div>
-
-        {/* Demo Quick Credential Hint */}
-        <div className="pt-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs text-slate-600">
-            <Zap className="h-3.5 w-3.5 text-amber-600" />
-            <span>Testing the app? Use demo account:</span>
-            <span className="font-mono font-semibold text-slate-800">demo@dealshield.local</span>
-            <Link href="/login" className="text-blue-600 font-bold hover:underline ml-1">
-              Quick Sign In &rarr;
-            </Link>
-          </div>
-        </div>
       </section>
 
       {/* What is DealShield AI? Section */}

@@ -42,8 +42,8 @@ export function ProfileDropdown() {
     router.refresh();
   };
 
-  const displayName = user?.full_name || "Demo User";
-  const displayEmail = user?.email || "demo@dealshield.local";
+  const displayName = user?.full_name || user?.email?.split("@")[0] || "User";
+  const displayEmail = user?.email || "";
   const displayRole = user?.role || "Contract Sponsor";
 
   const initials = displayName

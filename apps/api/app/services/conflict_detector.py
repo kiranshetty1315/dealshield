@@ -84,11 +84,6 @@ class ConflictDetectorService:
         if not messages:
             return []
 
-        # Check for Sample 1 signature
-        sample_1_conflict = self._check_sample_1(messages)
-        if sample_1_conflict:
-            return [sample_1_conflict]
-
         conflicts: List[ConflictItem] = []
 
         # 1. Detect Pricing Conflicts & Counter-Proposals
@@ -107,44 +102,6 @@ class ConflictDetectorService:
 
         return conflicts
 
-    def _check_sample_1(self, messages: List[Message]) -> Optional[ConflictItem]:
-        """Check for canonical Sample 1 negotiation fixture to ensure 100% precision match."""
-        senders = {m.sender.lower() for m in messages}
-        all_text = " ".join(m.content for m in messages).lower()
-        if (
-            any("raj" in s for s in senders)
-            and any("priya" in s for s in senders)
-            and "75,000" in all_text
-            and "1,50,000" in all_text
-            and "1,00,000" in all_text
-        ):
-            # Gather exact message IDs for pricing negotiation in Sample 1
-            source_ids = []
-            for m in messages:
-                if any(k in m.content for k in ["75,000", "1,50,000", "1,00,000", "50% upfront", "works I think"]):
-                    source_ids.append(m.message_id)
-
-            if not source_ids:
-                source_ids = ["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"]
-
-            return ConflictItem(
-                conflict_id="conflict_price_01",
-                term_category="pricing",
-                description="Price disagreement between ₹75,000 and ₹1,50,000 settled at ₹1,00,000 with ambiguous acceptance",
-                party_positions={
-                    "Raj Mehta": "Offered ₹75,000, then agreed to ₹1,00,000 saying 'Sure, that works I think. Let's go ahead'",
-                    "Priya Sharma": "Demanded ₹1,50,000, accepted ₹1,00,000 strictly subject to 50% upfront",
-                },
-                source_message_ids=source_ids,
-                severity=ConflictSeverity.HIGH,
-                resolution_suggestion="Formally confirm consideration at ₹1,00,000 with ₹50,000 paid upon signing.",
-                statutory_context=(
-                    "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. "
-                    "The phrase 'that works I think' introduces legal ambiguity."
-                ),
-            )
-        return None
-
     def _detect_pricing_conflict(self, messages: List[Message]) -> Optional[ConflictItem]:
         """Detect multi-party price counter-offers and hedged settlement."""
         price_msgs = self.extract_price_mentions(messages)
@@ -159,9 +116,9 @@ class ConflictDetectorService:
                     distinct_prices.append(p)
 
         # If 2 or more distinct prices are proposed, or price is hedged
-        parties_involved: Dict[str, List[Tuple[Message, str]]] = {}
+        parties_involved: Dict[str, Dict[str, Tuple[Message, str]]] = {}
         for msg, prices in price_msgs:
-            parties_involved.setdefault(msg.sender, []).append((msg, ", ".join(prices)))
+            parties_involved.setdefault(msg.sender, {})[msg.message_id] = (msg, ", ".join(prices))
 
         # Check if there is price variation or negotiation
         has_multiple_prices = len(distinct_prices) >= 2
@@ -175,28 +132,43 @@ class ConflictDetectorService:
                 has_hedge_near_price = True
                 if msg.message_id not in source_message_ids:
                     source_message_ids.append(msg.message_id)
+                if msg.message_id not in parties_involved.get(msg.sender, {}):
+                    parties_involved.setdefault(msg.sender, {})[msg.message_id] = (msg, "hedged statement")
 
         if has_multiple_prices or has_hedge_near_price:
             party_positions: Dict[str, str] = {}
-            for sender, entries in parties_involved.items():
-                quoted = [f"{e[1]} ({e[0].content.strip()})" for e in entries]
-                party_positions[sender] = f"Proposed/discussed: {'; '.join(quoted[:2])}"
+            for sender, msg_map in parties_involved.items():
+                entries = list(msg_map.values())
+                quoted = [f"{e[1]} ({e[0].content.strip()})" if e[1] != "hedged statement" else e[0].content.strip() for e in entries]
+                party_positions[sender] = f"Proposed/discussed: {'; '.join(quoted[:4])}"
 
-            prices_str = " and ".join(distinct_prices[:2]) if len(distinct_prices) >= 2 else (distinct_prices[0] if distinct_prices else "disputed consideration")
+            if len(distinct_prices) >= 3:
+                prices_str = f"{', '.join(distinct_prices[:-1])} and {distinct_prices[-1]}"
+            elif len(distinct_prices) == 2:
+                prices_str = f"{distinct_prices[0]} and {distinct_prices[1]}"
+            elif distinct_prices:
+                prices_str = distinct_prices[0]
+            else:
+                prices_str = "disputed consideration"
             final_price = distinct_prices[-1] if distinct_prices else "the proposed amount"
+
+            statutory_notes = (
+                "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. "
+                "Counter-proposals discharge the original offer until mutually ratified."
+            )
+            hedged_quotes = [e[0].content.strip() for msg_map in parties_involved.values() for e in msg_map.values() if e[1] == "hedged statement"]
+            if hedged_quotes:
+                statutory_notes += f" Qualified statements ({'; '.join(repr(q) for q in hedged_quotes)}) introduce legal ambiguity under Section 7."
 
             return ConflictItem(
                 conflict_id="conflict_price_01",
                 term_category="pricing",
-                description=f"Price negotiation between {prices_str} requiring absolute confirmation under Section 7",
+                description=f"Price disagreement between {prices_str} settled at {final_price} with ambiguous acceptance",
                 party_positions=party_positions,
                 source_message_ids=source_message_ids,
                 severity=ConflictSeverity.HIGH,
                 resolution_suggestion=f"Confirm total fixed consideration at {final_price} with clear milestone payment terms.",
-                statutory_context=(
-                    "Indian Contract Act, 1872 Section 7: Acceptance must be absolute and unqualified. "
-                    "Counter-proposals discharge the original offer until mutually ratified."
-                ),
+                statutory_context=statutory_notes,
             )
         return None
 

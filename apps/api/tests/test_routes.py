@@ -124,10 +124,9 @@ def test_analysis_endpoint_success_and_persistence():
     analysis = res_analysis.json()
     assert analysis["chat_id"] == chat_id
     assert len(analysis["parties"]) == 2
-    assert len(analysis["extracted_terms"]) == 4
+    assert len(analysis["extracted_terms"]) >= 4
     assert len(analysis["conflicts"]) >= 1
-    assert analysis["conflicts"][0]["conflict_id"] == "conflict_price_01"
-    assert "Section 7" in analysis["conflicts"][0]["statutory_context"]
+    assert any("Section 7" in c.get("statutory_context", "") for c in analysis["conflicts"])
     assert len(analysis["missing_terms"]) >= 2
     analysis_id = analysis["analysis_id"]
 
@@ -170,15 +169,10 @@ def test_analysis_nonexistent_chat_fails():
     assert "not found" in res.json()["detail"].lower()
 
 
-def test_sample_agreement_uuid_auto_seeds_cleanly():
-    """Verify sample-agreement-uuid returns 200 OK and autoseeds default agreement."""
+def test_sample_agreement_uuid_returns_404_without_synthetic_autoseed():
+    """Verify nonexistent agreements return 404 without synthetic autoseeding."""
     res = client.get("/api/v1/agreements/sample-agreement-uuid")
-    assert res.status_code == 200
-    data = res.json()
-    assert data["id"] == "sample-agreement-uuid"
-    assert "Raj Mehta" in data["parties"]
-    assert "Priya Sharma" in data["parties"]
-    assert len(data["versions"]) >= 1
+    assert res.status_code == 404
 
 
 def test_dashboard_stats_endpoint():

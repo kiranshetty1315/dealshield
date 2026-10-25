@@ -14,21 +14,12 @@ interface AuthContextType {
   logout: () => Promise<void>;
   updateUser: (data: { full_name?: string; organization?: string; role?: string }) => Promise<User>;
   refreshUser: () => Promise<User | null>;
-  setDemoUser: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const STORAGE_KEY_USER = "dealshield_auth_user";
 const STORAGE_KEY_TOKEN = "dealshield_auth_token";
-
-const DEFAULT_DEMO_USER: User = {
-  id: "00000000-0000-0000-0000-000000000001",
-  email: "demo@dealshield.local",
-  full_name: "DealShield User",
-  role: "Contract Sponsor",
-  organization: "",
-};
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -87,14 +78,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanUser));
       return cleanUser;
     } catch (err) {
-      // Offline fallback: if backend is unreachable, allow standard demo user credentials
-      if (email.trim().toLowerCase() === "demo@dealshield.local" && password === "password123") {
-        setUser(DEFAULT_DEMO_USER);
-        setToken("demo-fallback-token-jwt");
-        localStorage.setItem(STORAGE_KEY_TOKEN, "demo-fallback-token-jwt");
-        localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(DEFAULT_DEMO_USER));
-        return DEFAULT_DEMO_USER;
-      }
       throw err;
     } finally {
       setIsLoading(false);
@@ -175,13 +158,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [token]);
 
-  const setDemoUser = () => {
-    setUser(DEFAULT_DEMO_USER);
-    setToken("demo-offline-session-token");
-    localStorage.setItem(STORAGE_KEY_TOKEN, "demo-offline-session-token");
-    localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(DEFAULT_DEMO_USER));
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -194,7 +170,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         updateUser,
         refreshUser,
-        setDemoUser,
       }}
     >
       {children}

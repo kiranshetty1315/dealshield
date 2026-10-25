@@ -372,13 +372,9 @@ def user_owns_agreement(client, user_id: str, agreement_id: str) -> bool:
     Verifies ownership against:
     1. confirmations table initiator_user_id (if recorded)
     2. conversation.user_id via agreements -> analyses -> conversations
-    3. Sample agreement fallback in development mode
     """
     try:
         DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"
-        if settings.ENVIRONMENT == "development" and agreement_id == "sample-agreement-uuid":
-            return True
-
         # Check if any confirmation record explicitly records initiator_user_id
         conf_res = client.table("confirmations").select("initiator_user_id").eq("agreement_id", agreement_id).execute()
         conf_data = conf_res.data if isinstance(conf_res.data, list) else ([conf_res.data] if conf_res.data else [])

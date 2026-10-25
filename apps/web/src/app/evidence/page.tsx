@@ -27,7 +27,7 @@ function EvidenceContent() {
   const searchParams = useSearchParams();
   const entityIdParam = searchParams.get("entity_id") || "";
 
-  const [content, setContent] = useState("Agreement between Raj Mehta and Priya Sharma for ₹1,00,000");
+  const [content, setContent] = useState("");
   const [expectedHash, setExpectedHash] = useState("");
   const [isVerifying, setIsVerifying] = useState(false);
   const [result, setResult] = useState<DocumentHashVerification | null>(null);
@@ -213,6 +213,7 @@ function EvidenceContent() {
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              placeholder="Paste agreement text or document content to verify SHA-256 integrity..."
               rows={3}
               className="w-full p-2.5 text-xs font-mono border rounded-lg focus:ring-2 focus:ring-blue-600 focus:outline-none"
             />

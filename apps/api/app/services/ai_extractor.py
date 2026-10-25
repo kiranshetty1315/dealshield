@@ -130,13 +130,7 @@ class AIExtractorService:
     async def analyze_chat(
         self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None
     ) -> AgreementAnalysis:
-        """Extract structured agreement terms using Gemini 3.8 Flash structured outputs or intelligent fallback."""
-        # For the calibrated benchmark negotiation fixture, use the deterministic baseline unless testing live mock
-        if self._is_sample_1_negotiation(messages) and chat_id != "chat_gemini_test":
-            res = self._deterministic_extract(chat_id, messages, focus_areas)
-            res.analysis_id = ensure_uuid(res.analysis_id)
-            return res
-
+        """Extract structured agreement terms using Gemini 3.8 Flash structured outputs or dynamic extractor."""
         if self._is_live_configured():
             try:
                 res = await self._call_llm_extractor(chat_id, messages, focus_areas)
@@ -145,10 +139,10 @@ class AIExtractorService:
             except Exception as e:
                 logger.warning(
                     f"Live {self.provider.upper()} extraction failed ({type(e).__name__}: {str(e)}). "
-                    "Flipping to intelligent deterministic extraction engine."
+                    "Flipping to dynamic extraction engine."
                 )
 
-        # Fallback to intelligent deterministic extraction
+        # Dynamic extraction parsing real conversation messages
         res = self._deterministic_extract(chat_id, messages, focus_areas)
         res.analysis_id = ensure_uuid(res.analysis_id)
         return res
@@ -163,7 +157,11 @@ class AIExtractorService:
             logger.warning("openai client package not available, falling back to deterministic extractor.")
             return self._deterministic_extract(chat_id, messages, focus_areas)
 
-        client_kwargs: Dict[str, Any] = {"api_key": self.api_key}
+        client_kwargs: Dict[str, Any] = {
+            "api_key": self.api_key,
+            "max_retries": 1,
+            "timeout": 15.0,
+        }
         if self.base_url:
             client_kwargs["base_url"] = self.base_url
 
@@ -228,107 +226,9 @@ class AIExtractorService:
     def _deterministic_extract(
         self, chat_id: str, messages: List[Message], focus_areas: Optional[List[str]] = None
     ) -> AgreementAnalysis:
-        """Intelligent deterministic extraction engine.
-        
-        Matches 100% precision on sample-negotiation-01-expected.json while dynamically
-        extracting terms, conflicts, and missing clauses for any WhatsApp conversation.
-        """
-        analysis_id = "analysis_expected_01" if "sample_negotiation_01" in chat_id else str(uuid.uuid4())
-
-        # Check for Sample 1 signature
-        if self._is_sample_1_negotiation(messages):
-            return self._build_sample_1_analysis(chat_id, analysis_id, messages)
-
-        # Dynamic extraction for arbitrary WhatsApp conversations
+        """Dynamic extraction engine that parses real conversation messages."""
+        analysis_id = str(uuid.uuid4())
         return self._build_dynamic_analysis(chat_id, analysis_id, messages)
-
-    def _is_sample_1_negotiation(self, messages: List[Message]) -> bool:
-        """Detect Sample 1 (Raj Mehta & Priya Sharma website redesign)."""
-        all_text = " ".join(m.content for m in messages).lower()
-        senders = {m.sender.lower() for m in messages}
-        return (
-            any("raj" in s for s in senders)
-            and any("priya" in s for s in senders)
-            and "75,000" in all_text
-            and "1,50,000" in all_text
-        )
-
-    def _build_sample_1_analysis(
-        self, chat_id: str, analysis_id: str, messages: List[Message]
-    ) -> AgreementAnalysis:
-        """Build exact analysis matching sample-negotiation-01-expected.json."""
-        parties = [
-            Party(
-                party_id="party_raj_01",
-                name="Raj Mehta",
-                detected_role="Client",
-                contact_handle="Raj Mehta",
-            ),
-            Party(
-                party_id="party_priya_02",
-                name="Priya Sharma",
-                detected_role="Service Provider",
-                contact_handle="Priya Sharma",
-            ),
-        ]
-
-        extracted_terms = [
-            ExtractedTerm(
-                term_id="term_scope_01",
-                category="scope",
-                description="Full website redesign",
-                proposed_value="Full redesign",
-                accepted_value="Full website redesign with mockups",
-                status=TermStatus.AGREED,
-                source_message_ids=["msg_raj_001", "msg_priya_002", "msg_priya_010"],
-                confidence=ConfidenceLevel.HIGH,
-            ),
-            ExtractedTerm(
-                term_id="term_price_01",
-                category="pricing",
-                description="Total project fee",
-                proposed_value="₹75,000 / ₹1,50,000",
-                accepted_value="₹1,00,000",
-                status=TermStatus.AMBIGUOUS,
-                source_message_ids=["msg_raj_003", "msg_priya_004", "msg_raj_005", "msg_priya_008", "msg_raj_009"],
-                confidence=ConfidenceLevel.MEDIUM,
-            ),
-            ExtractedTerm(
-                term_id="term_payment_01",
-                category="payment_terms",
-                description="Advance milestone payment",
-                proposed_value="50% upfront",
-                accepted_value="50% upfront (₹50,000)",
-                status=TermStatus.AGREED,
-                source_message_ids=["msg_priya_008", "msg_raj_009"],
-                confidence=ConfidenceLevel.HIGH,
-            ),
-            ExtractedTerm(
-                term_id="term_timeline_01",
-                category="timeline",
-                description="Delivery deadline",
-                proposed_value="End of April 2024",
-                accepted_value="End of April 2024",
-                status=TermStatus.AGREED,
-                source_message_ids=["msg_raj_007", "msg_priya_008"],
-                confidence=ConfidenceLevel.MEDIUM,
-            ),
-        ]
-
-        conflicts = self.conflict_detector.detect_conflicts(messages)
-        missing_terms = self.legal_retriever.detect_missing_terms(extracted_terms, messages)
-
-        return AgreementAnalysis(
-            analysis_id=analysis_id,
-            chat_id=chat_id,
-            parties=parties,
-            extracted_terms=extracted_terms,
-            conflicts=conflicts,
-            missing_terms=missing_terms,
-            confidence_score=0.85,
-            requires_human_review=True,
-            analyzed_at=datetime.now(timezone.utc),
-        )
 
     def _build_dynamic_analysis(
         self, chat_id: str, analysis_id: str, messages: List[Message]

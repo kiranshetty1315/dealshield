@@ -5,7 +5,6 @@ from app.schemas.analysis import AnalysisRequest, AgreementAnalysis
 from app.schemas.chat import Message
 from app.db.repository import AnalysisRepository, ConversationRepository, AuditRepository
 from app.services.ai_extractor import AIExtractorService
-from app.services.chat_parser import parse_whatsapp_chat
 
 router = APIRouter(prefix="/analysis", tags=["Analysis"])
 
@@ -36,32 +35,11 @@ async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
         # Check if conversation metadata exists
         conv = conv_repo.get_conversation(request.chat_id)
         if not conv:
-            # Check for sample fixtures fallback if requested directly by sample chat ID
-            sample_file = None
-            if "sample_negotiation_01" in request.chat_id or "sample_01" in request.chat_id:
-                sample_file = "sample-data/whatsapp/sample-negotiation-01.txt"
-            elif "sample_negotiation_02" in request.chat_id or "sample_02" in request.chat_id:
-                sample_file = "sample-data/whatsapp/sample-negotiation-02.txt"
-
-            if sample_file and os.path.exists(sample_file):
-                with open(sample_file, "r", encoding="utf-8") as f:
-                    raw_text = f.read()
-                parsed_msgs, senders, _ = parse_whatsapp_chat(raw_text)
-                conv_repo.create_conversation(
-                    conversation_id=request.chat_id,
-                    filename=os.path.basename(sample_file),
-                    party_names=senders,
-                    message_count=len(parsed_msgs),
-                )
-                conv_repo.save_messages(request.chat_id, parsed_msgs)
-                messages = parsed_msgs
-            else:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Conversation {request.chat_id} not found. Please upload the chat transcript first via /api/v1/chats/upload."
-                )
-        else:
-            messages = []
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Conversation {request.chat_id} not found. Please upload the chat transcript first via /api/v1/chats/upload."
+            )
+        messages = []
     else:
         messages = []
         for m in messages_raw:
