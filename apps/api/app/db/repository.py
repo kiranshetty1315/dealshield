@@ -170,9 +170,8 @@ class ConversationRepository:
                 self.client.table("agreements").delete().eq("id", ag_id).execute()
             self.client.table("analyses").delete().eq("id", an_id).execute()
 
-        # 3. Delete hashes, audit events, messages, and conversation
+        # 3. Delete hashes, messages, and conversation (audit_events is append-only by law/trigger)
         self.client.table("document_hashes").delete().eq("document_id", conversation_id).execute()
-        self.client.table("audit_events").delete().eq("entity_id", conversation_id).execute()
         self.client.table("messages").delete().eq("conversation_id", conversation_id).execute()
         res = self.client.table("conversations").delete().eq("id", conversation_id).execute()
         return bool(res.data)
