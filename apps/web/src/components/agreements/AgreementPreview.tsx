@@ -24,18 +24,26 @@ export function AgreementPreview({
   const currentVersion = agreement?.versions?.[agreement.versions.length - 1];
   const dynamicClauses = currentVersion?.clauses;
 
-  const firstParty = agreement?.parties?.[0] || "First Party (Initiator)";
-  const secondParty = agreement?.parties?.[1] || "Second Party (Counterparty)";
+  const rawFirst = agreement?.parties?.[0] || "First Party (Initiator)";
+  const rawSecond = agreement?.parties?.[1] || "Second Party (Counterparty)";
+  const firstParty = ["you", "user", "me"].includes(rawFirst.trim().toLowerCase()) ? "Initiating Party" : rawFirst;
+  const secondParty = ["you", "user", "me"].includes(rawSecond.trim().toLowerCase()) ? "Counterparty" : rawSecond;
 
   const p1Record = confirmationStatus?.parties?.find(
-    (p) => p.party_name.trim().toLowerCase() === firstParty.trim().toLowerCase()
-  );
+    (p) => {
+      const pLower = p.party_name.trim().toLowerCase();
+      return pLower === firstParty.trim().toLowerCase() || pLower === rawFirst.trim().toLowerCase() || ["you", "user", "me"].includes(pLower);
+    }
+  ) || confirmationStatus?.parties?.[0];
   const p2Record = confirmationStatus?.parties?.find(
-    (p) => p.party_name.trim().toLowerCase() === secondParty.trim().toLowerCase()
-  );
+    (p) => {
+      const pLower = p.party_name.trim().toLowerCase();
+      return pLower === secondParty.trim().toLowerCase() || pLower === rawSecond.trim().toLowerCase();
+    }
+  ) || confirmationStatus?.parties?.[1];
 
   const partiesLabel = agreement?.parties?.length
-    ? agreement.parties.join(" & ")
+    ? `${firstParty} & ${secondParty}`
     : "Contracting Counterparties";
 
   const versionLabel = agreement

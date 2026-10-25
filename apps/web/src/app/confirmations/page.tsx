@@ -455,12 +455,22 @@ function ConfirmationsContent() {
   }
 
   // Deduplicate and assemble parties from confirmationStatus or agreement
-  const rawParties = confirmationStatus?.parties && confirmationStatus.parties.length > 0
-    ? confirmationStatus.parties
-    : (agreement?.parties || []).map((name) => ({
-        party_name: name,
-        confirmed: false,
-      }));
+  const rawParties = (
+    confirmationStatus?.parties && confirmationStatus.parties.length > 0
+      ? confirmationStatus.parties
+      : (agreement?.parties || []).map((name) => ({
+          party_name: name,
+          confirmed: false,
+        }))
+  ).map((p) => {
+    if (["you", "user", "me"].includes(p.party_name.trim().toLowerCase()) && user?.full_name) {
+      return {
+        ...p,
+        party_name: user.full_name + (user.organization ? ` (${user.organization})` : ""),
+      };
+    }
+    return p;
+  });
 
   const partiesMap = new Map<string, PartyConfirmationRecord>();
   for (const p of rawParties) {

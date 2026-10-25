@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   FileText,
   Download,
@@ -26,6 +27,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   Award,
+  UserCheck,
+  Building2,
 } from "lucide-react";
 import { AgreementPreview } from "@/components/agreements/AgreementPreview";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
@@ -34,6 +37,7 @@ import {
   ResolutionDiffSummary,
 } from "@/components/analysis/UpdatedChatComparisonModal";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { useAuth } from "@/context/AuthContext";
 import { StampPaperModal } from "@/components/agreements/StampPaperModal";
 import { Agreement, Message, ConversationRecord, AgreementAnalysis, ChatUploadResponse, ConfirmationStatus } from "@/types";
 import { api } from "@/lib/api/client";
@@ -68,6 +72,27 @@ function AgreementsContent() {
   // Indian Non-Judicial Stamp Paper Modal
   const [isStampModalOpen, setIsStampModalOpen] = useState<boolean>(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState<boolean>(false);
+
+  const { user } = useAuth();
+
+  // Contracting Legal Parties state
+  const [initiatorName, setInitiatorName] = useState<string>("");
+  const [initiatorCompany, setInitiatorCompany] = useState<string>("");
+  const [clientLegalName, setClientLegalName] = useState<string>("");
+  const [clientCompany, setClientCompany] = useState<string>("");
+  const [isSavingParties, setIsSavingParties] = useState<boolean>(false);
+  const [partySaveFeedback, setPartySaveFeedback] = useState<string | null>(null);
+  const [partySaveError, setPartySaveError] = useState<string | null>(null);
+
+  // Sync initial user info from auth if empty
+  useEffect(() => {
+    if (user?.full_name && !initiatorName) {
+      setInitiatorName(user.full_name);
+      if (user.organization && !initiatorCompany) {
+        setInitiatorCompany(user.organization);
+      }
+    }
+  }, [user, initiatorName, initiatorCompany]);
 
   const handleDownloadPdf = async () => {
     if (!agreement?.id) return;
@@ -125,6 +150,39 @@ function AgreementsContent() {
 
       setAgreement(fetchedAgreement);
 
+      // Populate legal parties inputs from agreement or user signup
+      if (fetchedAgreement.parties && fetchedAgreement.parties.length > 0) {
+        const rawP1 = fetchedAgreement.parties[0];
+        if (rawP1 && !["you", "user", "me", "client", "first party (initiator)"].includes(rawP1.trim().toLowerCase())) {
+          const match = rawP1.match(/^(.*?)\s*\((.*?)\)$/);
+          if (match) {
+            setInitiatorName(match[1].trim());
+            setInitiatorCompany(match[2].trim());
+          } else {
+            setInitiatorName(rawP1.trim());
+          }
+        } else if (user?.full_name) {
+          setInitiatorName(user.full_name);
+          if (user.organization) setInitiatorCompany(user.organization);
+        }
+
+        if (fetchedAgreement.parties.length > 1) {
+          const rawP2 = fetchedAgreement.parties[1];
+          if (rawP2 && !["counterparty", "second party (counterparty)"].includes(rawP2.trim().toLowerCase())) {
+            const match2 = rawP2.match(/^(.*?)\s*\((.*?)\)$/);
+            if (match2) {
+              setClientLegalName(match2[1].trim());
+              setClientCompany(match2[2].trim());
+            } else {
+              setClientLegalName(rawP2.trim());
+            }
+          }
+        }
+      } else if (user?.full_name) {
+        setInitiatorName(user.full_name);
+        if (user.organization) setInitiatorCompany(user.organization);
+      }
+
       // Load confirmation status
       api.getConfirmationStatus(fetchedAgreement.id)
         .then(setConfirmationStatus)
@@ -167,7 +225,7 @@ function AgreementsContent() {
     } finally {
       setIsLoadingAgreement(false);
     }
-  }, []);
+  }, [user?.full_name, user?.organization]);
 
   useEffect(() => {
     if (agreementIdParam) {
@@ -245,6 +303,46 @@ function AgreementsContent() {
 
   const handleMessageSelect = (msg: Message) => {
     setActiveCitationId(msg.message_id);
+  };
+
+
+  const handleSaveParties = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!agreement?.id) return;
+    if (!initiatorName.trim()) {
+      setPartySaveError("Please enter the Initiator Legal Name.");
+      return;
+    }
+    if (!clientLegalName.trim()) {
+      setPartySaveError("Please enter the Client Legal Name (same as Aadhaar).");
+      return;
+    }
+
+    setIsSavingParties(true);
+    setPartySaveError(null);
+    setPartySaveFeedback(null);
+
+    try {
+      const updatedAgreement = await api.updateAgreementParties(agreement.id, {
+        initiator_name: initiatorName.trim(),
+        initiator_company: initiatorCompany.trim() || undefined,
+        client_legal_name: clientLegalName.trim(),
+        client_company: clientCompany.trim() || undefined,
+      });
+
+      setAgreement(updatedAgreement);
+      setPartySaveFeedback("Legal contracting parties updated successfully! Plain-language clauses, confirmation links, and PDF have been updated with verified names.");
+      api.getConfirmationStatus(updatedAgreement.id)
+        .then(setConfirmationStatus)
+        .catch(() => null);
+
+      setTimeout(() => setPartySaveFeedback(null), 6000);
+    } catch (err: any) {
+      console.error("Failed to update parties:", err);
+      setPartySaveError(err?.message || "Failed to update legal parties.");
+    } finally {
+      setIsSavingParties(false);
+    }
   };
 
   // Current selected conversation record
@@ -522,6 +620,153 @@ function AgreementsContent() {
                 ))}
             </div>
           )}
+
+          {/* Contracting Legal Parties & Signatories Form Card */}
+          <Card className="border-blue-200 bg-gradient-to-r from-blue-50/50 via-white to-indigo-50/30 shadow-xs">
+            <CardHeader className="pb-3 border-b border-blue-100/70">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-blue-100 text-blue-700">
+                    <UserCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-sm sm:text-base font-bold text-slate-900">
+                      Contracting Legal Parties &amp; Signatories
+                    </CardTitle>
+                    <CardDescription className="text-xs text-slate-500">
+                      Specify verified legal identity as per Aadhaar &amp; business entities. Replaces informal chat aliases (&quot;You&quot;) across all contract clauses, confirmation review links, and the final PDF.
+                    </CardDescription>
+                  </div>
+                </div>
+                <Badge variant="outline" className="border-blue-300 bg-blue-50 text-blue-800 text-xs font-semibold self-start sm:self-auto shrink-0">
+                  Aadhaar &amp; Legal Entity Alignment
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              <form onSubmit={handleSaveParties} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Column 1: Initiator (First Party / You) */}
+                  <div className="p-3.5 rounded-xl border border-blue-200/80 bg-white space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
+                        <Building2 className="h-3.5 w-3.5 text-blue-600" />
+                        First Party (Initiator / You)
+                      </span>
+                      <Badge variant="secondary" className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200">
+                        From User Signup
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="initiator-legal-name" className="text-[11px] font-semibold text-slate-700">
+                        Initiator Legal Name <span className="text-rose-500">*</span>
+                      </label>
+                      <Input
+                        id="initiator-legal-name"
+                        type="text"
+                        required
+                        placeholder="Your full legal name as given at signup"
+                        value={initiatorName}
+                        onChange={(e) => setInitiatorName(e.target.value)}
+                        className="h-9 text-xs font-medium"
+                      />
+                      <p className="text-[10px] text-slate-400">Prefilled from your account profile. Used in place of &quot;You&quot;.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="initiator-company" className="text-[11px] font-semibold text-slate-700">
+                        Company / Business Entity (Optional)
+                      </label>
+                      <Input
+                        id="initiator-company"
+                        type="text"
+                        placeholder="e.g. Acme Tech Solutions"
+                        value={initiatorCompany}
+                        onChange={(e) => setInitiatorCompany(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column 2: Counterparty (Client / Second Party) */}
+                  <div className="p-3.5 rounded-xl border border-indigo-200/80 bg-white space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                        <Scale className="h-3.5 w-3.5 text-indigo-600" />
+                        Second Party (Client / Counterparty)
+                      </span>
+                      <Badge variant="secondary" className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        Aadhaar &amp; Company
+                      </Badge>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="client-legal-name" className="text-[11px] font-semibold text-slate-700">
+                        Client Legal Name (same as Aadhaar) <span className="text-rose-500">*</span>
+                      </label>
+                      <Input
+                        id="client-legal-name"
+                        type="text"
+                        required
+                        placeholder="e.g. Rajesh Kumar (as per Aadhaar)"
+                        value={clientLegalName}
+                        onChange={(e) => setClientLegalName(e.target.value)}
+                        className="h-9 text-xs font-medium"
+                      />
+                      <p className="text-[10px] text-slate-400">Exact legal name for statutory contract validity under Indian law.</p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label htmlFor="client-company" className="text-[11px] font-semibold text-slate-700">
+                        Client Company Name (Optional)
+                      </label>
+                      <Input
+                        id="client-company"
+                        type="text"
+                        placeholder="e.g. TechCorp Solutions Pvt Ltd"
+                        value={clientCompany}
+                        onChange={(e) => setClientCompany(e.target.value)}
+                        className="h-9 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Feedback Messages */}
+                {partySaveFeedback && (
+                  <div className="p-3 rounded-lg border border-emerald-300 bg-emerald-50 text-xs text-emerald-900 flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span>{partySaveFeedback}</span>
+                  </div>
+                )}
+                {partySaveError && (
+                  <div className="p-3 rounded-lg border border-rose-300 bg-rose-50 text-xs text-rose-900 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                    <span>{partySaveError}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-3 pt-1">
+                  <Button
+                    type="submit"
+                    disabled={isSavingParties || !initiatorName.trim() || !clientLegalName.trim()}
+                    className="text-xs h-9 bg-blue-600 hover:bg-blue-700 text-white font-semibold gap-2 shadow-xs"
+                  >
+                    {isSavingParties ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving Parties...
+                      </>
+                    ) : (
+                      <>
+                        <UserCheck className="h-3.5 w-3.5" /> Save &amp; Apply Legal Names
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
 
           {/* Split Pane: Agreement Document (Left) & Chat Evidence Transcript (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">

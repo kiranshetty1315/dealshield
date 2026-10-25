@@ -47,3 +47,10 @@ class AgreementCreateRequest(BaseModel):
     template_type: str = Field(default="service_agreement", description="Template to base agreement on")
     parties: Optional[List[str]] = Field(default=None, description="Optional contracting party names override")
     terms: Optional[List[Dict[str, Any]]] = Field(default=None, description="Optional resolved terms override")
+
+
+class AgreementUpdatePartiesRequest(BaseModel):
+    initiator_name: str = Field(..., description="Legal name of first party/initiator (from signup)")
+    initiator_company: Optional[str] = Field(None, description="Optional company/firm of initiator")
+    client_legal_name: str = Field(..., description="Legal name of client counterparty as per Aadhaar")
+    client_company: Optional[str] = Field(None, description="Company/firm of client counterparty")

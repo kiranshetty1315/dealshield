@@ -4,6 +4,7 @@ import {
   ConversationRecord,
   AgreementAnalysis,
   Agreement,
+  AgreementUpdatePartiesRequest,
   ConfirmationStatus,
   DocumentHashVerification,
   AuditEvent,
@@ -348,6 +349,23 @@ export class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Failed to create updated agreement version" }));
       throw new Error(err.detail || `Version creation failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async updateAgreementParties(
+    agreementId: string,
+    data: AgreementUpdatePartiesRequest
+  ): Promise<Agreement> {
+    const res = await fetch(`${this.baseUrl}/api/v1/agreements/${encodeURIComponent(agreementId)}/parties`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...this.getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to update contracting parties" }));
+      throw new Error(err.detail || `Party update failed (${res.status})`);
     }
     return res.json();
   }

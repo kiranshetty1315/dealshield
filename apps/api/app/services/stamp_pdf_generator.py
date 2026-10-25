@@ -209,8 +209,10 @@ class StampPaperPdfService:
         # ---------------------------------------------------------
         # 1. HONEST COMMERCIAL RECORD HEADER
         # ---------------------------------------------------------
-        first_party = agreement.parties[0] if len(agreement.parties) > 0 else "First Party (Initiator)"
-        second_party = agreement.parties[1] if len(agreement.parties) > 1 else "Second Party (Counterparty)"
+        raw_first = agreement.parties[0] if len(agreement.parties) > 0 else "First Party (Initiator)"
+        raw_second = agreement.parties[1] if len(agreement.parties) > 1 else "Second Party (Counterparty)"
+        first_party = "Initiating Party" if raw_first.strip().lower() in ("you", "user", "me") else raw_first
+        second_party = "Counterparty" if raw_second.strip().lower() in ("you", "user", "me") else raw_second
         created_dt = agreement.created_at.strftime("%d-%b-%Y %I:%M %p UTC") if agreement.created_at else "Immediate"
 
         header_data = [
@@ -378,10 +380,16 @@ class StampPaperPdfService:
 
         if confirmation_status and confirmation_status.parties:
             for p in confirmation_status.parties:
-                if p.party_name.strip().lower() == first_party.strip().lower():
+                p_lower = p.party_name.strip().lower()
+                if p_lower == first_party.strip().lower() or p_lower in ("you", "user", "me", raw_first.strip().lower()):
                     party_a_rec = p
-                elif p.party_name.strip().lower() == second_party.strip().lower():
+                elif p_lower == second_party.strip().lower() or p_lower == raw_second.strip().lower():
                     party_b_rec = p
+            # Fallback by index if still not resolved
+            if not party_a_rec and len(confirmation_status.parties) > 0:
+                party_a_rec = confirmation_status.parties[0]
+            if not party_b_rec and len(confirmation_status.parties) > 1:
+                party_b_rec = confirmation_status.parties[1]
 
         def build_assent_box(
             role_label: str,

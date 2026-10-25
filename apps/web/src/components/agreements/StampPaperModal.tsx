@@ -37,8 +37,10 @@ export function StampPaperModal({
   const currentVersion = agreement.versions?.[agreement.versions.length - 1];
   const clauses = currentVersion?.clauses || [];
 
-  const firstParty = agreement.parties?.[0] || "Client / First Party";
-  const secondParty = agreement.parties?.[1] || "Service Provider / Counterparty";
+  const rawFirst = agreement.parties?.[0] || "First Party (Initiator)";
+  const rawSecond = agreement.parties?.[1] || "Second Party (Counterparty)";
+  const firstParty = ["you", "user", "me"].includes(rawFirst.trim().toLowerCase()) ? "Initiating Party" : rawFirst;
+  const secondParty = ["you", "user", "me"].includes(rawSecond.trim().toLowerCase()) ? "Counterparty" : rawSecond;
 
   const createdDate = agreement.created_at
     ? new Date(agreement.created_at).toLocaleDateString("en-IN", {
@@ -55,8 +57,8 @@ export function StampPaperModal({
     }
   }
 
-  const p1Record = partiesMap.get(firstParty.trim().toLowerCase());
-  const p2Record = partiesMap.get(secondParty.trim().toLowerCase());
+  const p1Record = partiesMap.get(firstParty.trim().toLowerCase()) || partiesMap.get(rawFirst.trim().toLowerCase()) || confirmationStatus?.parties?.[0];
+  const p2Record = partiesMap.get(secondParty.trim().toLowerCase()) || partiesMap.get(rawSecond.trim().toLowerCase()) || confirmationStatus?.parties?.[1];
 
   const handlePrint = () => {
     window.print();

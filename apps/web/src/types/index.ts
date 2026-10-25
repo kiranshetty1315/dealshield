@@ -129,6 +129,13 @@ export interface AgreementVersion {
   content_hash?: string;
 }
 
+export interface AgreementUpdatePartiesRequest {
+  initiator_name: string;
+  initiator_company?: string;
+  client_legal_name: string;
+  client_company?: string;
+}
+
 export interface Agreement {
   id: string;
   analysis_id: string;

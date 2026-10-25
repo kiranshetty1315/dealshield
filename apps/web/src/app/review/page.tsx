@@ -79,6 +79,9 @@ function ReviewContent() {
 
   // Agreement State
   const [agreement, setAgreement] = useState<Agreement | null>(null);
+  const initiatorDisplayName = agreement?.parties[0] && !["you", "user", "me"].includes(agreement.parties[0].trim().toLowerCase())
+    ? agreement.parties[0]
+    : "Originating Party (Initiator)";
   const [clauses, setClauses] = useState<Clause[]>([]);
 
   // Action / Execution State
@@ -729,7 +732,7 @@ function ReviewContent() {
                 {/* Parties Header */}
                 <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-700">
                   <p className="font-semibold text-slate-900 mb-1">Contracting Parties:</p>
-                  <p>1. <strong>{agreement?.parties[0] || "First Party (Initiator)"}</strong> (Initiator)</p>
+                  <p>1. <strong>{initiatorDisplayName}</strong> (Initiator)</p>
                   <p>2. <strong>{partyName}</strong> (Counterparty)</p>
                 </div>
 
@@ -767,7 +770,7 @@ function ReviewContent() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                     <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
                       <span className="text-[10px] uppercase font-bold text-slate-500 block">First Party (Initiator)</span>
-                      <p className="font-bold text-slate-900">{agreement?.parties[0] || "Initiator"}</p>
+                      <p className="font-bold text-slate-900">{initiatorDisplayName}</p>
                       <p className="text-[11px] text-slate-600"><strong>Role:</strong> Originating Party</p>
                     </div>
 

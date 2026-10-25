@@ -53,20 +53,28 @@ class AgreementGeneratorService:
             client_party = next((p.name for p in analysis.parties if p.detected_role and "client" in p.detected_role.lower()), None)
             provider_party = next((p.name for p in analysis.parties if p.detected_role and ("provider" in p.detected_role.lower() or "freelancer" in p.detected_role.lower() or "vendor" in p.detected_role.lower())), None)
 
-        if client_party and provider_party and client_party != provider_party:
+        if parties and len(parties) >= 2:
+            contracting_parties = list(parties)
+            p1 = contracting_parties[0]
+            p2 = contracting_parties[1]
+        elif client_party and provider_party and client_party != provider_party:
             p1 = client_party
             p2 = provider_party
             contracting_parties = [p1, p2]
-        elif parties:
-            contracting_parties = parties
-            p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
-            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
+        elif parties and len(parties) > 0:
+            contracting_parties = list(parties)
+            p1 = contracting_parties[0]
+            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Counterparty"
+            if len(contracting_parties) == 1:
+                contracting_parties.append(p2)
         elif analysis and analysis.parties:
             contracting_parties = [p.name for p in analysis.parties]
-            p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Client"
-            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Service Provider"
+            p1 = contracting_parties[0] if len(contracting_parties) > 0 else "Originating Party"
+            p2 = contracting_parties[1] if len(contracting_parties) > 1 else "Counterparty"
+            if len(contracting_parties) == 1:
+                contracting_parties.append(p2)
         else:
-            contracting_parties = ["Raj Mehta", "Priya Sharma"]
+            contracting_parties = ["Originating Party", "Counterparty"]
             p1 = contracting_parties[0]
             p2 = contracting_parties[1]
 
