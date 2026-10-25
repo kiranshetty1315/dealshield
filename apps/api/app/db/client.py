@@ -32,8 +32,9 @@ class MockResponse:
         self.count = count if count is not None else (len(data) if isinstance(data, list) else 1)
 
 
+# shortcut: in-memory mock PostgREST engine for tests/offline dev; use Supabase PostgreSQL in production or migrate to SQLite if query complexity exceeds PostgREST chaining.
 class MockTableQueryBuilder:
-    """Simulates PostgREST query chain (insert, select, eq, order, execute)."""
+    """Simulates PostgREST query chain (insert, select, eq, in_, neq, order, execute)."""
 
     def __init__(
         self,
@@ -48,6 +49,8 @@ class MockTableQueryBuilder:
         self._insert_data: Any = None
         self._update_data: Any = None
         self._filters: List[tuple] = []
+        self._in_filters: List[tuple] = []
+        self._neq_filters: List[tuple] = []
         self._order_col: Optional[str] = None
         self._order_desc: bool = False
         self._limit_count: Optional[int] = None
@@ -78,6 +81,14 @@ class MockTableQueryBuilder:
         self._filters.append((column, value))
         return self
 
+    def neq(self, column: str, value: Any):
+        self._neq_filters.append((column, value))
+        return self
+
+    def in_(self, column: str, values: List[Any]):
+        self._in_filters.append((column, list(values)))
+        return self
+
     def order(self, column: str, desc: bool = False):
         self._order_col = column
         self._order_desc = desc
@@ -90,6 +101,19 @@ class MockTableQueryBuilder:
     def single(self):
         self._single = True
         return self
+
+    def _matches_row(self, row: Dict[str, Any]) -> bool:
+        for col, val in self._filters:
+            if str(row.get(col)) != str(val):
+                return False
+        for col, val in self._neq_filters:
+            if str(row.get(col)) == str(val):
+                return False
+        for col, vals in self._in_filters:
+            str_vals = {str(v) for v in vals}
+            if str(row.get(col)) not in str_vals:
+                return False
+        return True
 
     def execute(self) -> MockResponse:
         rows = self._storage[self._table]
@@ -112,12 +136,7 @@ class MockTableQueryBuilder:
         elif self._action == "update":
             updated = []
             for row in rows:
-                match = True
-                for col, val in self._filters:
-                    if str(row.get(col)) != str(val):
-                        match = False
-                        break
-                if match:
+                if self._matches_row(row):
                     for k, v in self._update_data.items():
                         row[k] = v
                     updated.append(copy.deepcopy(row))
@@ -129,13 +148,7 @@ class MockTableQueryBuilder:
             deleted = []
             remaining = []
             for row in rows:
-                match = True
-                if self._filters:
-                    for col, val in self._filters:
-                        if str(row.get(col)) != str(val):
-                            match = False
-                            break
-                if match:
+                if self._matches_row(row):
                     deleted.append(row)
                 else:
                     remaining.append(row)
@@ -145,15 +158,7 @@ class MockTableQueryBuilder:
             return MockResponse(deleted)
 
         else:  # select
-            matched = []
-            for row in rows:
-                match = True
-                for col, val in self._filters:
-                    if str(row.get(col)) != str(val):
-                        match = False
-                        break
-                if match:
-                    matched.append(copy.deepcopy(row))
+            matched = [copy.deepcopy(r) for r in rows if self._matches_row(r)]
 
             if self._order_col:
                 matched.sort(

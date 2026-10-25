@@ -96,6 +96,21 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
     }
   };
 
+  // Track pending unauthenticated uploads so they can be claimed after sign in
+  const trackPendingChat = (chatId?: string) => {
+    if (typeof window === "undefined" || !chatId) return;
+    try {
+      const raw = localStorage.getItem("dealshield_pending_chat_ids");
+      const list: string[] = raw ? JSON.parse(raw) : [];
+      if (!list.includes(chatId)) {
+        list.push(chatId);
+        localStorage.setItem("dealshield_pending_chat_ids", JSON.stringify(list));
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   // Upload selected file
   const handleUploadFile = async () => {
     if (!selectedFile) return;
@@ -104,6 +119,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
     setError(null);
     try {
       const data = await api.uploadChat(selectedFile);
+      trackPendingChat(data?.chat_id);
       setResult(data);
       onUploadSuccess?.(data);
     } catch (err: any) {
@@ -122,6 +138,7 @@ export function ChatUpload({ onUploadSuccess }: { onUploadSuccess?: (data: ChatU
     setError(null);
     try {
       const data = await api.uploadChatText(chatText);
+      trackPendingChat(data?.chat_id);
       setResult(data);
       onUploadSuccess?.(data);
     } catch (err: any) {

@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime, timezone
 from app.schemas.agreement import Agreement, AgreementVersion, Clause, AgreementStatus
 from app.schemas.analysis import ExtractedTerm
+from app.services.ai_extractor import clean_timeline_text
 from app.services.hash_service import HashService
 from app.db.repository import (
     AgreementRepository,
@@ -115,10 +116,12 @@ class AgreementGeneratorService:
             # 3. Timeline
             timeline_term = next((t for t in extracted_terms if t.category == "timeline"), None)
             if timeline_term:
+                raw_tl = timeline_term.accepted_value or timeline_term.description
+                clean_tl = clean_timeline_text(raw_tl)
                 clauses.append(Clause(
                     clause_id="clause_timeline_03",
                     title="3. Project Timeline & Delivery Milestones",
-                    body=f"All deliverable commitments shall be completed and submitted by {p2}: {timeline_term.accepted_value or timeline_term.description}.",
+                    body=f"All deliverable commitments shall be completed and submitted by {p2}: {clean_tl}.",
                     source_term_ids=timeline_term.source_message_ids or ["term_timeline_01"],
                 ))
 

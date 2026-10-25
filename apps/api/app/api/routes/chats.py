@@ -1,5 +1,6 @@
 import uuid
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status, Request
 from app.schemas.chat import ChatUploadResponse, Message
 from app.services.chat_parser import parse_whatsapp_chat
@@ -253,6 +254,27 @@ async def list_chats(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required.")
         return conv_repo.list_conversations(user_id="00000000-0000-0000-0000-000000000001")
     return conv_repo.list_conversations(user_id=current_user["id"])
+
+
+class ClaimChatsRequest(BaseModel):
+    conversation_ids: List[str]
+
+
+@router.post(
+    "/claim",
+    summary="Claim Unauthenticated Conversations",
+    description="Reassigns chats uploaded prior to logging in to the authenticated user account.",
+)
+async def claim_chats(
+    payload: ClaimChatsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Claims conversations uploaded before authentication."""
+    count = conv_repo.claim_conversations(
+        conversation_ids=payload.conversation_ids,
+        target_user_id=current_user["id"],
+    )
+    return {"claimed_count": count}
 
 
 @router.delete(

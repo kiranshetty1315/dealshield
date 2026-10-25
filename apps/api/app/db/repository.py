@@ -149,12 +149,46 @@ class ConversationRepository:
         return decrypted_rows
 
     def delete_conversation(self, conversation_id: str) -> bool:
-        """Permanently deletes conversation and all its parsed messages (Right to Erasure - DPDP Act 2023)."""
-        # 1. Delete associated messages
+        """Permanently deletes conversation and all cascade-related artifacts (Right to Erasure - DPDP Act 2023)."""
+        # 1. Query all analyses for this conversation
+        an_res = self.client.table("analyses").select("*").eq("conversation_id", conversation_id).execute()
+        analyses = an_res.data if isinstance(an_res.data, list) else ([an_res.data] if an_res.data else [])
+        for an in analyses:
+            an_id = an.get("id")
+            if not an_id:
+                continue
+            # 2. Query and delete all agreements for this analysis
+            ag_res = self.client.table("agreements").select("*").eq("analysis_id", an_id).execute()
+            agreements = ag_res.data if isinstance(ag_res.data, list) else ([ag_res.data] if ag_res.data else [])
+            for ag in agreements:
+                ag_id = ag.get("id")
+                if not ag_id:
+                    continue
+                self.client.table("confirmations").delete().eq("agreement_id", ag_id).execute()
+                self.client.table("agreement_versions").delete().eq("agreement_id", ag_id).execute()
+                self.client.table("document_hashes").delete().eq("document_id", ag_id).execute()
+                self.client.table("agreements").delete().eq("id", ag_id).execute()
+            self.client.table("analyses").delete().eq("id", an_id).execute()
+
+        # 3. Delete hashes, audit events, messages, and conversation
+        self.client.table("document_hashes").delete().eq("document_id", conversation_id).execute()
+        self.client.table("audit_events").delete().eq("entity_id", conversation_id).execute()
         self.client.table("messages").delete().eq("conversation_id", conversation_id).execute()
-        # 2. Delete conversation record
         res = self.client.table("conversations").delete().eq("id", conversation_id).execute()
         return bool(res.data)
+
+    def claim_conversations(self, conversation_ids: List[str], target_user_id: str) -> int:
+        """Reassigns demo/anonymous conversations to an authenticated user account."""
+        count = 0
+        demo_user_id = "00000000-0000-0000-0000-000000000001"
+        for cid in conversation_ids:
+            conv = self.get_conversation(cid)
+            if conv:
+                uid = conv.get("user_id")
+                if not uid or uid == demo_user_id:
+                    self.client.table("conversations").update({"user_id": target_user_id}).eq("id", cid).execute()
+                    count += 1
+        return count
 
     def delete_all_conversations(self, user_id: Optional[str] = None) -> int:
         """Permanently deletes all stored conversations and messages upon user request."""
@@ -1603,6 +1637,17 @@ class DashboardRepository:
         # 5. Fetch confirmations
         conf_res = self.client.table("confirmations").select("*").execute()
         confirmations = conf_res.data if isinstance(conf_res.data, list) else ([conf_res.data] if conf_res.data else [])
+
+        # Scope metrics and artifacts strictly to user's conversations when authenticated
+        if user_id:
+            user_conv_ids = {str(c["id"]) for c in conversations if c.get("id")}
+            analyses = [a for a in analyses if str(a.get("conversation_id")) in user_conv_ids]
+            user_analysis_ids = {str(a["id"]) for a in analyses if a.get("id")}
+            agreements = [ag for ag in agreements if str(ag.get("analysis_id")) in user_analysis_ids]
+            user_agreement_ids = {str(ag["id"]) for ag in agreements if ag.get("id")}
+            confirmations = [conf for conf in confirmations if str(conf.get("agreement_id")) in user_agreement_ids]
+            user_doc_ids = user_conv_ids | user_agreement_ids
+            hashes = [h for h in hashes if str(h.get("document_id")) in user_doc_ids]
 
         # Map lookup structures
         analyses_by_conv: Dict[str, Dict[str, Any]] = {}

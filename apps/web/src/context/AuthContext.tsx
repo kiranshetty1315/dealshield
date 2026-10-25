@@ -26,6 +26,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const claimPendingChats = async () => {
+    try {
+      const raw = localStorage.getItem("dealshield_pending_chat_ids");
+      if (raw) {
+        const ids: string[] = JSON.parse(raw);
+        if (Array.isArray(ids) && ids.length > 0) {
+          await api.claimChats(ids);
+          localStorage.removeItem("dealshield_pending_chat_ids");
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to claim pending chats:", e);
+    }
+  };
+
   // Restore authenticated session from localStorage on mount and refresh from Supabase
   useEffect(() => {
     async function restoreSession() {
@@ -40,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           setToken(storedToken);
           setUser(parsed);
+          claimPendingChats();
 
           // Background revalidation against Supabase database
           api.getMe(storedToken).then((freshUser) => {
@@ -76,6 +92,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(authRes.access_token);
       localStorage.setItem(STORAGE_KEY_TOKEN, authRes.access_token);
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(cleanUser));
+      await claimPendingChats();
       return cleanUser;
     } catch (err) {
       throw err;
@@ -102,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken(authRes.access_token);
       localStorage.setItem(STORAGE_KEY_TOKEN, authRes.access_token);
       localStorage.setItem(STORAGE_KEY_USER, JSON.stringify(authRes.user));
+      await claimPendingChats();
       return authRes.user;
     } catch (err) {
       throw err;

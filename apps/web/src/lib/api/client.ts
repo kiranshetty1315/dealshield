@@ -212,6 +212,19 @@ export class ApiClient {
     return res.json();
   }
 
+  async claimChats(conversationIds: string[]): Promise<{ claimed_count: number }> {
+    const res = await fetch(`${this.baseUrl}/api/v1/chats/claim`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", ...this.getAuthHeaders() },
+      body: JSON.stringify({ conversation_ids: conversationIds }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Failed to claim conversations" }));
+      throw new Error(err.detail || `Failed to claim conversations (${res.status})`);
+    }
+    return res.json();
+  }
+
   async deleteChat(chatId: string): Promise<{ status: string; chat_id: string; message: string }> {
     const res = await fetch(`${this.baseUrl}/api/v1/chats/${encodeURIComponent(chatId)}`, {
       method: "DELETE",

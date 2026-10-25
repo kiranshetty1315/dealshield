@@ -107,6 +107,33 @@ EXTRACTION INSTRUCTIONS:
 """
 
 
+def clean_timeline_text(text: str) -> str:
+    """Extracts actual date, timeframe, or duration, stripping conversational chat pleasantries."""
+    if not text:
+        return ""
+    phrase_match = re.search(
+        r"\b(?:by\s+end\s+of\s+[A-Za-z]+|by\s+[A-Za-z0-9\s,]+|within\s+\d+\s*(?:weeks?|days?|months?)|in\s+\d+\s*(?:weeks?|days?|months?)|next\s+week)\b",
+        text,
+        re.IGNORECASE,
+    )
+    if phrase_match:
+        return phrase_match.group(0).strip()
+
+    cleaned = re.sub(
+        r"^(?:ok|okay|sounds good|great|sure|perfect|noted|yes|thanks|thank you)[.,!\s]*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+    cleaned = re.sub(
+        r"^(?:i(?:'ll|\s+will|\s+can)?\s+(?:send\s+over|deliver|share|need\s+it))\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+    return cleaned.strip() or text.strip()
+
+
 class AIExtractorService:
     """Service boundary for Google Gemini 3.8 Flash structured analysis and deterministic fallback."""
 
@@ -506,18 +533,26 @@ class AIExtractorService:
                 )
                 break
 
-        # Timeline detection
+        # Timeline detection: identify deadline, prioritizing committed delivery over casual sign-offs
         timeline_keywords = ["deadline", "by end of", "timeline", "month", "weeks", "friday", "april", "march"]
         timeline_msgs = [m for m in messages if any(k in m.content.lower() for k in timeline_keywords)]
         if timeline_msgs:
             t_ids = [m.message_id for m in timeline_msgs]
+            # Prioritize explicit deadline commitments over casual sign-off messages mentioning "next week"
+            deadline_markers = ["deadline", "by end of", "done by", "finish by", "complete by", "due by", "deliver by"]
+            deadline_candidates = [m for m in timeline_msgs if any(dm in m.content.lower() for dm in deadline_markers)]
+            target_accepted_msg = deadline_candidates[-1] if deadline_candidates else timeline_msgs[-1]
+
+            prop_val = clean_timeline_text(timeline_msgs[0].content)
+            acc_val = clean_timeline_text(target_accepted_msg.content)
+
             extracted_terms.append(
                 ExtractedTerm(
                     term_id="term_timeline_01",
                     category="timeline",
                     description="Delivery schedule and deadline",
-                    proposed_value=timeline_msgs[0].content.strip(),
-                    accepted_value=timeline_msgs[-1].content.strip(),
+                    proposed_value=prop_val,
+                    accepted_value=acc_val,
                     status=TermStatus.AGREED if len(timeline_msgs) <= 2 else TermStatus.AMBIGUOUS,
                     source_message_ids=t_ids,
                     confidence=ConfidenceLevel.MEDIUM,

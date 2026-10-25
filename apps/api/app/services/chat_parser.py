@@ -28,6 +28,31 @@ WHATSAPP_LINE_REGEX = re.compile(
     r"^\[?(\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:[\s\u202f\xa0]*(?:[AaPp]\.?[Mm]\.?|[AaPp][Mm]))?)\]?\s*[-–—]?\s*([^:]+):\s*(.*)$"
 )
 
+# Regex matching timestamped lines without sender colon (WhatsApp system notices)
+WHATSAPP_SYSTEM_LINE_REGEX = re.compile(
+    r"^\[?(\d{1,4}[/.-]\d{1,2}[/.-]\d{2,4}),?\s+(\d{1,2}:\d{2}(?::\d{2})?(?:[\s\u202f\xa0]*(?:[AaPp]\.?[Mm]\.?|[AaPp][Mm]))?)\]?\s*[-–—]?\s*(.+)$"
+)
+
+SYSTEM_NOTICES = [
+    "end-to-end encrypted",
+    "created group",
+    "security code changed",
+    "messages to this chat and calls are now secured",
+    "changed the group",
+    "changed this group",
+    "changed the subject",
+    "changed the description",
+    "added you",
+    "you were added",
+    "left the group",
+    "you left",
+    "was removed",
+    "joined using this group's invite link",
+    "waiting for this message",
+    "tap to learn more",
+    "disappearing messages",
+]
+
 
 def _detect_chat_date_convention(raw_lines: List[str]) -> Tuple[bool, bool, str]:
     """Scan all lines in chat to determine if format is DD/MM or MM/DD.
@@ -165,26 +190,26 @@ def parse_whatsapp_chat(
 
     for line_idx, raw_line in enumerate(lines, start=1):
         line = raw_line.lstrip("\u200e\u200f\ufeff\u202a\u202b\u202c\u202d\u202e")
+        line_lower = line.lower()
+
+        # Filter out system notifications before regex matching or line accumulation
+        is_known_system = any(n in line_lower for n in SYSTEM_NOTICES)
+        is_system_header = bool(WHATSAPP_SYSTEM_LINE_REGEX.match(line) and not WHATSAPP_LINE_REGEX.match(line))
+
+        if is_known_system or (is_system_header and not current_sender):
+            commit_current()
+            current_sender = ""
+            current_timestamp = None
+            current_content_lines = []
+            current_raw_lines = []
+            continue
+
         match = WHATSAPP_LINE_REGEX.match(line)
         if match:
             commit_current()
 
             date_part, time_part, sender_part, content_part = match.groups()
             sender_clean = sender_part.strip()
-
-            # Ignore system notifications
-            line_lower = line.lower()
-            if (
-                "end-to-end encrypted" in line_lower
-                or "created group" in line_lower
-                or "security code changed" in line_lower
-                or "messages to this chat and calls are now secured" in line_lower
-            ):
-                current_sender = ""
-                current_timestamp = None
-                current_content_lines = []
-                current_raw_lines = []
-                continue
 
             current_sender = sender_clean
             senders_set.add(sender_clean)
@@ -196,6 +221,15 @@ def parse_whatsapp_chat(
             current_content_lines = [content_part]
             current_raw_lines = [line]
         else:
+            if is_system_header:
+                # Mid-chat timestamped notice without colon (e.g., security code change or join/leave event)
+                commit_current()
+                current_sender = ""
+                current_timestamp = None
+                current_content_lines = []
+                current_raw_lines = []
+                continue
+
             if current_sender:
                 current_content_lines.append(line)
                 current_raw_lines.append(line)
