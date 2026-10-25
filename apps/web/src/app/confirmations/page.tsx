@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
   ConfirmationStatus,
   Agreement,
@@ -1047,15 +1048,17 @@ function ConfirmationsContent() {
 
 export default function ConfirmationsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-slate-700">Loading Confirmations View...</p>
-        </div>
-      }
-    >
-      <ConfirmationsContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense
+        fallback={
+          <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-slate-700">Loading Confirmations View...</p>
+          </div>
+        }
+      >
+        <ConfirmationsContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

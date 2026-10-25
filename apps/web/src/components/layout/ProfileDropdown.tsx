@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   User,
   Settings,
@@ -12,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 
 export function ProfileDropdown() {
+  const router = useRouter();
   const { user, logout } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isLogoutDialogOpen, setIsLogoutDialogOpen] = useState(false);
@@ -36,6 +38,8 @@ export function ProfileDropdown() {
   const handleConfirmLogout = async () => {
     setIsLogoutDialogOpen(false);
     await logout();
+    router.push("/");
+    router.refresh();
   };
 
   const displayName = user?.full_name || "Demo User";

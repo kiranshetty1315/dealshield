@@ -36,6 +36,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
 import { useAuth } from "@/context/AuthContext";
 import { ConversationRecord } from "@/types";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 export default function SettingsPage() {
   const { user, updateUser, refreshUser, isLoading: isAuthLoading } = useAuth();

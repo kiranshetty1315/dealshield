@@ -33,6 +33,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 import {
   ConflictResolutionDrawer,
   ResolvedConflictState,
@@ -674,15 +675,17 @@ function AnalysisContent() {
 
 export default function AnalysisPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-slate-700">Initializing Analysis View...</p>
-        </div>
-      }
-    >
-      <AnalysisContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense
+        fallback={
+          <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-slate-700">Initializing Analysis View...</p>
+          </div>
+        }
+      >
+        <AnalysisContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

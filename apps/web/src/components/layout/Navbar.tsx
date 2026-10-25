@@ -60,7 +60,7 @@ export function Navbar() {
           </Link>
 
           <nav className="hidden md:flex items-center gap-1">
-            {navItems.map((item) => {
+            {mounted && isAuthenticated && navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -79,28 +79,8 @@ export function Navbar() {
           </nav>
         </div>
 
-        {/* Right Section: Backend Connectivity Status & Auth Actions */}
+        {/* Right Section: Auth Actions */}
         <div className="flex items-center gap-3">
-          {/* Backend Health Badge */}
-          <div className="hidden sm:flex items-center gap-2 text-xs border border-slate-200 px-3 py-1.5 rounded-full bg-slate-50">
-            {isHealthLoading && !health ? (
-              <>
-                <span className="h-2 w-2 rounded-full bg-amber-400 animate-ping" />
-                <span className="text-slate-600">Checking API...</span>
-              </>
-            ) : health?.status === "healthy" ? (
-              <>
-                <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                <span className="text-emerald-700 font-medium">Backend Online (v{health.version})</span>
-              </>
-            ) : (
-              <>
-                <span className="h-2 w-2 rounded-full bg-red-500" />
-                <span className="text-red-700 font-medium">Backend Offline</span>
-              </>
-            )}
-          </div>
-
           {/* Dynamic Auth Section: Login/Signup buttons or User Profile Dropdown */}
           {mounted && !isAuthLoading && !isAuthenticated ? (
             <div className="flex items-center gap-2">

@@ -20,7 +20,7 @@ from app.services.chat_parser import parse_whatsapp_chat
 
 @pytest.fixture
 def extractor():
-    return AIExtractorService()
+    return AIExtractorService(api_key="")
 
 
 @pytest.fixture

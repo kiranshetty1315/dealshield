@@ -21,6 +21,7 @@ import {
 import { api } from "@/lib/api/client";
 import { DashboardStats, DashboardRecentConversation } from "@/types";
 import { useAuth } from "@/context/AuthContext";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 function formatTimestamp(isoString: string): string {
   if (!isoString) return "Recently";
@@ -78,7 +79,8 @@ export default function DashboardPage() {
   const recentConversations = stats?.recent_conversations ?? [];
 
   return (
-    <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-6xl">
+    <AuthGuard>
+      <div className="container mx-auto px-4 sm:px-8 py-8 space-y-8 max-w-6xl">
       {/* Header with Title and Primary Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -366,5 +368,6 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
-  );
+  </AuthGuard>
+);
 }

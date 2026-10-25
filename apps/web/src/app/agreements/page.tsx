@@ -33,6 +33,7 @@ import {
   UpdatedChatComparisonModal,
   ResolutionDiffSummary,
 } from "@/components/analysis/UpdatedChatComparisonModal";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 import { StampPaperModal } from "@/components/agreements/StampPaperModal";
 import { Agreement, Message, ConversationRecord, AgreementAnalysis, ChatUploadResponse } from "@/types";
 import { api } from "@/lib/api/client";
@@ -556,15 +557,17 @@ function AgreementsContent() {
 
 export default function AgreementsPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          <p className="text-sm font-medium text-slate-700">Loading Agreement Draft...</p>
-        </div>
-      }
-    >
-      <AgreementsContent />
-    </Suspense>
+    <AuthGuard>
+      <Suspense
+        fallback={
+          <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+            <p className="text-sm font-medium text-slate-700">Loading Agreement Draft...</p>
+          </div>
+        }
+      >
+        <AgreementsContent />
+      </Suspense>
+    </AuthGuard>
   );
 }

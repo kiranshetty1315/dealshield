@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api/client";
 import { DocumentHashVerification, AuditEvent } from "@/types";
+import { AuthGuard } from "@/components/auth/AuthGuard";
 
 function EvidenceContent() {
   const searchParams = useSearchParams();
@@ -282,7 +283,8 @@ function EvidenceContent() {
 
 export default function EvidencePage() {
   return (
-    <Suspense
+    <AuthGuard>
+      <Suspense
       fallback={
         <div className="container mx-auto px-4 py-20 flex flex-col items-center justify-center space-y-4">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -292,5 +294,6 @@ export default function EvidencePage() {
     >
       <EvidenceContent />
     </Suspense>
+    </AuthGuard>
   );
 }
