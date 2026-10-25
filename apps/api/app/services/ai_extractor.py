@@ -143,8 +143,12 @@ class AIExtractorService:
         model: Optional[str] = None,
         base_url: Optional[str] = None,
     ):
-        gemini_key = api_key or os.getenv("GEMINI_API_KEY") or getattr(settings, "GEMINI_API_KEY", "")
-        openai_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
+        if api_key == "":
+            gemini_key = ""
+            openai_key = ""
+        else:
+            gemini_key = api_key or os.getenv("GEMINI_API_KEY") or getattr(settings, "GEMINI_API_KEY", "")
+            openai_key = os.getenv("OPENAI_API_KEY") or getattr(settings, "OPENAI_API_KEY", "")
 
         raw_model = model or os.getenv("GEMINI_MODEL") or getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
         self.model = self._normalize_model_name(raw_model)

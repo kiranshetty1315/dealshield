@@ -98,5 +98,13 @@ class Settings(BaseSettings):
     SESSION_TTL_MINUTES: int = 30
     FRONTEND_BASE_URL: str = "http://localhost:3000"
 
+    # Security & Abuse Prevention
+    SQL_INJECTION_PROTECTION_ENABLED: bool = True
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = 120
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 20
+    RATE_LIMIT_AI_PER_MINUTE: int = 30
+    RATE_LIMIT_UPLOAD_PER_MINUTE: int = 30
+
 
 settings = Settings()

@@ -185,7 +185,7 @@ async def test_gemini_mocked_live_call(sample_01_messages, sample_01_fixture):
         mock_openai_module.AsyncOpenAI.assert_called_once_with(
             api_key="AIzaSyRealGeminiKeyExample123456",
             max_retries=0,
-            timeout=15.0,
+            timeout=45.0,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
         )
         mock_client.beta.chat.completions.parse.assert_awaited_once()

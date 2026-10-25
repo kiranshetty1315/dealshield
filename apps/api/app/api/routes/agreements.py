@@ -65,7 +65,10 @@ def check_agreement_access(
 )
 async def create_agreement(request: AgreementCreateRequest) -> Agreement:
     """Generate initial draft agreement and persist to database."""
-    analysis = analysis_repo.get_analysis(request.analysis_id)
+    try:
+        analysis = analysis_repo.get_analysis(request.analysis_id)
+    except Exception:
+        analysis = None
     if analysis and not analysis.is_commercial_deal:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -92,7 +95,10 @@ async def get_agreement_by_chat(
 ) -> Agreement:
     """Retrieve agreement for conversation or generate on-the-fly."""
     # 1. Look up analysis for this chat
-    analysis = analysis_repo.get_analysis_by_chat_id(chat_id)
+    try:
+        analysis = analysis_repo.get_analysis_by_chat_id(chat_id)
+    except Exception:
+        analysis = None
     if not analysis:
         from app.api.routes.analysis import analyze_chat
         from app.schemas.analysis import AnalysisRequest

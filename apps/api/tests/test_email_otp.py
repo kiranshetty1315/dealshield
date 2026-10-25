@@ -47,8 +47,11 @@ def setup_test_env():
     InMemoryEmailSender.clear()
 
 
-def create_test_agreement(analysis_id="analysis_email_otp_01"):
-    res = client.post("/api/v1/agreements", json={"analysis_id": analysis_id})
+def create_test_agreement(analysis_id="analysis_email_otp_01", parties=None):
+    payload = {"analysis_id": analysis_id}
+    if parties:
+        payload["parties"] = parties
+    res = client.post("/api/v1/agreements", json=payload)
     assert res.status_code in (200, 201)
     return res.json()["id"]
 
@@ -479,7 +482,7 @@ def test_confirmation_link_created_audit_logged():
 
 def test_version_assent_reset_on_create_new_version():
     from app.schemas.agreement import Clause
-    agreement_id = create_test_agreement("analysis_version_reset_01")
+    agreement_id = create_test_agreement("analysis_version_reset_01", parties=["Raj Mehta", "Priya Sharma"])
     agree_repo = AgreementRepository()
     conf_repo = ConfirmationRepository()
 
@@ -543,6 +546,8 @@ def test_direct_confirmation_rejects_unauthorized_user():
 async def test_production_lifespan_hard_stop():
     from app.main import lifespan
 
+    original_env = settings.ENVIRONMENT
+    original_secret = settings.SECRET_KEY
     settings.ENVIRONMENT = "production"
     settings.SECRET_KEY = "dealshield-insecure-default-dev-secret-key-change-in-production"
     try:
@@ -552,8 +557,8 @@ async def test_production_lifespan_hard_stop():
         assert "Production startup blocked" in str(exc_info.value)
     finally:
         # Reset to development settings
-        settings.ENVIRONMENT = "development"
-        settings.SECRET_KEY = "dealshield-insecure-default-dev-secret-key-change-in-production"
+        settings.ENVIRONMENT = original_env
+        settings.SECRET_KEY = original_secret
 
 def test_client_business_details_and_pan_verification_flow():
     """Validates:
@@ -588,7 +593,7 @@ def test_client_business_details_and_pan_verification_flow():
     # Verify zero-knowledge encrypted storage in DB (raw fields MUST contain ciphertext starting with enc:)
     db_res = conf_repo.client.table("confirmations").select("*").eq("agreement_id", agreement_id).execute()
     db_rows = db_res.data if isinstance(db_res.data, list) else [db_res.data]
-    cp_db_row = next(r for r in db_rows if r.get("confirmation_token_hash"))
+    cp_db_row = next(r for r in db_rows if r.get("confirmation_token_hash") == conf_repo.hash_token(raw_token))
     assert cp_db_row["gst_number"].startswith("enc:")
     assert "29ABCDE1234F1Z5" not in cp_db_row["gst_number"]
     assert cp_db_row["pan_last_4"].startswith("enc:")
@@ -628,7 +633,7 @@ def test_client_business_details_and_pan_verification_flow():
     assert send_otp_res.json()["status"] == "sent"
 
     # Extract OTP from in-memory sender
-    emails = InMemoryEmailSender.get_sent_emails()
+    emails = InMemoryEmailSender.outbox
     assert len(emails) > 0
     otp_match = re.search(r"\b(\d{6})\b", emails[-1]["body"])
     assert otp_match is not None

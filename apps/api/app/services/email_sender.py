@@ -70,6 +70,11 @@ class InMemoryEmailSender(EmailSender):
         """Clear all messages in the in-memory outbox."""
         cls.outbox.clear()
 
+    @classmethod
+    def get_sent_emails(cls) -> List[Dict[str, str]]:
+        """Return all sent emails in the in-memory outbox."""
+        return cls.outbox
+
 
 class SmtpEmailSender(EmailSender):
     """Production and staging SMTP email sender.
