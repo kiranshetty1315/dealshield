@@ -184,11 +184,76 @@ async def test_gemini_mocked_live_call(sample_01_messages, sample_01_fixture):
         assert len(result.parties) == 2
         mock_openai_module.AsyncOpenAI.assert_called_once_with(
             api_key="AIzaSyRealGeminiKeyExample123456",
-            max_retries=1,
+            max_retries=0,
             timeout=15.0,
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
         )
         mock_client.beta.chat.completions.parse.assert_awaited_once()
         call_kwargs = mock_client.beta.chat.completions.parse.await_args.kwargs
         assert call_kwargs["model"] == "gemini-3.8-flash"
+        assert call_kwargs["temperature"] == 0
         assert call_kwargs["response_format"] == AgreementAnalysis
+
+
+@pytest.mark.asyncio
+async def test_sample_non_deal_01_rejected_by_deal_gate(extractor):
+    """Verify non-deal hackathon announcement is rejected by deterministic deal gate."""
+    txt_path = "sample-data/whatsapp/sample-non-deal-01.txt"
+    with open(txt_path, "r", encoding="utf-8") as f:
+        raw_text = f.read()
+    messages, _, _ = parse_whatsapp_chat(raw_text)
+
+    analysis = await extractor.analyze_chat("chat_non_deal_01", messages)
+    assert analysis.is_commercial_deal is False
+    assert analysis.extraction_engine == "fallback"
+    assert analysis.confidence_score <= 0.3
+    assert analysis.requires_human_review is False
+    assert len(analysis.extracted_terms) == 0
+    assert len(analysis.conflicts) == 0
+    assert len(analysis.missing_terms) == 0
+    assert analysis.deal_rationale is not None
+    assert "No bilateral commercial negotiation" in analysis.deal_rationale or "keywords" in analysis.deal_rationale
+
+
+@pytest.mark.asyncio
+async def test_negotiation_samples_pass_deal_gate(extractor, sample_01_messages, sample_02_messages):
+    """Verify commercial negotiations sample 01 and 02 pass deal gate with extraction_engine=fallback."""
+    analysis_01 = await extractor.analyze_chat("chat_01", sample_01_messages)
+    assert analysis_01.is_commercial_deal is True
+    assert analysis_01.extraction_engine == "fallback"
+    assert len(analysis_01.extracted_terms) > 0
+    assert analysis_01.requires_human_review is True
+
+    analysis_02 = await extractor.analyze_chat("chat_02", sample_02_messages)
+    assert analysis_02.is_commercial_deal is True
+    assert analysis_02.extraction_engine == "fallback"
+    assert len(analysis_02.extracted_terms) > 0
+    assert analysis_02.requires_human_review is True
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_retry_backoff_and_fallback(sample_01_messages):
+    """Verify 429 rate-limit errors trigger 3 retry attempts with backoff before fallback."""
+    from unittest.mock import AsyncMock, patch, MagicMock
+
+    ext = AIExtractorService(api_key="AIzaSyRealGeminiKeyExample123456", model="Gemini 3.8 Flash")
+
+    mock_client = MagicMock()
+    # Simulate rate-limit error on parse and create
+    mock_client.beta.chat.completions.parse = AsyncMock(side_effect=Exception("429 Too Many Requests: Rate limit exceeded"))
+    mock_client.chat.completions.create = AsyncMock(side_effect=Exception("429 Too Many Requests: Rate limit exceeded"))
+
+    mock_openai_module = MagicMock()
+    mock_openai_module.AsyncOpenAI = MagicMock(return_value=mock_client)
+
+    with patch.dict("sys.modules", {"openai": mock_openai_module}):
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await ext.analyze_chat("chat_rate_limit_test", sample_01_messages)
+            # Should have retried 3 times on parse
+            assert mock_client.beta.chat.completions.parse.call_count == 3
+            # Should have called sleep twice during parse retries (1s, 2s)
+            assert mock_sleep.call_count >= 2
+            # Should fall back to deterministic extraction
+            assert result.extraction_engine == "fallback"
+            assert result.is_commercial_deal is True
+

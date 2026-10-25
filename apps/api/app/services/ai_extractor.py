@@ -7,6 +7,7 @@ intelligent deterministic fallback for offline evaluation matching
 sample-negotiation-01-expected.json.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -29,15 +30,50 @@ from app.schemas.analysis import (
     ImportanceLevel,
 )
 from app.schemas.chat import Message
-from app.services.conflict_detector import ConflictDetectorService
+from app.services.conflict_detector import ConflictDetectorService, PRICE_REGEX
 from app.services.legal_retriever import LegalRetrieverService
 
 logger = logging.getLogger(__name__)
 
+SCOPE_KEYWORDS = [
+    "design",
+    "develop",
+    "campaign",
+    "website",
+    "work",
+    "deliver",
+    "project",
+]
+
+PRICE_REPLY_REGEX = re.compile(
+    r"\b(price|prices|budget|budgets|rate|rates|fee|fees|charge|charges|cost|costs|ok|okay|deal|agree|agreed|works|can do|too high|too low|instead)\b",
+    re.IGNORECASE,
+)
 
 EXTRACTION_SYSTEM_PROMPT = """You are DealShield AI's Senior Legal Intelligence and Contract Extraction Engine.
 Your role is to parse informal business conversations (WhatsApp transcripts) and convert them into structured,
 legally rigorous commercial contract agreements governed by Indian commercial law.
+
+COMMERCIAL DEAL DEFINITION & QUALIFICATION GATE:
+A commercial deal requires:
+(a) two or more parties,
+(b) an exchange of paid work/goods/services for money or other consideration, and
+(c) at least one proposal or counter-proposal between those parties.
+Announcements, prizes, giveaways, event invitations, hackathons, general chat, and amounts not offered between the parties are NOT deals.
+
+If the conversation is NOT a commercial deal:
+- Set is_commercial_deal = false.
+- Set deal_rationale to a concise one-sentence explanation of why it is not a commercial deal (e.g. "This conversation represents an event prize announcement rather than a bilateral commercial negotiation between contracting parties.").
+- Set extraction_engine = "llm".
+- Return empty arrays for extracted_terms ([]), conflicts ([]), and missing_terms ([]).
+- Set confidence_score to 0.9.
+- Set requires_human_review = false.
+
+If the conversation IS a commercial deal:
+- Set is_commercial_deal = true.
+- Set deal_rationale to a concise one-sentence description of the commercial arrangement.
+- Set extraction_engine = "llm".
+- Extract all terms, conflicts, and missing statutory boilerplate as instructed below.
 
 STATUTORY FOUNDATION TO ENFORCE:
 1. Indian Contract Act, 1872:
@@ -153,13 +189,13 @@ class AIExtractorService:
         """Invoke live Gemini 3.8 Flash (or OpenAI fallback) with structured output schema validation."""
         try:
             from openai import AsyncOpenAI
-        except ImportError:
+        except ImportError as ie:
             logger.warning("openai client package not available, falling back to deterministic extractor.")
-            return self._deterministic_extract(chat_id, messages, focus_areas)
+            raise ie
 
         client_kwargs: Dict[str, Any] = {
             "api_key": self.api_key,
-            "max_retries": 1,
+            "max_retries": 0,
             "timeout": 15.0,
         }
         if self.base_url:
@@ -175,44 +211,103 @@ class AIExtractorService:
         transcript_text = "\n".join(transcript_lines)
 
         user_content = (
-            f"Analyze the following conversation (Chat ID: {chat_id}) and extract all agreement terms, "
-            f"conflicts under Section 7 Indian Contract Act, and missing statutory boilerplate clauses.\n\n"
+            f"Analyze the following conversation (Chat ID: {chat_id}) and determine if it represents a commercial deal. "
+            f"If it is a commercial deal, extract all agreement terms, "
+            f"conflicts under Section 7 Indian Contract Act, and missing statutory boilerplate clauses. "
+            f"If not, set is_commercial_deal=false with deal_rationale.\n\n"
             f"CONVERSATION TRANSCRIPT:\n{transcript_text}\n"
         )
         if focus_areas:
             user_content += f"\nPriority focus areas: {', '.join(focus_areas)}\n"
 
+        delays = [1.0, 2.0, 4.0]
+
+        async def _call_parse_with_backoff():
+            for attempt in range(3):
+                try:
+                    return await client.beta.chat.completions.parse(
+                        model=self.model,
+                        temperature=0,
+                        messages=[
+                            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                            {"role": "user", "content": user_content},
+                        ],
+                        response_format=AgreementAnalysis,
+                    )
+                except Exception as exc:
+                    exc_name = type(exc).__name__.lower()
+                    exc_msg = str(exc).lower()
+                    is_rate_or_timeout = (
+                        isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+                        or "ratelimit" in exc_name
+                        or "timeout" in exc_name
+                        or "429" in exc_msg
+                        or "resource_exhausted" in exc_msg
+                    )
+                    if is_rate_or_timeout and attempt < 2:
+                        delay = delays[attempt]
+                        logger.warning(
+                            f"LLM API rate limit or timeout ({type(exc).__name__}: {exc}). "
+                            f"Retrying in {delay}s (attempt {attempt + 1}/3)..."
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    raise exc
+
         try:
-            completion = await client.beta.chat.completions.parse(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_content},
-                ],
-                response_format=AgreementAnalysis,
-            )
+            completion = await _call_parse_with_backoff()
             parsed: Optional[AgreementAnalysis] = completion.choices[0].message.parsed
             if parsed:
                 parsed.chat_id = chat_id
                 parsed.analysis_id = ensure_uuid(parsed.analysis_id)
+                parsed.extraction_engine = "llm"
                 return parsed
         except Exception as parse_err:
-            logger.info(f"{self.provider.upper()} structured parse failed ({parse_err}), trying JSON mode fallback.")
-            response = await client.chat.completions.create(
-                model=self.model,
-                response_format={"type": "json_object"},
-                messages=[
-                    {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                    {
-                        "role": "user",
-                        "content": user_content + "\nReturn a valid JSON object matching the AgreementAnalysis schema.",
-                    },
-                ],
+            logger.info(
+                f"{self.provider.upper()} structured parse failed ({type(parse_err).__name__}: {parse_err}), trying JSON mode fallback."
             )
+
+            async def _call_json_mode_with_backoff():
+                for attempt in range(3):
+                    try:
+                        return await client.chat.completions.create(
+                            model=self.model,
+                            temperature=0,
+                            response_format={"type": "json_object"},
+                            messages=[
+                                {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+                                {
+                                    "role": "user",
+                                    "content": user_content + "\nReturn a valid JSON object matching the AgreementAnalysis schema.",
+                                },
+                            ],
+                        )
+                    except Exception as exc:
+                        exc_name = type(exc).__name__.lower()
+                        exc_msg = str(exc).lower()
+                        is_rate_or_timeout = (
+                            isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+                            or "ratelimit" in exc_name
+                            or "timeout" in exc_name
+                            or "429" in exc_msg
+                            or "resource_exhausted" in exc_msg
+                        )
+                        if is_rate_or_timeout and attempt < 2:
+                            delay = delays[attempt]
+                            logger.warning(
+                                f"LLM API JSON-mode rate limit or timeout ({type(exc).__name__}: {exc}). "
+                                f"Retrying in {delay}s (attempt {attempt + 1}/3)..."
+                            )
+                            await asyncio.sleep(delay)
+                            continue
+                        raise exc
+
+            response = await _call_json_mode_with_backoff()
             raw_json = response.choices[0].message.content or "{}"
             data = json.loads(raw_json)
             data["chat_id"] = chat_id
             data["analysis_id"] = ensure_uuid(data.get("analysis_id"))
+            data["extraction_engine"] = "llm"
             return AgreementAnalysis.model_validate(data)
 
         return self._deterministic_extract(chat_id, messages, focus_areas)
@@ -229,6 +324,45 @@ class AIExtractorService:
         """Dynamic extraction engine that parses real conversation messages."""
         analysis_id = str(uuid.uuid4())
         return self._build_dynamic_analysis(chat_id, analysis_id, messages)
+
+    def _evaluate_commercial_deal_gate(
+        self, messages: List[Message], unique_senders: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """Evaluate if conversation satisfies bilateral commercial deal requirements."""
+        # 1. At least 2 distinct senders
+        if len(unique_senders) < 2:
+            return False, "Fewer than two distinct participants found in conversation transcript."
+
+        # 2. At least one scope keyword
+        has_scope = any(
+            any(kw in m.content.lower() for kw in SCOPE_KEYWORDS)
+            for m in messages
+        )
+        if not has_scope:
+            return False, "No commercial scope or deliverable keywords detected in conversation."
+
+        # 3. Currency amount mentioned by one sender AND a reply from a different sender within next 3 messages
+        # referencing price, budget, rate, fee, charge, cost, or containing acceptance/counter word
+        has_price_exchange = False
+        for i, msg in enumerate(messages):
+            if PRICE_REGEX.search(msg.content):
+                sender_i = msg.sender
+                for j in range(i + 1, min(i + 4, len(messages))):
+                    reply_msg = messages[j]
+                    if reply_msg.sender != sender_i:
+                        if PRICE_REPLY_REGEX.search(reply_msg.content) or PRICE_REGEX.search(reply_msg.content):
+                            has_price_exchange = True
+                            break
+            if has_price_exchange:
+                break
+
+        if not has_price_exchange:
+            return (
+                False,
+                "No bilateral commercial negotiation or exchange of price proposals detected between parties.",
+            )
+
+        return True, "Commercial negotiation detected with bilateral consideration and scope."
 
     def _build_dynamic_analysis(
         self, chat_id: str, analysis_id: str, messages: List[Message]
@@ -253,7 +387,25 @@ class AIExtractorService:
                 )
             )
 
-        # 2. Extract Terms dynamically
+        # 2. Gate check for commercial deal
+        is_deal, rationale = self._evaluate_commercial_deal_gate(messages, unique_senders)
+        if not is_deal:
+            return AgreementAnalysis(
+                analysis_id=analysis_id,
+                chat_id=chat_id,
+                parties=parties,
+                extracted_terms=[],
+                conflicts=[],
+                missing_terms=[],
+                confidence_score=0.2,
+                requires_human_review=False,
+                analyzed_at=datetime.now(timezone.utc),
+                is_commercial_deal=False,
+                deal_rationale=rationale,
+                extraction_engine="fallback",
+            )
+
+        # 3. Extract Terms dynamically
         extracted_terms: List[ExtractedTerm] = []
 
         # Pricing detection
@@ -336,11 +488,11 @@ class AIExtractorService:
                 )
             )
 
-        # 3. Detect Conflicts under Section 7
-        conflicts = self.conflict_detector.detect_conflicts(messages)
+        # 4. Detect Conflicts under Section 7
+        conflicts = self.conflict_detector.detect_conflicts(messages, is_commercial_deal=True)
 
-        # 4. Detect Missing Terms
-        missing_terms = self.legal_retriever.detect_missing_terms(extracted_terms, messages)
+        # 5. Detect Missing Terms
+        missing_terms = self.legal_retriever.detect_missing_terms(extracted_terms, messages, is_commercial_deal=True)
 
         confidence_score = 0.85 if not conflicts else 0.78
 
@@ -354,4 +506,7 @@ class AIExtractorService:
             confidence_score=confidence_score,
             requires_human_review=True,
             analyzed_at=datetime.now(timezone.utc),
+            is_commercial_deal=True,
+            deal_rationale=rationale,
+            extraction_engine="fallback",
         )

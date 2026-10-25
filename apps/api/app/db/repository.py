@@ -1394,6 +1394,9 @@ class AnalysisRepository:
                 if isinstance(analysis.analyzed_at, datetime)
                 else str(analysis.analyzed_at)
             ),
+            "is_commercial_deal": analysis.is_commercial_deal,
+            "deal_rationale": analysis.deal_rationale,
+            "extraction_engine": analysis.extraction_engine,
         }
         res = self.client.table("analyses").insert(row).execute()
         return res.data[0] if isinstance(res.data, list) and res.data else res.data
@@ -1423,45 +1426,32 @@ class AnalysisRepository:
             confidence_score=data.get("confidence_score", 0.0),
             requires_human_review=data.get("requires_human_review", True),
             analyzed_at=an_dt,
-        )
-
-    def get_analysis_by_chat_id(self, chat_id: str) -> Optional[AgreementAnalysis]:
-        target_conv_id = ensure_uuid(chat_id)
-        res = self.client.table("analyses").select("*").eq("conversation_id", target_conv_id).execute()
-        data = res.data[0] if isinstance(res.data, list) and res.data else res.data
-        if not data and target_conv_id != chat_id:
-            res = self.client.table("analyses").select("*").eq("conversation_id", chat_id).execute()
-            data = res.data[0] if isinstance(res.data, list) and res.data else res.data
-        if not data:
-            return None
-        an_at = data.get("analyzed_at")
-        an_dt = (
-            datetime.fromisoformat(an_at.replace("Z", "+00:00"))
-            if isinstance(an_at, str)
-            else datetime.now(timezone.utc)
-        )
-        return AgreementAnalysis(
-            analysis_id=data["id"],
-            chat_id=data.get("conversation_id", ""),
-            parties=data.get("parties", []),
-            extracted_terms=data.get("extracted_terms", []),
-            conflicts=data.get("conflicts", []),
-            missing_terms=data.get("missing_terms", []),
-            confidence_score=data.get("confidence_score", 0.0),
-            requires_human_review=data.get("requires_human_review", True),
-            analyzed_at=an_dt,
+            is_commercial_deal=data.get("is_commercial_deal", True),
+            deal_rationale=data.get("deal_rationale"),
+            extraction_engine=data.get("extraction_engine", "llm"),
         )
 
     def get_analysis_by_chat_id(self, conversation_id: str) -> Optional[AgreementAnalysis]:
         """Retrieves latest legal analysis record for a given conversation."""
+        target_conv_id = ensure_uuid(conversation_id)
         res = (
             self.client.table("analyses")
             .select("*")
-            .eq("conversation_id", conversation_id)
+            .eq("conversation_id", target_conv_id)
             .order("analyzed_at", desc=True)
             .execute()
         )
         data = res.data
+        if not data and target_conv_id != conversation_id:
+            res = (
+                self.client.table("analyses")
+                .select("*")
+                .eq("conversation_id", conversation_id)
+                .order("analyzed_at", desc=True)
+                .execute()
+            )
+            data = res.data
+
         if not data:
             return None
         row = data[0] if isinstance(data, list) else data
@@ -1481,6 +1471,9 @@ class AnalysisRepository:
             confidence_score=row.get("confidence_score", 0.0),
             requires_human_review=row.get("requires_human_review", True),
             analyzed_at=an_dt,
+            is_commercial_deal=row.get("is_commercial_deal", True),
+            deal_rationale=row.get("deal_rationale"),
+            extraction_engine=row.get("extraction_engine", "llm"),
         )
 
 

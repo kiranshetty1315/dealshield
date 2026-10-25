@@ -228,3 +228,35 @@ def test_llm_slug_analysis_id_persistence():
     assert retrieved_by_slug.analysis_id == analysis.analysis_id
 
 
+def test_non_deal_chat_yields_422_on_agreements_creation():
+    """Verify non-deal conversation cannot be converted into an agreement draft and returns 422."""
+    with open("sample-data/whatsapp/sample-non-deal-01.txt", "r", encoding="utf-8") as f:
+        content = f.read()
+
+    upload_res = client.post(
+        "/api/v1/chats/upload",
+        content=content,
+        headers={"Content-Type": "text/plain"},
+    )
+    assert upload_res.status_code == 201
+    chat_id = upload_res.json()["chat_id"]
+
+    analysis_res = client.post("/api/v1/analysis", json={"chat_id": chat_id})
+    assert analysis_res.status_code == 200
+    analysis = analysis_res.json()
+    assert analysis["is_commercial_deal"] is False
+    assert analysis["extraction_engine"] == "fallback"
+    analysis_id = analysis["analysis_id"]
+
+    # Attempting to synthesize draft agreement on non-deal returns 422
+    ag_res = client.post("/api/v1/agreements", json={"analysis_id": analysis_id})
+    assert ag_res.status_code == 422
+    assert "No commercial negotiation detected in this conversation" in ag_res.json()["detail"]
+
+    # Attempting to retrieve/synthesize by chat returns 422
+    by_chat_res = client.get(f"/api/v1/agreements/chat/{chat_id}")
+    assert by_chat_res.status_code == 422
+    assert "No commercial negotiation detected in this conversation" in by_chat_res.json()["detail"]
+
+
+

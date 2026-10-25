@@ -79,6 +79,9 @@ class AgreementAnalysis(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0, description="Overall extraction confidence")
     requires_human_review: bool = Field(default=True, description="Flag indicating human lawyer/user review needed")
     analyzed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_commercial_deal: bool = Field(default=True, description="Whether this conversation represents a commercial deal")
+    deal_rationale: Optional[str] = Field(default=None, description="One-sentence explanation of deal classification")
+    extraction_engine: str = Field(default="llm", description="Engine used: llm or fallback")
 
 
 class AnalysisRequest(BaseModel):

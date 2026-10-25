@@ -92,6 +92,8 @@ async def analyze_chat(request: AnalysisRequest) -> AgreementAnalysis:
             "missing_terms_flagged": len(analysis.missing_terms),
             "confidence_score": analysis.confidence_score,
             "requires_human_review": analysis.requires_human_review,
+            "is_commercial_deal": analysis.is_commercial_deal,
+            "extraction_engine": analysis.extraction_engine,
         },
     )
 

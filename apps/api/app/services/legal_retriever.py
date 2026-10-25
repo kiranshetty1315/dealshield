@@ -173,6 +173,7 @@ class LegalRetrieverService:
         extracted_terms: List[ExtractedTerm],
         messages: Optional[List[Message]] = None,
         include_recommended: bool = False,
+        is_commercial_deal: bool = True,
     ) -> List[MissingTerm]:
         """Detect missing statutory and commercial safeguards against Indian commercial standards.
         
@@ -181,6 +182,9 @@ class LegalRetrieverService:
         - Termination and Work-in-Progress remedies (Indian Contract Act Section 73)
         - Dispute resolution / governing law (recommended)
         """
+        if not is_commercial_deal:
+            return []
+
         existing_categories = {t.category.lower() for t in extracted_terms}
         
         # Also inspect message content if provided

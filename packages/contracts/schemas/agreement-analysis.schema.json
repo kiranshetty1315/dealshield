@@ -318,6 +318,35 @@
       "format": "date-time",
       "title": "Analyzed At",
       "type": "string"
+    },
+    "is_commercial_deal": {
+      "default": true,
+      "description": "Whether this conversation represents a commercial deal",
+      "title": "Is Commercial Deal",
+      "type": "boolean"
+    },
+    "deal_rationale": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "One-sentence explanation of deal classification",
+      "title": "Deal Rationale"
+    },
+    "extraction_engine": {
+      "default": "llm",
+      "description": "Engine used: llm or fallback",
+      "enum": [
+        "llm",
+        "fallback"
+      ],
+      "title": "Extraction Engine",
+      "type": "string"
     }
   },
   "required": [

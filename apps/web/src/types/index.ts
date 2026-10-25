@@ -100,6 +100,9 @@ export interface AgreementAnalysis {
   confidence_score: number;
   requires_human_review: boolean;
   analyzed_at: string;
+  is_commercial_deal?: boolean;
+  deal_rationale?: string | null;
+  extraction_engine?: "llm" | "fallback" | string;
 }
 
 export type AgreementStatus =

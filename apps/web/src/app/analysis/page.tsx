@@ -32,6 +32,7 @@ import {
   ChevronDown,
   RefreshCw,
   ShieldCheck,
+  AlertCircle,
 } from "lucide-react";
 import { ChatMessageViewer } from "@/components/chat/ChatMessageViewer";
 import { AuthGuard } from "@/components/auth/AuthGuard";
@@ -271,6 +272,22 @@ function AnalysisContent() {
     }
   };
 
+  const [isReanalyzing, setIsReanalyzing] = useState<boolean>(false);
+
+  const handleRerunAnalysis = async () => {
+    const targetChatId = analysis?.chat_id || selectedChatId || chatIdParam;
+    if (!targetChatId) return;
+    setIsReanalyzing(true);
+    try {
+      const refreshed = await api.analyzeChat(targetChatId);
+      setAnalysis(refreshed);
+    } catch (err: any) {
+      alert(`Re-run analysis failed: ${err.message || err}`);
+    } finally {
+      setIsReanalyzing(false);
+    }
+  };
+
   // Current selected conversation record
   const currentConversation = conversations.find((c) => c.id === selectedChatId) || null;
 
@@ -474,7 +491,12 @@ function AnalysisContent() {
             </div>
 
             <div className="flex items-center gap-3 shrink-0 flex-wrap">
-              {isAllResolved ? (
+              {analysis.is_commercial_deal === false ? (
+                <Badge variant="outline" className="gap-1.5 py-1 px-3 text-xs font-medium border-slate-300 text-slate-700 bg-slate-50">
+                  <AlertCircle className="h-3.5 w-3.5 text-slate-500" />
+                  Non-Commercial Chat
+                </Badge>
+              ) : isAllResolved ? (
                 <Badge variant="success" className="gap-1.5 py-1 px-3 text-xs bg-emerald-600 text-white font-medium">
                   <CheckCircle className="h-3.5 w-3.5" />
                   All Conflicts Resolved
@@ -486,31 +508,102 @@ function AnalysisContent() {
                 </Badge>
               )}
 
+              {analysis.is_commercial_deal !== false && (
+                <Button
+                  onClick={handleGenerateAgreement}
+                  disabled={isGenerating}
+                  className="gap-2 text-xs font-semibold shadow-sm"
+                  variant={isAllResolved ? "default" : "secondary"}
+                >
+                  {isGenerating ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Synthesizing Agreement Draft...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4" />
+                      Synthesize Agreement Draft
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Fallback Engine Notice Banner */}
+          {analysis.extraction_engine === "fallback" && (
+            <div className="bg-amber-50 border border-amber-300 text-amber-900 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-sm">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-950">
+                    AI service was unavailable; this result used a basic keyword engine and may be inaccurate. Re-run the analysis.
+                  </p>
+                  <p className="text-xs text-amber-800 mt-0.5">
+                    Deterministic keyword extraction was used as a fallback.
+                  </p>
+                </div>
+              </div>
               <Button
-                onClick={handleGenerateAgreement}
-                disabled={isGenerating}
-                className="gap-2 text-xs font-semibold shadow-sm"
-                variant={isAllResolved ? "default" : "secondary"}
+                variant="outline"
+                size="sm"
+                disabled={isReanalyzing}
+                onClick={handleRerunAnalysis}
+                className="border-amber-400 bg-white hover:bg-amber-100 text-amber-900 text-xs font-semibold shrink-0 gap-1.5 shadow-sm"
               >
-                {isGenerating ? (
+                {isReanalyzing ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Synthesizing Agreement Draft...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Re-running...
                   </>
                 ) : (
                   <>
-                    <FileText className="h-4 w-4" />
-                    Synthesize Agreement Draft
-                    <ArrowRight className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Re-run analysis
                   </>
                 )}
               </Button>
             </div>
-          </div>
+          )}
 
           {/* Split Pane: Analysis & Resolution (Left) vs. Verbatim Chat Evidence (Right) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* Left Pane (7 cols): Analysis, Conflicts, Terms, Legal Safeguards */}
+            {/* Left Pane (7 cols): Analysis or Non-Deal Card */}
+            {analysis.is_commercial_deal === false ? (
+              <div className="lg:col-span-7 space-y-6">
+                <Card className="border-amber-200 bg-amber-50/40 shadow-sm p-6 sm:p-8 space-y-5">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0 text-amber-700 shadow-sm">
+                      <AlertCircle className="h-6 w-6" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <h2 className="text-lg font-bold text-slate-900">
+                        No commercial negotiation detected
+                      </h2>
+                      <p className="text-sm text-slate-600 leading-relaxed">
+                        {analysis.deal_rationale ||
+                          "This conversation does not appear to contain a bilateral commercial negotiation, exchange of price proposals, or formal terms between contracting parties."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-amber-200/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Agreements can only be synthesized from genuine bilateral commercial negotiations.
+                    </p>
+                    <Button
+                      onClick={() => router.push("/upload")}
+                      className="gap-2 text-xs font-semibold shadow-sm shrink-0"
+                    >
+                      <Upload className="h-4 w-4" />
+                      Upload Different Chat
+                    </Button>
+                  </div>
+                </Card>
+              </div>
+            ) : (
             <div className="lg:col-span-7 space-y-6">
               {/* Identified Contracting Parties */}
               <Card className="border-slate-200 shadow-sm">
@@ -635,6 +728,7 @@ function AnalysisContent() {
                 </CardContent>
               </Card>
             </div>
+            )}
 
             {/* Right Pane (5 cols): Interactive Verbatim WhatsApp Transcript */}
             <div className="lg:col-span-5 lg:sticky lg:top-20 space-y-4">

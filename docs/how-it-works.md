@@ -119,6 +119,15 @@ The user clicks **"Analyze Negotiation with DealShield AI"**. The frontend calls
 
 * Saves findings in Supabase `analyses` and logs an immutable audit event in `audit_events`.
 
+* **Commercial Deal Qualification Gate:**
+  * Before generating terms, the analysis pipeline strictly qualifies whether the transcript represents a genuine commercial negotiation.
+  * **3-Point Deal Criteria:**
+    1. **Multi-Party Participation:** At least two distinct participants in the conversation.
+    2. **Bilateral Consideration:** A currency amount proposed by one participant followed by an active negotiation or acceptance response from another participant within 3 messages (e.g. referencing price, budget, fee, cost, or containing acceptance/counter words like `ok`, `deal`, `agree`, `works`, `can do`, `too high`, `instead`).
+    3. **Commercial Scope:** Mentions commercial work keywords (`design`, `develop`, `campaign`, `website`, `work`, `deliver`, `project`).
+  * **Non-Deal Rejection:** Broadcast announcements, prize notifications, hackathons, and general banter without bilateral consideration are flagged with `is_commercial_deal = false`, a concise `deal_rationale`, and empty terms/conflicts/missing items. Drafting agreements for non-deals is blocked with HTTP 422.
+  * **Extraction Engine Transparency:** Returns `extraction_engine: "llm" | "fallback"`. If AI rate limits or network issues occur, the pipeline retries with exponential backoff before using deterministic fallback, displaying a user-visible fallback banner with a "Re-run analysis" trigger.
+
 ---
 
 ### Step 3: Plain-Language Agreement Synthesis (`/agreements`)

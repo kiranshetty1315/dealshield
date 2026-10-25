@@ -76,12 +76,14 @@ class ConflictDetectorService:
                 results.append((msg, formatted_prices))
         return results
 
-    def detect_conflicts(self, messages: List[Message]) -> List[ConflictItem]:
+    def detect_conflicts(
+        self, messages: List[Message], is_commercial_deal: bool = True
+    ) -> List[ConflictItem]:
         """Analyze message exchanges for pricing disagreements, counter-offers, and ambiguous acceptance.
         
         Anchored on Section 7 of the Indian Contract Act, 1872.
         """
-        if not messages:
+        if not is_commercial_deal or not messages:
             return []
 
         conflicts: List[ConflictItem] = []

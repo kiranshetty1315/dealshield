@@ -63,6 +63,13 @@ def check_agreement_access(
 )
 async def create_agreement(request: AgreementCreateRequest) -> Agreement:
     """Generate initial draft agreement and persist to database."""
+    analysis = analysis_repo.get_analysis(request.analysis_id)
+    if analysis and not analysis.is_commercial_deal:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No commercial negotiation detected in this conversation",
+        )
+
     agreement = generator_service.generate_draft(
         analysis_id=request.analysis_id,
         parties=request.parties,
@@ -84,6 +91,12 @@ async def get_agreement_by_chat(chat_id: str) -> Agreement:
         from app.api.routes.analysis import analyze_chat
         from app.schemas.analysis import AnalysisRequest
         analysis = await analyze_chat(AnalysisRequest(chat_id=chat_id))
+
+    if analysis and not analysis.is_commercial_deal:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No commercial negotiation detected in this conversation",
+        )
 
     # 2. Check if an agreement already exists for this analysis_id
     res = agreement_repo.client.table("agreements").select("*").eq("analysis_id", analysis.analysis_id).execute()
