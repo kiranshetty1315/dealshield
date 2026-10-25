@@ -3,6 +3,7 @@ import hashlib
 from typing import Optional
 from fastapi import APIRouter, Depends, Header, HTTPException, status, Response
 import re
+from app.core.security import encrypt_message_content, decrypt_message_content
 from app.schemas.agreement import Agreement, AgreementCreateRequest, AgreementUpdatePartiesRequest, Clause
 from app.services.agreement_generator import AgreementGeneratorService
 from app.services.hash_service import HashService
@@ -234,9 +235,9 @@ async def update_agreement_parties(
     new_hash = HashService.hash_text(plain_text)
     now_iso = datetime.now(timezone.utc).isoformat()
 
-    # Update agreement in database
+    # Update agreement in database with encrypted parties
     agreement_repo.client.table("agreements").update({
-        "parties": updated_parties,
+        "parties": [encrypt_message_content(p) for p in updated_parties],
         "updated_at": now_iso,
     }).eq("id", agreement_id).execute()
 
@@ -252,26 +253,33 @@ async def update_agreement_parties(
             "content_hash": new_hash,
         }).eq("agreement_id", agreement_id).eq("version_number", agreement.current_version).execute()
 
-    # Update confirmations table party_name entries so tokens match new party names
+    # Update confirmations table party_name entries with application-level encryption
     try:
         conf_res = agreement_repo.client.table("confirmations").select("id, party_name").eq("agreement_id", agreement_id).execute()
         conf_rows = conf_res.data if isinstance(conf_res.data, list) else ([conf_res.data] if conf_res.data else [])
         if conf_rows:
             for idx, crow in enumerate(conf_rows):
-                cp_name = crow.get("party_name", "")
-                target_new_name = None
+                cp_name = decrypt_message_content(crow.get("party_name", ""))
                 if cp_name == old_p1 or cp_name.lower() in ("you", "user", "me") or idx == 0:
-                    target_new_name = new_p1
+                    update_row = {
+                        "party_name": encrypt_message_content(new_p1),
+                        "client_name_encrypted": encrypt_message_content(initiator_clean),
+                    }
+                    if initiator_co:
+                        update_row["company_name_encrypted"] = encrypt_message_content(initiator_co)
+                    agreement_repo.client.table("confirmations").update(update_row).eq("id", crow["id"]).execute()
                 elif cp_name == old_p2 or idx == 1:
-                    target_new_name = new_p2
-                if target_new_name and target_new_name != cp_name:
-                    agreement_repo.client.table("confirmations").update({
-                        "party_name": target_new_name,
-                    }).eq("id", crow["id"]).execute()
+                    update_row = {
+                        "party_name": encrypt_message_content(new_p2),
+                        "client_name_encrypted": encrypt_message_content(client_clean),
+                    }
+                    if client_co:
+                        update_row["company_name_encrypted"] = encrypt_message_content(client_co)
+                    agreement_repo.client.table("confirmations").update(update_row).eq("id", crow["id"]).execute()
     except Exception as e:
         print(f"Warning: could not update confirmations table party names: {e}")
 
-    # Audit event
+    # Audit event (privacy-safe, no raw party names)
     try:
         from app.db.repository import AuditRepository
         audit_repo = AuditRepository(client=agreement_repo.client)
@@ -281,9 +289,8 @@ async def update_agreement_parties(
             action="agreement_parties_updated",
             actor_id=current_user["id"] if current_user else None,
             metadata={
-                "old_parties": agreement.parties,
-                "new_parties": updated_parties,
                 "content_hash": new_hash,
+                "party_count": len(updated_parties),
             },
         )
     except Exception:

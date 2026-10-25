@@ -585,6 +585,20 @@ def test_client_business_details_and_pan_verification_flow():
     assert data["pan_last_4"] == "1234"
     assert "Tech Park" in data["office_address"]
 
+    # Verify zero-knowledge encrypted storage in DB (raw fields MUST contain ciphertext starting with enc:)
+    db_res = conf_repo.client.table("confirmations").select("*").eq("agreement_id", agreement_id).execute()
+    db_rows = db_res.data if isinstance(db_res.data, list) else [db_res.data]
+    cp_db_row = next(r for r in db_rows if r.get("confirmation_token_hash"))
+    assert cp_db_row["gst_number"].startswith("enc:")
+    assert "29ABCDE1234F1Z5" not in cp_db_row["gst_number"]
+    assert cp_db_row["pan_last_4"].startswith("enc:")
+    assert "1234" not in cp_db_row["pan_last_4"]
+    assert cp_db_row["office_address"].startswith("enc:")
+    assert "Tech Park" not in cp_db_row["office_address"]
+    assert cp_db_row["party_name"].startswith("enc:")
+    assert "Acme Corp Services" not in cp_db_row["party_name"]
+    assert cp_db_row.get("client_name_encrypted", "").startswith("enc:")
+
     # Inspect token before session authentication: PAN last 4 is hidden, has_pan_check is True
     insp_res = client.get(f"/api/v1/confirmations/token/{raw_token}")
     assert insp_res.status_code == 200

@@ -130,17 +130,16 @@ async def generate_counterparty_token(
         # Return URL without agreement_id query param to prevent URL leak
         confirmation_url = f"/review?token={tok['raw_token']}"
 
-        # Append-only audit record
+        # Append-only audit record (no raw sensitive data in metadata)
         audit_repo.log_event(
             entity_type="confirmation",
             entity_id=payload.agreement_id,
             action="confirmation_link_created",
             actor_id=current_user["id"],
             metadata={
-                "party_name": payload.party_name,
-                "masked_email": masked,
-                "gst_number": clean_gst,
-                "pan_last_4": clean_pan,
+                "has_gst": bool(clean_gst),
+                "has_pan": bool(clean_pan),
+                "has_address": bool(clean_address),
                 "expires_at": tok["expires_at"],
             },
         )
@@ -221,16 +220,25 @@ async def inspect_token(
     masked = conf_repo.mask_email(raw_email) if raw_email else None
     requires_verification = settings.REQUIRE_EMAIL_OTP and not has_valid_session
 
-    pan_last_4_val = row.get("pan_last_4") if has_valid_session else None
+    pan_last_4_raw = row.get("pan_last_4_encrypted") or row.get("pan_last_4")
+    pan_last_4_val = decrypt_message_content(pan_last_4_raw) if (has_valid_session and pan_last_4_raw) else None
+
+    gst_raw = row.get("gst_number_encrypted") or row.get("gst_number")
+    gst_val = decrypt_message_content(gst_raw) if gst_raw else None
+
+    addr_raw = row.get("office_address_encrypted") or row.get("office_address")
+    addr_val = decrypt_message_content(addr_raw) if addr_raw else None
+
+    p_name = decrypt_message_content(row.get("party_name", ""))
 
     return TokenInspectResponse(
         token=token,
-        party_name=row.get("party_name", ""),
+        party_name=p_name,
         masked_email=masked,
-        gst_number=row.get("gst_number"),
+        gst_number=gst_val,
         pan_last_4=pan_last_4_val,
-        office_address=row.get("office_address"),
-        has_pan_check=bool(row.get("pan_last_4")),
+        office_address=addr_val,
+        has_pan_check=bool(pan_last_4_raw),
         confirmed=bool(row.get("confirmed", False)),
         confirmed_at=row.get("confirmed_at"),
         declined=bool(row.get("declined", False)),

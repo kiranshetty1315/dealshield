@@ -222,11 +222,11 @@ class AgreementRepository:
         now_dt = datetime.now(timezone.utc)
         now_iso = now_dt.isoformat()
 
-        # Insert Agreement header
+        # Insert Agreement header with encrypted parties at rest
         ag_row = {
             "id": ag_id,
             "analysis_id": valid_analysis_id,
-            "parties": parties,
+            "parties": [encrypt_message_content(p) for p in parties],
             "current_version": 1,
             "status": AgreementStatus.DRAFT.value,
             "created_at": now_iso,
@@ -324,10 +324,13 @@ class AgreementRepository:
             else datetime.now(timezone.utc)
         )
 
+        raw_parties = ag_data.get("parties", [])
+        decrypted_parties = [decrypt_message_content(p) for p in raw_parties] if isinstance(raw_parties, list) else []
+
         return Agreement(
             id=ag_data["id"],
             analysis_id=ag_data["analysis_id"],
-            parties=ag_data.get("parties", []),
+            parties=decrypted_parties,
             current_version=ag_data.get("current_version", 1),
             status=AgreementStatus(ag_data.get("status", "draft")),
             versions=versions,
@@ -524,23 +527,38 @@ class ConfirmationRepository:
                 enc_email = encrypt_message_content(norm_email)
                 email_hash = self.hash_email(norm_email)
 
-            # Check if record already exists for this party to prevent duplicate entries
+            # Check if record already exists for this agreement
             existing_res = (
                 self.client.table("confirmations")
                 .select("*")
                 .eq("agreement_id", agreement_id)
-                .eq("party_name", party)
                 .execute()
             )
-            existing = (
-                existing_res.data[0]
-                if isinstance(existing_res.data, list) and existing_res.data
-                else existing_res.data
-            )
+            conf_rows = existing_res.data if isinstance(existing_res.data, list) else ([existing_res.data] if existing_res.data else [])
+            existing = next((r for r in conf_rows if decrypt_message_content(r.get("party_name", "")) == party), None)
+
+            # Application-level encryption for all sensitive business & client identity fields
+            enc_party_name = encrypt_message_content(party)
+            enc_gst = encrypt_message_content(gst_number.strip().upper()) if gst_number else None
+            enc_pan = encrypt_message_content(pan_last_4.strip().upper()) if pan_last_4 else None
+            enc_addr = encrypt_message_content(office_address.strip()) if office_address else None
+
+            # Parse client and company names from party name (e.g. "Name (Company)")
+            client_name_val = party
+            company_name_val = None
+            import re
+            m = re.match(r"^(.*?)\s*\((.*?)\)$", party)
+            if m:
+                client_name_val = m.group(1).strip()
+                company_name_val = m.group(2).strip()
+
+            enc_client_name = encrypt_message_content(client_name_val)
+            enc_company_name = encrypt_message_content(company_name_val) if company_name_val else None
 
             update_fields: Dict[str, Any] = {
                 "confirmation_token_hash": token_hash,
                 "token_expires_at": expires_at,
+                "party_name": enc_party_name,
                 "party_email": None,  # never store plaintext email
                 "confirmed": False,
                 "confirmed_at": None,
@@ -563,18 +581,24 @@ class ConfirmationRepository:
                 "locked_at": None,
                 "agreed_version_number": None,
                 "agreed_content_hash": None,
+                "client_name_encrypted": enc_client_name,
             }
+            if enc_company_name:
+                update_fields["company_name_encrypted"] = enc_company_name
             if party_email:
                 update_fields["party_email_encrypted"] = enc_email
                 update_fields["party_email_hash"] = email_hash
             if initiator_user_id:
                 update_fields["initiator_user_id"] = str(initiator_user_id)
             if gst_number is not None:
-                update_fields["gst_number"] = gst_number.strip().upper() if gst_number else None
+                update_fields["gst_number"] = enc_gst
+                update_fields["gst_number_encrypted"] = enc_gst
             if pan_last_4 is not None:
-                update_fields["pan_last_4"] = pan_last_4.strip().upper() if pan_last_4 else None
+                update_fields["pan_last_4"] = enc_pan
+                update_fields["pan_last_4_encrypted"] = enc_pan
             if office_address is not None:
-                update_fields["office_address"] = office_address.strip() if office_address else None
+                update_fields["office_address"] = enc_addr
+                update_fields["office_address_encrypted"] = enc_addr
 
             if existing:
                 self.client.table("confirmations").update(update_fields).eq("id", existing["id"]).execute()
@@ -583,7 +607,7 @@ class ConfirmationRepository:
                     "id": str(uuid.uuid4()),
                     "agreement_id": agreement_id,
                     "version_id": version_id,
-                    "party_name": party,
+                    "party_name": enc_party_name,
                     **update_fields,
                 }
                 self.client.table("confirmations").insert(row).execute()
@@ -610,7 +634,7 @@ class ConfirmationRepository:
         for row in data:
             if not row or not row.get("party_name"):
                 continue
-            p_name = row["party_name"]
+            p_name = decrypt_message_content(row["party_name"])
             conf_at = row.get("confirmed_at")
             dt = (
                 datetime.fromisoformat(conf_at.replace("Z", "+00:00"))
@@ -647,13 +671,22 @@ class ConfirmationRepository:
             if is_confirmed and agreed_ver is not None and agreed_ver != version_number:
                 is_confirmed = False
 
+            raw_gst = row.get("gst_number_encrypted") or row.get("gst_number")
+            gst_val = decrypt_message_content(raw_gst) if raw_gst else None
+
+            raw_pan = row.get("pan_last_4_encrypted") or row.get("pan_last_4")
+            pan_val = decrypt_message_content(raw_pan) if raw_pan else None
+
+            raw_addr = row.get("office_address_encrypted") or row.get("office_address")
+            addr_val = decrypt_message_content(raw_addr) if raw_addr else None
+
             rec = PartyConfirmationRecord(
                 party_name=p_name,
                 party_email=None,  # Never leak plaintext email
                 masked_email=masked,
-                gst_number=row.get("gst_number"),
-                pan_last_4=row.get("pan_last_4"),
-                office_address=row.get("office_address"),
+                gst_number=gst_val,
+                pan_last_4=pan_val,
+                office_address=addr_val,
                 verification_method=method,
                 email_verified_at=dt_ev,
                 agreed_version_number=row.get("agreed_version_number"),
@@ -712,14 +745,15 @@ class ConfirmationRepository:
         typed_hash = self.hash_email(normalized_typed)
         email_match = hmac.compare_digest(typed_hash, stored_email_hash)
 
-        # Match PAN last 4 digits if stored on the confirmation record
-        stored_pan_last_4 = row.get("pan_last_4")
+        # Match PAN last 4 digits if stored on the confirmation record (decrypt transparently)
+        stored_pan_raw = row.get("pan_last_4_encrypted") or row.get("pan_last_4")
         pan_match = True
-        if stored_pan_last_4:
+        if stored_pan_raw:
+            decrypted_pan = decrypt_message_content(stored_pan_raw)
             if not typed_pan_last_4:
                 pan_match = False
             else:
-                pan_match = (typed_pan_last_4.strip().upper() == stored_pan_last_4.strip().upper())
+                pan_match = (typed_pan_last_4.strip().upper() == decrypted_pan.strip().upper())
 
         if (not email_match) or (not pan_match):
             attempts = (row.get("email_check_attempts") or 0) + 1
@@ -1022,7 +1056,7 @@ class ConfirmationRepository:
             if ag_data and ag_data.get("parties"):
                 parties = ag_data["parties"]
                 if isinstance(parties, list) and len(parties) > 0:
-                    initiator_party = parties[0]
+                    initiator_party = decrypt_message_content(parties[0])
                     if party_name != initiator_party:
                         raise PermissionError(
                             "Direct confirmation is only allowed for the initiating party. "
@@ -1085,21 +1119,19 @@ class ConfirmationRepository:
             self.client.table("confirmations")
             .select("*")
             .eq("agreement_id", agreement_id)
-            .eq("party_name", party_name)
             .execute()
         )
-        existing = res.data[0] if isinstance(res.data, list) and res.data else res.data
+        conf_rows = res.data if isinstance(res.data, list) else ([res.data] if res.data else [])
+        existing = next((r for r in conf_rows if decrypt_message_content(r.get("party_name", "")) == party_name), None)
 
         if existing:
-            self.client.table("confirmations").update(update_payload).eq(
-                "agreement_id", agreement_id
-            ).eq("party_name", party_name).execute()
+            self.client.table("confirmations").update(update_payload).eq("id", existing["id"]).execute()
         else:
             new_row = {
                 "id": str(uuid.uuid4()),
                 "agreement_id": agreement_id,
                 "version_id": target_version_id,
-                "party_name": party_name,
+                "party_name": encrypt_message_content(party_name),
                 **update_payload,
             }
             self.client.table("confirmations").insert(new_row).execute()
