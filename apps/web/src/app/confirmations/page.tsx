@@ -93,6 +93,7 @@ function ConfirmationsContent() {
   const [currentAnalysis, setCurrentAnalysis] = useState<AgreementAnalysis | null>(null);
   const [confirmationStatus, setConfirmationStatus] = useState<ConfirmationStatus | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
+  const [isManualRefreshing, setIsManualRefreshing] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
@@ -200,6 +201,38 @@ function ConfirmationsContent() {
     },
     []
   );
+
+  const handleManualRefresh = useCallback(async () => {
+    if (isManualRefreshing || isLoadingStatus) return;
+    setIsManualRefreshing(true);
+    setErrorMessage(null);
+    try {
+      if (agreement?.id) {
+        const [statusData, agData] = await Promise.all([
+          api.getConfirmationStatus(agreement.id),
+          api.getAgreement(agreement.id),
+        ]);
+        if (statusData) setConfirmationStatus(statusData);
+        if (agData) {
+          setAgreement(agData);
+          if (agData.analysis_id) {
+            api.getAnalysis(agData.analysis_id).then(setCurrentAnalysis).catch(() => null);
+          }
+        }
+        setFeedbackMessage("Mutual assent status refreshed: latest party records loaded.");
+        setTimeout(() => setFeedbackMessage(null), 3500);
+      } else if (selectedChatId) {
+        await loadDataForSelection(selectedChatId, null);
+        setFeedbackMessage("Negotiation records refreshed.");
+        setTimeout(() => setFeedbackMessage(null), 3500);
+      }
+    } catch (err: any) {
+      console.error("Failed to refresh status:", err);
+      setErrorMessage(`Failed to refresh confirmation status: ${err.message || "Network error"}`);
+    } finally {
+      setIsManualRefreshing(false);
+    }
+  }, [agreement?.id, selectedChatId, isManualRefreshing, isLoadingStatus, loadDataForSelection]);
 
   useEffect(() => {
     if (agreementIdParam) {
@@ -536,13 +569,13 @@ function ConfirmationsContent() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => agreement?.id && refreshStatus(agreement.id)}
-              disabled={isLoadingStatus || !agreement?.id}
-              className="gap-1.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-50"
-              title="Refresh confirmation status"
+              onClick={handleManualRefresh}
+              disabled={isManualRefreshing || isLoadingStatus || (!agreement?.id && !selectedChatId)}
+              className="gap-1.5 text-xs border-slate-300 text-slate-700 hover:bg-slate-50 transition-all shadow-2xs"
+              title="Refresh confirmation status and assent records"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingStatus ? "animate-spin" : ""}`} />
-              <span>Refresh Status</span>
+              <RefreshCw className={`h-3.5 w-3.5 ${isManualRefreshing ? "animate-spin text-blue-600" : ""}`} />
+              <span>{isManualRefreshing ? "Refreshing..." : "Refresh Status"}</span>
             </Button>
 
             {agreement && (
