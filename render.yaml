@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: dealshield-api
+    runtime: python
+    plan: free
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: CORS_ORIGINS
+        value: https://dealshield.vercel.app,http://localhost:3000
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: IP_HASH_SALT
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        value: rUqpl4OBAPgr-k1M_wughKIjIBOWpJn-YTRIEq6f3Wk=
+      - key: REQUIRE_EMAIL_OTP
+        value: "true"
+      - key: ALLOW_DIRECT_CONFIRM
+        value: "false"
+      - key: EMAIL_BACKEND
+        value: console
