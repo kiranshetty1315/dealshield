@@ -882,7 +882,8 @@ class ConfirmationRepository:
 
         # Send email
         sender = get_email_sender()
-        subject = f"Your DealShield Verification Code for {row['party_name']}"
+        party_name_clean = decrypt_message_content(row.get("party_name", "")) or "Counterparty"
+        subject = f"Your DealShield Verification Code for {party_name_clean}"
         body = (
             f"Hello,\n\n"
             f"Your single-use verification code to review the commercial agreement is: {otp}\n\n"
