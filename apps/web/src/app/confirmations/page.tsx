@@ -1144,8 +1144,8 @@ function ConfirmationsContent() {
 
               {/* Commercial Agreement Record Download & Client Sharing Banner */}
               {agreement && (
-                <div className="border border-amber-300 bg-amber-50/90 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs shadow-xs">
-                  <div className="space-y-1">
+                <div className="border border-amber-300 bg-amber-50/90 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs shadow-xs">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Award className="h-4 w-4 text-amber-700 shrink-0" />
                       <span className="font-bold text-amber-950 text-sm">
@@ -1160,25 +1160,31 @@ function ConfirmationsContent() {
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto md:shrink-0">
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => setIsStampModalOpen(true)}
-                      className="text-xs gap-1.5 border-amber-400 bg-white text-amber-950 hover:bg-amber-100"
+                      className="w-full sm:w-auto text-xs gap-1.5 border-amber-400 bg-white text-amber-950 hover:bg-amber-100 justify-center h-9"
                     >
-                      <Eye className="h-3.5 w-3.5 text-amber-700" />
+                      <Eye className="h-3.5 w-3.5 text-amber-700 shrink-0" />
                       <span>Preview Agreement</span>
                     </Button>
 
                     <Button
                       size="sm"
                       asChild
-                      className="text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs"
+                      className="w-full sm:w-auto text-xs gap-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold shadow-xs justify-center h-9"
                     >
-                      <a href={api.getAgreementPdfUrl(agreement.id)} target="_blank" rel="noopener noreferrer" download>
-                        <Download className="h-3.5 w-3.5" />
-                        <span>Download Agreement PDF</span>
+                      <a
+                        href={api.getAgreementPdfUrl(agreement.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        download
+                        className="inline-flex items-center justify-center gap-1.5 w-full sm:w-auto"
+                      >
+                        <Download className="h-3.5 w-3.5 shrink-0" />
+                        <span className="whitespace-nowrap">Download Agreement PDF</span>
                       </a>
                     </Button>
                   </div>
@@ -1186,23 +1192,23 @@ function ConfirmationsContent() {
               )}
 
               {/* DPDP Act Message Erasure Option */}
-              <div className="border border-blue-200 bg-blue-50/70 p-4 rounded-xl flex items-center justify-between gap-3 text-xs">
-                <div className="space-y-0.5">
+              <div className="border border-blue-200 bg-blue-50/70 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5 flex-1 min-w-0">
                   <span className="font-bold text-blue-950 flex items-center gap-1.5">
-                    <Trash2 className="h-4 w-4 text-blue-700" />
+                    <Trash2 className="h-4 w-4 text-blue-700 shrink-0" />
                     Agreement Finalized? Exercise DPDP Act Right to Erasure
                   </span>
                   <p className="text-blue-800 text-[11px]">
                     Now that all obligations are formalized into the executed agreement, you can permanently erase underlying WhatsApp chat messages from your vault.
                   </p>
                 </div>
-                <Link href="/settings">
+                <Link href="/settings" className="w-full sm:w-auto shrink-0">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="shrink-0 text-xs border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5"
+                    className="w-full sm:w-auto text-xs border-blue-300 text-blue-700 hover:bg-blue-100 gap-1.5 justify-center h-9"
                   >
-                    <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                    <Trash2 className="h-3.5 w-3.5 text-red-500 shrink-0" />
                     Manage & Erase Messages
                   </Button>
                 </Link>
