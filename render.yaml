@@ -37,7 +37,13 @@ services:
       - key: ALLOW_DIRECT_CONFIRM
         value: "false"
       - key: EMAIL_BACKEND
-        value: smtp
+        value: brevo
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false
+      - key: BREVO_SENDER_NAME
+        value: "DealShield AI"
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

@@ -76,15 +76,83 @@ class InMemoryEmailSender(EmailSender):
         return cls.outbox
 
 
+class BrevoEmailSender(EmailSender):
+    """Production HTTPS email sender using Brevo (Sendinblue) v3 API.
+    
+    Operates over standard HTTPS (port 443), which is never blocked by cloud
+    firewalls (like Render free tier).
+    """
+
+    def __init__(self, api_key: Optional[str] = None):
+        import os
+        self.api_key = api_key or getattr(settings, "BREVO_API_KEY", None) or os.environ.get("BREVO_API_KEY")
+
+    def send(self, to: str, subject: str, body: str) -> None:
+        import os
+        import httpx
+
+        api_key = self.api_key or getattr(settings, "BREVO_API_KEY", None) or os.environ.get("BREVO_API_KEY")
+        if not api_key:
+            raise ValueError("BREVO_API_KEY is not configured.")
+
+        sender_email = (
+            getattr(settings, "BREVO_SENDER_EMAIL", None)
+            or os.environ.get("BREVO_SENDER_EMAIL")
+            or settings.SMTP_USERNAME
+            or (settings.SMTP_FROM if settings.SMTP_FROM and "dealshield.local" not in settings.SMTP_FROM else None)
+            or "kiranshetty1315@gmail.com"
+        )
+        sender_name = getattr(settings, "BREVO_SENDER_NAME", None) or os.environ.get("BREVO_SENDER_NAME") or "DealShield AI"
+
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key": api_key.strip(),
+            "accept": "application/json",
+            "content-type": "application/json",
+        }
+        payload = {
+            "sender": {
+                "name": sender_name,
+                "email": sender_email,
+            },
+            "to": [{"email": to}],
+            "subject": subject,
+            "textContent": body,
+        }
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                res = client.post(url, headers=headers, json=payload)
+                if res.status_code in (200, 201, 202):
+                    logger.info("Successfully sent email to %s via Brevo HTTPS API", to)
+                    return
+                else:
+                    logger.error("Brevo API error (HTTP %d): %s", res.status_code, res.text)
+                    raise RuntimeError(f"Brevo API error ({res.status_code}): {res.text}")
+        except Exception as e:
+            logger.error("Failed to send email via Brevo to %s: %s", to, str(e))
+            raise
+
+
 class SmtpEmailSender(EmailSender):
-    """Production and staging SMTP email sender.
+    """Production and staging SMTP email sender with Brevo HTTPS fallback.
     
     Uses standard library smtplib with optional STARTTLS and authentication.
     """
 
     def send(self, to: str, subject: str, body: str) -> None:
+        # 1. Try Brevo HTTPS API first if configured to bypass cloud SMTP port blocking
+        import os
+        brevo_key = getattr(settings, "BREVO_API_KEY", None) or os.environ.get("BREVO_API_KEY")
+        if brevo_key:
+            try:
+                BrevoEmailSender(api_key=brevo_key).send(to=to, subject=subject, body=body)
+                return
+            except Exception as e:
+                logger.warning("Brevo HTTPS API dispatch failed: %s; attempting SMTP...", e)
+
         if not settings.SMTP_HOST:
-            raise ValueError("SMTP_HOST must be configured to use SmtpEmailSender")
+            raise ValueError("Neither BREVO_API_KEY nor SMTP_HOST is configured to send emails.")
 
         from_address = settings.SMTP_FROM
         if (not from_address or "dealshield.local" in from_address) and settings.SMTP_USERNAME and "@" in settings.SMTP_USERNAME:
@@ -95,34 +163,6 @@ class SmtpEmailSender(EmailSender):
         msg["From"] = from_address
         msg["To"] = to
         msg.set_content(body)
-
-        # 1. Try HTTP email API (e.g. Resend) if configured to bypass cloud SMTP port blocking
-        import os
-        resend_key = os.environ.get("RESEND_API_KEY")
-        if resend_key:
-            try:
-                import httpx
-                res = httpx.post(
-                    "https://api.resend.com/emails",
-                    headers={
-                        "Authorization": f"Bearer {resend_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "from": os.environ.get("RESEND_FROM", "DealShield AI <onboarding@resend.dev>"),
-                        "to": [to],
-                        "subject": subject,
-                        "text": body,
-                    },
-                    timeout=10,
-                )
-                if res.status_code in (200, 201):
-                    logger.info("Successfully sent email to %s via Resend HTTPS API (bypassing SMTP port)", to)
-                    return
-                else:
-                    logger.warning("Resend HTTPS API returned status %d: %s", res.status_code, res.text)
-            except Exception as e:
-                logger.warning("Resend HTTPS API dispatch failed: %s", e)
 
         # 2. Try SMTP delivery with retries
         max_attempts = 2
@@ -178,17 +218,24 @@ def get_email_sender() -> EmailSender:
     if settings.ENVIRONMENT == "production" and backend in ("console", "memory"):
         raise RuntimeError(
             f"Refusing to use dev email backend '{backend}' in production environment. "
-            "Configure SMTP credentials and set EMAIL_BACKEND=smtp."
+            "Configure Brevo or SMTP credentials and set EMAIL_BACKEND=brevo or smtp."
         )
 
     if backend == "memory":
         return InMemoryEmailSender()
-    elif backend == "smtp":
+    elif backend == "brevo":
+        return BrevoEmailSender()
+    elif backend in ("smtp", "resend"):
+        import os
+        if os.environ.get("BREVO_API_KEY") or getattr(settings, "BREVO_API_KEY", None):
+            return BrevoEmailSender()
         return SmtpEmailSender()
     elif backend == "console":
         return ConsoleEmailSender()
     else:
-        # If not explicitly specified, auto-select SMTP if host is configured
+        import os
+        if os.environ.get("BREVO_API_KEY") or getattr(settings, "BREVO_API_KEY", None):
+            return BrevoEmailSender()
         if settings.SMTP_HOST and settings.SMTP_USERNAME:
             return SmtpEmailSender()
         return ConsoleEmailSender()

@@ -87,7 +87,10 @@ class Settings(BaseSettings):
     # Counterparty Email-OTP Confirmation & Notification Config
     REQUIRE_EMAIL_OTP: bool = True
     ALLOW_DIRECT_CONFIRM: bool = False
-    EMAIL_BACKEND: str = "console"  # "console" | "smtp" | "memory"
+    EMAIL_BACKEND: str = "console"  # "console" | "smtp" | "brevo" | "memory"
+    BREVO_API_KEY: Optional[str] = None
+    BREVO_SENDER_EMAIL: Optional[str] = None
+    BREVO_SENDER_NAME: str = "DealShield AI"
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 587
     SMTP_USERNAME: Optional[str] = None
