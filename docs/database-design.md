@@ -4,7 +4,12 @@
 
 The DealShield AI persistence layer is implemented on **PostgreSQL 15+** via Supabase, protected by Row Level Security (RLS) policies.
 
-The core migration is located in [`infra/supabase/migrations/001_initial_schema.sql`](file:///C:/dealshield/infra/supabase/migrations/001_initial_schema.sql).
+Migrations are maintained under `infra/supabase/migrations/`:
+- `001_initial_schema.sql`: Core entities, triggers, RLS, and append-only audit log.
+- `002_email_otp_verification.sql`: Zero-knowledge email verification, OTP rate limiting, and session tokens.
+- `003_analysis_deal_gate.sql`: Commercial deal qualification gate and extraction engine transparency.
+- `004_client_business_details.sql`: Client GST, business PAN last 4 digits, and office address.
+- `005_encrypted_client_business_details.sql`: Application-level AES-256/Fernet encryption for business KYC data.
 
 ```mermaid
 erDiagram
@@ -16,6 +21,8 @@ erDiagram
     agreement_versions ||--o{ confirmations : "receives"
     users ||--o{ audit_events : "triggers"
     agreements ||--o{ document_hashes : "secures"
+    agreements ||--o{ party_identities : "verifies (Future Scope)"
+    agreements ||--o{ esign_transactions : "seals (Future Scope)"
 
     users {
         uuid id PK
@@ -55,6 +62,9 @@ erDiagram
         jsonb parties
         double_precision confidence_score
         boolean requires_human_review
+        boolean is_commercial_deal
+        text deal_rationale
+        text extraction_engine
         timestamptz analyzed_at
     }
 
@@ -73,6 +83,7 @@ erDiagram
         uuid agreement_id FK
         int version_number
         jsonb clauses
+        text content_hash
         text status
         timestamptz generated_at
     }
@@ -84,6 +95,16 @@ erDiagram
         text party_name
         boolean confirmed
         text notes
+        text party_email_encrypted
+        text party_email_hash
+        text otp_hash
+        timestamptz otp_expires_at
+        text session_token_hash
+        timestamptz session_expires_at
+        timestamptz locked_at
+        text gst_number_encrypted
+        text pan_last_4_encrypted
+        text office_address_encrypted
         text ip_hash
         timestamptz confirmed_at
     }
@@ -104,6 +125,31 @@ erDiagram
         text document_type
         text hash_algorithm
         text hash_value
+        timestamptz created_at
+    }
+
+    party_identities {
+        uuid id PK
+        uuid agreement_id FK
+        text party_role
+        boolean digilocker_verified
+        text verified_legal_name
+        text masked_aadhaar
+        text pan_number
+        text udyam_registration
+        timestamptz created_at
+    }
+
+    esign_transactions {
+        uuid id PK
+        uuid agreement_id FK
+        text esp_provider
+        text esp_transaction_id UK
+        text x509_cert_serial
+        timestamptz rfc3161_timestamp
+        text pades_document_url
+        text pades_sha256
+        text status
         timestamptz created_at
     }
 ```
@@ -132,10 +178,14 @@ Individual parsed chat lines with deterministic citation IDs.
 - **Constraint:** `UNIQUE (conversation_id, message_id)` (scoped per conversation to avoid cross-chat collisions).
 
 ### `analyses`
-Structured output from LLM analysis.
+Structured output from LLM analysis and deal qualification.
 - **PK:** `id` UUID.
 - **FK:** `conversation_id` references `public.conversations(id)` ON DELETE CASCADE.
 - **Fields:** `extracted_terms` (`JSONB`), `conflicts` (`JSONB`), `missing_terms` (`JSONB`), `parties` (`JSONB`), `confidence_score` (`FLOAT`), `requires_human_review` (`BOOLEAN`).
+- **Deal Gate Additions (Migration 003):**
+  - `is_commercial_deal` (`BOOLEAN NOT NULL DEFAULT TRUE`): Whether conversation passes bilateral commercial qualification.
+  - `deal_rationale` (`TEXT`): One-sentence rationale explaining commercial qualification status.
+  - `extraction_engine` (`TEXT NOT NULL DEFAULT 'llm'`): Processing engine transparency (`llm` or `fallback`).
 
 ### `agreements`
 Contract parent container.
@@ -151,14 +201,22 @@ Immutable snapshot of contract clauses for each revision.
 - **Fields:** `clauses` (`JSONB`), `content_hash` (TEXT, SHA-256 digest), `status`, `generated_at`.
 
 ### `confirmations`
-Records party sign-off, objection notes, and token-based external access.
+Records party sign-off, objection notes, email-OTP authentication, and client business KYC.
 - **PK:** `id` UUID.
 - **FK:** `agreement_id` references `public.agreements(id)` ON DELETE CASCADE.
 - **FK:** `version_id` references `public.agreement_versions(id)` ON DELETE CASCADE.
 - **Constraint:** `UNIQUE (agreement_id, version_id, party_name)` (prevents duplicate entries per party per version).
-- **Fields:** `party_name`, `party_email`, `confirmed` (BOOLEAN), `notes`, `confirmation_token_hash` (TEXT UNIQUE, SHA-256 hash of secret link token), `token_expires_at` (TIMESTAMPTZ), `ip_hash` (anonymized IP for DPDP Act 2023), `confirmed_at`.
-- **Security & Single-Use:** Input tokens are matched via `digest(p_token, 'sha256')`. Single-use is strictly enforced by checking `confirmed_at IS NULL`. Each confirmation automatically appends an immutable record to `audit_events`.
-- **RPC Lockdown:** `REVOKE EXECUTE FROM PUBLIC, anon, authenticated` ensures calls route exclusively via backend FastAPI using `service_role`.
+- **Core Fields:** `party_name`, `confirmed` (BOOLEAN), `notes`, `confirmed_at`, `ip_hash` (secret-salted HMAC).
+- **Email-OTP Security Columns (Migration 002):**
+  - `party_email_encrypted`: Symmetric Fernet ciphertext of counterparty email.
+  - `party_email_hash`: Blind-index HMAC-SHA256 for O(1) equality verification without decryption.
+  - `otp_hash` & `otp_expires_at`: 6-digit cryptographic OTP hash with 10-minute validity.
+  - `session_token_hash` & `session_expires_at`: 32-byte ephemeral review session token (`X-Review-Session`).
+  - `locked_at`: Lockout timestamp after 5 failed attempts (HTTP 423).
+- **Business KYC Columns (Migrations 004 & 005):**
+  - `gst_number_encrypted`: Encrypted Goods & Services Tax identification.
+  - `pan_last_4_encrypted`: Encrypted last 4 characters of Business PAN.
+  - `office_address_encrypted`: Encrypted registered office address.
 
 ### `audit_events`
 Append-only tamper-evident event log.
@@ -175,10 +233,42 @@ Cryptographic SHA-256 fingerprints.
 
 ---
 
-## 3. Database Triggers & Performance Indexes
+## 3. Future Scope Database Extensions
 
-### Auto-updating Timestamps
-Tables with `updated_at` (`users`, `agreements`) trigger `public.update_updated_at()` before every update operation.
+For post-hackathon implementation of DigiLocker e-KYC and UIDAI Aadhaar eSign:
+
+```sql
+-- 1. Verified Legal Identity Ledger (DigiLocker Integration)
+CREATE TABLE public.party_identities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agreement_id UUID NOT NULL REFERENCES public.agreements(id) ON DELETE CASCADE,
+    party_role VARCHAR(20) NOT NULL CHECK (party_role IN ('initiator', 'counterparty')),
+    digilocker_verified BOOLEAN DEFAULT FALSE,
+    verified_legal_name VARCHAR(255),
+    masked_aadhaar VARCHAR(16), -- e.g. 'XXXXXXXX9842' (Zero raw Aadhaar storage)
+    pan_number VARCHAR(10),
+    udyam_registration VARCHAR(50),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 2. Statutory Digital Signature Records (CCA / ESP eSign Integration)
+CREATE TABLE public.esign_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    agreement_id UUID NOT NULL REFERENCES public.agreements(id) ON DELETE CASCADE,
+    esp_provider VARCHAR(50) NOT NULL, -- 'cdac' | 'nsdl' | 'emudhra'
+    esp_transaction_id VARCHAR(128) UNIQUE NOT NULL,
+    x509_cert_serial VARCHAR(255) NOT NULL,
+    rfc3161_timestamp TIMESTAMPTZ NOT NULL,
+    pades_document_url TEXT NOT NULL,
+    pades_sha256 VARCHAR(64) NOT NULL,
+    status VARCHAR(30) DEFAULT 'completed',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## 4. Performance Indexes & Triggers
 
 ### Performance Indexes
 - `idx_conversations_user_id` on `conversations(user_id)`
@@ -188,5 +278,8 @@ Tables with `updated_at` (`users`, `agreements`) trigger `public.update_updated_
 - `idx_agreements_analysis_id` on `agreements(analysis_id)`
 - `idx_agreement_versions_agreement_id` on `agreement_versions(agreement_id)`
 - `idx_confirmations_agreement_id` on `confirmations(agreement_id)`
+- `idx_confirmations_party_email_hash` on `confirmations(party_email_hash)`
+- `idx_confirmations_session_token_hash` on `confirmations(session_token_hash)`
+- `idx_confirmations_pan_last_4` on `confirmations(pan_last_4)`
 - `idx_audit_events_entity` on `audit_events(entity_type, entity_id)`
 - `idx_document_hashes_document` on `document_hashes(document_id, document_type)`

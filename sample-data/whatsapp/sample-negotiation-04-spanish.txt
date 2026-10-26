@@ -1,0 +1,6 @@
+15/04/24, 09:30 - Carlos Gomez: Hola Sofia, te escribo para coordinar el project de redesign y desarrollo de nuestra tienda online
+15/04/24, 09:32 - Sofia Fernandez: Hola Carlos! Perfecto. Puedo hacer el UI/UX design completo y el build de la plataforma web
+15/04/24, 09:35 - Carlos Gomez: Excelente. Nuestro presupuesto total para este service es de ₹1,20,000
+15/04/24, 09:38 - Sofia Fernandez: El precio de ₹1,20,000 me parece razonable para todo el trabajo. Requiero 40% de anticipo para iniciar
+15/04/24, 09:41 - Carlos Gomez: Me parece bien creo, pero depende de la fecha de entrega. Lo necesitamos listo para el 15 de junio
+15/04/24, 09:44 - Sofia Fernandez: De acuerdo, confirmamos el project con entrega para el 15 de junio

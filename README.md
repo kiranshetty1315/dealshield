@@ -433,13 +433,15 @@ The extraction prompt explicitly instructs the LLM on:
 |---|---|---|
 | **Chat Upload** | **Fully Demonstrated:** Web upload of exported WhatsApp `.txt` files. | Direct WhatsApp Business API webhook (forwarding chats directly to bot). |
 | **Legal Extraction** | **Fully Demonstrated:** Gemini 3.8 Flash structured output with fallback. | Multi-LLM consensus verification (cross-checking Gemini with Claude/GPT-4o). |
-| **Two-Party Assent** | **Fully Demonstrated:** Dashboard assent + 6-digit Email OTP token. | Aadhaar-based biometric/OTP eSign under Section 3A of the IT Act. |
+| **Two-Party Assent** | **Fully Demonstrated:** Dashboard assent + 6-digit Email OTP token. | DigiLocker identity verification + Aadhaar biometric/OTP eSign under Section 3A of the IT Act. |
+| **Identity Verification** | **Fully Demonstrated:** Unverified chat display names & email handles. | DigiLocker API OAuth 2.0 verification for Aadhaar XML, PAN, and MSME UDYAM certificates. |
 | **Stamp Duty Warning**| **Fully Demonstrated:** Statutory disclosure citing Stamp Act Section 35. | Direct digital e-stamping integration via NeSL / SHCIL APIs. |
 | **Language Support** | **Fully Demonstrated:** English with Indian business idioms and ₹ symbols. | Vernacular Indian language & Hinglish NLP parsing (*"50k me done"*). |
 | **Export Formats** | **Fully Demonstrated:** Web view, JSON contract schemas, and audit logs. | Digitally signed, watermarked, court-ready PDF generation. |
 
 ### 11.2 Known Limitations
 * **Physical Stamp Duty:** DealShield AI documents are valid electronic agreements under Section 10A of the IT Act 2000; however, formal admission in state civil court trials requires payment of state stamp duty under the Indian Stamp Act, 1899.
+* **Identity Repudiation Risk in Email-Only OTP:** While the 6-digit email OTP enforces review confidentiality, an email address does not guarantee statutory non-repudiation in a contested trial under Section 3A of the Information Technology Act, 2000.
 * **Single Negotiation Context:** Currently analyzes one continuous conversation export; does not merge multiple fragmented exports across different chat threads.
 
 ---
@@ -464,7 +466,10 @@ The extraction prompt explicitly instructs the LLM on:
 ## 13. Future Scope
 
 1. **Direct WhatsApp Business API Integration:** Deploying a certified DealShield WhatsApp Business bot allowing users to forward chat exports directly within WhatsApp or add the bot to a project escrow group.
-2. **Aadhaar eSign Integration:** Partnering with an authorized Certifying Authority (ESP) to enable legal digital signatures using UIDAI Aadhaar biometric or OTP verification under Section 3A of the IT Act.
+2. **DigiLocker Identity Verification & Aadhaar eSign (Section 3A IT Act):**
+   * **DigiLocker Gateway (OAuth 2.0):** Verify legal identity directly from official issuer repositories (masked Aadhaar XML, PAN verification, and MSME UDYAM registration) to prevent party impersonation while remaining compliant with the DPDP Act 2023.
+   * **UIDAI Aadhaar OTP / Biometric eSign:** Partner with an authorized eSign Service Provider (ESP) (e.g., CDAC, NSDL, eMudhra) operating under Controller of Certifying Authorities (CCA) eSign 3.0 standards.
+   * **Cryptographic PAdES PDF Sealing:** Issue an ephemeral X.509 certificate upon UIDAI OTP verification to digitally sign and timestamp the agreement PDF with RFC 3161 audit logs, providing tamper-proof non-repudiation admissible under Section 63 of Bharatiya Sakshya Adhiniyam, 2023.
 3. **Digital e-Stamping (NeSL / SHCIL Integration):** Enabling users to pay state stamp duty online and attach digital e-stamp certificates directly to the agreement.
 4. **Vernacular & Hinglish NLP Support:** Fine-tuning extraction models on regional Indian dialects and mixed-language business slang (e.g., Hindi, Tamil, Telugu, and Hinglish).
 5. **Smart Escrow & Milestone Payments:** Connecting agreed payment terms to UPI autopay or escrow accounts to release milestone disbursements automatically upon verified deliverable approval.
